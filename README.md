@@ -6,11 +6,9 @@ The launcher is a desktop application for Windows, macOS (Apple Silicon) and Lin
 
 It can install, update, reinstall and run Invoke Community Edition. It is self-contained, so you don't need to worry about having the right python version installed.
 
-!['Screenshot of launcher'](./assets/launcher-screenshot.png)
-
-## Getting the launcher
-
 Download the launcher from the [releases](https://github.com/invoke-ai/launcher/releases) page.
+
+!['Screenshot of launcher'](./assets/launcher-screenshot.png)
 
 ## FAQ
 

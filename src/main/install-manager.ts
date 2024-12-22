@@ -161,7 +161,17 @@ export class InstallManager {
     this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
 
     const installPythonResult = await withResultAsync(() =>
-      runProcess(uvPath, installPythonArgs, onOutput, { signal: abortController.signal })
+      runProcess(
+        uvPath,
+        installPythonArgs,
+        {
+          onStdout: onOutput,
+          onStderr: onOutput,
+        },
+        {
+          signal: abortController.signal,
+        }
+      )
     );
 
     if (installPythonResult.isErr()) {
@@ -205,9 +215,17 @@ export class InstallManager {
     this.log.info(`> ${uvPath} ${createVenvArgs.join(' ')}\r\n`);
 
     const createVenvResult = await withResultAsync(() =>
-      runProcess(uvPath, createVenvArgs, onOutput, {
-        signal: abortController.signal,
-      })
+      runProcess(
+        uvPath,
+        createVenvArgs,
+        {
+          onStdout: onOutput,
+          onStderr: onOutput,
+        },
+        {
+          signal: abortController.signal,
+        }
+      )
     );
 
     if (createVenvResult.isErr()) {
@@ -254,10 +272,15 @@ export class InstallManager {
     this.log.info(`> ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
 
     const installAppResult = await withResultAsync(() =>
-      runProcess(uvPath, installInvokeArgs, onOutput, {
-        cwd: location,
-        signal: abortController.signal,
-      })
+      runProcess(
+        uvPath,
+        installInvokeArgs,
+        { onStdout: onOutput, onStderr: onOutput },
+        {
+          cwd: location,
+          signal: abortController.signal,
+        }
+      )
     );
 
     if (installAppResult.isErr()) {
@@ -344,18 +367,21 @@ export const createInstallManager = (arg: {
  * Simple wrapper around `child_process.execFile` that returns a promise that resolves when the process exits with code 0.
  * If the process exits with a non-zero code, the promise is rejected with an error.
  *
- * @param file The path to the executable
- * @param args The arguments to pass to the executable
- * @param onOutput A callback that is called with the both stdout _and_ stderr outputs
+ * @param file The path to the executable to run.
+ * @param args The arguments to pass to the executable.
+ * @param callbacks An object with `onStdout` and `onStderr` functions to handle the process's output. The output is passed as a string.
  * @param options Additional options to pass to `child_process.execFile`
  */
 const runProcess = (
   file: string,
   args: string[],
-  onOutput: (data: string) => void,
+  callbacks: {
+    onStdout: (data: string) => void;
+    onStderr: (data: string) => void;
+  },
   options?: ObjectEncodingOptions & ExecFileOptions
 ): Promise<'success' | 'canceled'> => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const p = execFile(file, args, options);
 
     p.on('error', (error) => {
@@ -363,17 +389,15 @@ const runProcess = (
         // The process started but errored - handle this in the exit event
         return;
       }
-      throw error;
+      reject(error);
     });
 
-    assert(p.stdout);
-    p.stdout.on('data', (data) => {
-      onOutput(data.toString());
+    p.stdout?.on('data', (data) => {
+      callbacks.onStdout(data.toString());
     });
 
-    assert(p.stderr);
-    p.stderr.on('data', (data) => {
-      onOutput(data.toString());
+    p.stderr?.on('data', (data) => {
+      callbacks.onStderr(data.toString());
     });
 
     p.on('close', (code) => {
@@ -382,9 +406,9 @@ const runProcess = (
       } else if (code === null) {
         // The process was killed via signal
         resolve('canceled');
-      } else if (code !== 0) {
+      } else {
         // The process exited with a non-zero code
-        throw new Error(`Process exited with code ${code}`);
+        reject(new Error(`Process exited with code ${code}`));
       }
     });
   });

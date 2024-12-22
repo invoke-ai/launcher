@@ -274,7 +274,10 @@ export const createInvokeManager = (arg: {
   });
 
   const cleanupInvokeManager = () => {
-    invokeManager.exitInvoke();
+    const status = invokeManager.getStatus();
+    if (status.type === 'running' || status.type === 'starting') {
+      invokeManager.exitInvoke();
+    }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');
   };

@@ -309,6 +309,8 @@ export class InstallManager {
 
     // Hey it worked!
     this.updateStatus({ type: 'completed' });
+    this.log.info('Installation completed successfully!\r\n');
+
     this.abortController = null;
   };
 

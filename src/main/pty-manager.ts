@@ -1,8 +1,9 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
 import { ipcMain } from 'electron';
+import path from 'path';
 
 import { PtyManager } from '@/lib/pty';
-import { getActivateVenvCommand, getHomeDirectory, getInstallationDetails } from '@/main/util';
+import { getActivateVenvCommand, getHomeDirectory, getInstallationDetails, getUVExecutablePath } from '@/main/util';
 import type { IpcEvents, IpcRendererEvents, PtyOptions } from '@/shared/types';
 
 export const createPtyManager = (arg: {
@@ -31,6 +32,15 @@ export const createPtyManager = (arg: {
 
     const entry = ptyManager.create({ onData, onExit, options });
 
+    // Add the UV executable path to the PATH environment variable
+    const newPath = `${getUVExecutablePath()}${path.delimiter}${process.env.PATH}`;
+
+    if (process.platform === 'win32') {
+      entry.process.write(`$env:PATH="${newPath}"\r`);
+    } else {
+      // macOS, Linux
+      entry.process.write(`export PATH=${newPath}\r`);
+    }
 
     if (cwd) {
       const installDetails = await getInstallationDetails(cwd);

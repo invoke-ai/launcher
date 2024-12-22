@@ -260,7 +260,7 @@ export const killProcess = (childProcess: ChildProcess): void => {
  * are set, they will be used. Otherwise, Windows will default to Powershell and Linux/macOS will default to sh.
  * @returns The shell to use for running commands
  */
-export const getShell = (): string => {
+export const getShell = () => {
   if (process.platform === 'win32') {
     return 'Powershell.exe';
   } else if (process.platform === 'darwin') {

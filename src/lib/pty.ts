@@ -52,6 +52,11 @@ export class PtyManager {
       cwd: options?.cwd ?? process.env.HOME,
       env,
     });
+
+    if (shell === 'Powershell.exe') {
+      ptyProcess.write(`$env:PATH="${env.PATH}"\r`);
+    }
+
     const ansiSequenceBuffer = new AnsiSequenceBuffer();
     const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
 

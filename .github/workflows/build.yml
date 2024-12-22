@@ -22,13 +22,12 @@ jobs:
 
       - name: Download uv
         run: |
-          mkdir bin
+          mkdir temp
+          mkdir -p ./assets/bin
           curl -L https://github.com/astral-sh/uv/releases/download/${{ env.UV_VERSION }}/uv-x86_64-unknown-linux-gnu.tar.gz -o uv.tar.gz
-          tar -xzf uv.tar.gz -C ./bin
-          mv ./bin/uv-x86_64-unknown-linux-gnu/uv ./assets/uv
-          rm -rf ./bin/uv-x86_64-unknown-linux-gnu
-          ls -alF ./bin
-          ls -alF ./assets
+          tar -xzf uv.tar.gz -C ./temp
+          mv ./temp/uv-x86_64-unknown-linux-gnu/uv ./assets/bin/uv
+          rm -rf ./temp/uv-x86_64-unknown-linux-gnu
 
       - name: setup nodejs
         uses: actions/setup-node@v4
@@ -55,13 +54,12 @@ jobs:
 
       - name: Download uv
         run: |
-          mkdir bin
+          mkdir temp
+          mkdir -p ./assets/bin
           curl -L https://github.com/astral-sh/uv/releases/download/${{ env.UV_VERSION }}/uv-aarch64-apple-darwin.tar.gz -o uv.tar.gz
-          tar -xzf uv.tar.gz -C ./bin
-          mv ./bin/uv-aarch64-apple-darwin/uv ./assets/uv
-          rm -rf ./bin/uv-aarch64-apple-darwin
-          ls -alF ./bin
-          ls -alF ./assets
+          tar -xzf uv.tar.gz -C ./temp
+          mv ./temp/uv-aarch64-apple-darwin/uv ./assets/bin/uv
+          rm -rf ./temp/uv-aarch64-apple-darwin
 
       - name: setup nodejs
         uses: actions/setup-node@v4
@@ -87,10 +85,11 @@ jobs:
 
       - name: Download uv
         run: |
-          mkdir bin
+          mkdir temp
+          mkdir -p ./assets/bin
           curl -L https://github.com/astral-sh/uv/releases/download/${{ env.UV_VERSION }}/uv-x86_64-pc-windows-msvc.zip -o uv.zip
-          unzip uv.zip -d bin/
-          mv bin/uv.exe assets/uv.exe
+          unzip uv.zip -d temp/
+          mv temp/uv.exe assets/bin/uv.exe
 
       - name: setup nodejs
         uses: actions/setup-node@v4

@@ -3,7 +3,7 @@ import { exec, execFile } from 'child_process';
 import type { BrowserWindow } from 'electron';
 import { app, screen } from 'electron';
 import fs from 'fs/promises';
-import { join as pathJoin } from 'path';
+import path from 'path';
 import { promisify } from 'util';
 
 import { withResultAsync } from '@/lib/result';
@@ -24,17 +24,24 @@ export const getOperatingSystem = (): OperatingSystem => {
 };
 
 /**
+ * Get the path to the bundled bin directory
+ */
+export const getBundledBinPath = (): string => {
+  if (isDevelopment()) {
+    // In development, resolve from project root
+    return path.resolve(path.join(__dirname, '..', '..', 'assets', 'bin'));
+  } else {
+    // In production, assets are copied to the resources directory
+    return path.resolve(path.join(process.resourcesPath, 'bin'));
+  }
+};
+
+/**
  * Get the path to the uv executable
  */
 export const getUVExecutablePath = (): string => {
   const uvName = process.platform === 'win32' ? 'uv.exe' : 'uv';
-  if (isDevelopment()) {
-    // In development, resolve from project root
-    return pathJoin(__dirname, '..', '..', 'assets', uvName);
-  } else {
-    // In production, assets are copied to the resources directory
-    return pathJoin(process.resourcesPath, uvName);
-  }
+  return path.join(getBundledBinPath(), uvName);
 };
 
 /**
@@ -42,8 +49,8 @@ export const getUVExecutablePath = (): string => {
  */
 const getInvokeExecPath = (installLocation: string): string => {
   return process.platform === 'win32'
-    ? pathJoin(installLocation, '.venv', 'Scripts', 'invokeai-web.exe')
-    : pathJoin(installLocation, '.venv', 'bin', 'invokeai-web');
+    ? path.join(installLocation, '.venv', 'Scripts', 'invokeai-web.exe')
+    : path.join(installLocation, '.venv', 'bin', 'invokeai-web');
 };
 
 /**
@@ -51,8 +58,8 @@ const getInvokeExecPath = (installLocation: string): string => {
  */
 const getActivateVenvPath = (installLocation: string): string => {
   return process.platform === 'win32'
-    ? pathJoin(installLocation, '.venv', 'Scripts', 'Activate.ps1')
-    : pathJoin(installLocation, '.venv', 'bin', 'activate');
+    ? path.join(installLocation, '.venv', 'Scripts', 'Activate.ps1')
+    : path.join(installLocation, '.venv', 'bin', 'activate');
 };
 
 export const getActivateVenvCommand = (installLocation: string): string => {
@@ -141,7 +148,7 @@ export const pathExists = async (path: string): Promise<boolean> => {
 };
 
 const getPythonPathForVenv = (venvPath: string): string => {
-  return pathJoin(venvPath, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+  return path.join(venvPath, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 };
 
 /**
@@ -174,26 +181,26 @@ const getPackageVersion = async (pythonPath: string, packageName: string): Promi
  * - It contains a `.venv` directory
  * - It contains a `invokeai.yaml` file
  *
- * @param path The location to check for an existing installation
+ * @param installLocation The location to check for an existing installation
  * @returns Whether an existing installation is present at the given location
  */
-export const getInstallationDetails = async (path: string): Promise<DirDetails> => {
+export const getInstallationDetails = async (installLocation: string): Promise<DirDetails> => {
   // Must be a directory
-  if (!(await isDirectory(path))) {
+  if (!(await isDirectory(installLocation))) {
     return {
-      path,
+      path: installLocation,
       isInstalled: false,
       isDirectory: false,
       canInstall: false,
     };
   }
 
-  const venvPath = pathJoin(path, '.venv');
+  const venvPath = path.join(installLocation, '.venv');
 
   // Must contain a `.venv` directory
   if (!(await isDirectory(venvPath))) {
     return {
-      path,
+      path: installLocation,
       isInstalled: false,
       isDirectory: true,
       canInstall: true,
@@ -206,24 +213,24 @@ export const getInstallationDetails = async (path: string): Promise<DirDetails> 
 
   if (!version) {
     return {
-      path,
+      path: installLocation,
       isDirectory: true,
       isInstalled: false,
       canInstall: true,
     };
   }
 
-  const isFirstRun = !(await isFile(pathJoin(path, 'invokeai.yaml')));
+  const isFirstRun = !(await isFile(path.join(installLocation, 'invokeai.yaml')));
 
   return {
-    path,
+    path: installLocation,
     isInstalled: true,
     isDirectory: true,
     isFirstRun,
     canInstall: true,
     version: version.startsWith('v') ? version : `v${version}`, // Make it consistent w/ our tagging format
-    invokeExecPath: getInvokeExecPath(path),
-    activateVenvPath: getActivateVenvPath(path),
+    invokeExecPath: getInvokeExecPath(installLocation),
+    activateVenvPath: getActivateVenvPath(installLocation),
   };
 };
 

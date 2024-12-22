@@ -1,9 +1,10 @@
 import { nanoid } from 'nanoid';
 import * as pty from 'node-pty';
+import path from 'path';
 
 import { AnsiSequenceBuffer } from '@/lib/ansi-sequence-buffer';
 import { SlidingBuffer } from '@/lib/sliding-buffer';
-import { getShell } from '@/main/util';
+import { getBundledBinPath, getShell } from '@/main/util';
 import type { PtyOptions } from '@/shared/types';
 
 type PtyManagerOptions = {
@@ -40,10 +41,16 @@ export class PtyManager {
   create = ({ onData, onExit, options }: CreatePtyArgs): string => {
     const id = nanoid();
     const shell = getShell();
+
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${getBundledBinPath()}${path.delimiter}${process.env.PATH}`,
+    };
+
     const ptyProcess = pty.spawn(shell, [], {
       name: process.env['TERM'] ?? 'xterm-color',
       cwd: options?.cwd ?? process.env.HOME,
-      env: process.env,
+      env,
     });
     const ansiSequenceBuffer = new AnsiSequenceBuffer();
     const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);

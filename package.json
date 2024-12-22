@@ -117,11 +117,8 @@
     ],
     "extraResources": [
       {
-        "from": "assets/",
-        "to": ".",
-        "filter": [
-          "uv*"
-        ]
+        "from": "assets/bin",
+        "to": "./bin"
       }
     ],
     "linux": {

@@ -1,10 +1,9 @@
 import { nanoid } from 'nanoid';
 import * as pty from 'node-pty';
-import path from 'path';
 
 import { AnsiSequenceBuffer } from '@/lib/ansi-sequence-buffer';
 import { SlidingBuffer } from '@/lib/sliding-buffer';
-import { getBundledBinPath, getShell } from '@/main/util';
+import { getShell } from '@/main/util';
 import type { PtyOptions } from '@/shared/types';
 
 type PtyManagerOptions = {
@@ -16,6 +15,7 @@ const DEFAULT_PTY_MANAGER_OPTIONS: PtyManagerOptions = {
 };
 
 type PtyEntry = {
+  id: string;
   process: pty.IPty;
   ansiSequenceBuffer: AnsiSequenceBuffer;
   historyBuffer: SlidingBuffer<string>;
@@ -38,34 +38,18 @@ export class PtyManager {
     this.options = { ...DEFAULT_PTY_MANAGER_OPTIONS, ...options };
   }
 
-  create = ({ onData, onExit, options }: CreatePtyArgs): string => {
+  create = ({ onData, onExit, options }: CreatePtyArgs): PtyEntry => {
     const id = nanoid();
     const shell = getShell();
-
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      PATH: `${getBundledBinPath()}${path.delimiter}${process.env.PATH}`,
-    };
 
     const ptyProcess = pty.spawn(shell, [], {
       name: process.env['TERM'] ?? 'xterm-color',
       cwd: options?.cwd ?? process.env.HOME,
-      env,
+      env: process.env,
     });
-
-    if (shell === 'Powershell.exe') {
-      ptyProcess.write(`$env:PATH="${env.PATH}"\r`);
-    }
 
     const ansiSequenceBuffer = new AnsiSequenceBuffer();
     const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
-
-    if (options?.cmd) {
-      for (const cmd of options.cmd) {
-        ptyProcess.write(cmd);
-        ptyProcess.write('\r');
-      }
-    }
 
     ptyProcess.onData((data) => {
       const result = ansiSequenceBuffer.append(data);
@@ -83,8 +67,11 @@ export class PtyManager {
       onExit(id, exitCode);
     });
 
-    this.ptys.set(id, { process: ptyProcess, ansiSequenceBuffer, historyBuffer });
-    return id;
+    const entry = { id, process: ptyProcess, ansiSequenceBuffer, historyBuffer };
+
+    this.ptys.set(id, entry);
+
+    return entry;
   };
 
   write = (id: string, data: string): void => {

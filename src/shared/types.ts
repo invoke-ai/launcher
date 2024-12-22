@@ -241,10 +241,6 @@ export type PtyOptions = {
    */
   cwd?: string;
   /**
-   * An array of command to execute in the terminal on startup.
-   */
-  cmd?: string[];
-  /**
    * The initial size of the terminal.
    */
   size?: { cols: number; rows: number };

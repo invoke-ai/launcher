@@ -29,16 +29,17 @@ export const createPtyManager = (arg: {
       cwd: getHomeDirectory(),
     };
 
+    const entry = ptyManager.create({ onData, onExit, options });
+
+
     if (cwd) {
       const installDetails = await getInstallationDetails(cwd);
       if (installDetails.isInstalled) {
-        options.cmd = [getActivateVenvCommand(installDetails.path)];
-        options.cwd = installDetails.path;
+        entry.process.write(getActivateVenvCommand(installDetails.path));
       }
     }
 
-    const id = ptyManager.create({ onData, onExit, options });
-    return id;
+    return entry.id;
   });
   ipc.handle('terminal:dispose', (_, id) => ptyManager.dispose(id));
   ipc.handle('terminal:resize', (_, id, cols, rows) => ptyManager.resize(id, cols, rows));

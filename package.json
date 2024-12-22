@@ -1,7 +1,7 @@
 {
-  "name": "invoke-installer",
-  "productName": "invoke-installer",
-  "version": "1.0.0",
+  "name": "invoke-community-edition",
+  "productName": "Invoke Community Edition",
+  "version": "1.1.0",
   "description": "Invoke Community Edition",
   "main": ".vite/build/main.js",
   "engines": {
@@ -106,8 +106,8 @@
     "use-stick-to-bottom": "^1.0.42"
   },
   "build": {
-    "appId": "com.invoke.installer",
-    "productName": "Invoke-Installer",
+    "appId": "com.invoke.invoke-community-edition",
+    "productName": "Invoke Community Edition",
     "directories": {
       "output": "dist"
     },
@@ -123,7 +123,7 @@
     ],
     "linux": {
       "target": "AppImage",
-      "artifactName": "${productName}-linux-${arch}.${ext}",
+      "artifactName": "${productName}.${ext}",
       "icon": "assets/icons/icon.png"
     },
     "mac": {
@@ -133,12 +133,12 @@
           "arm64"
         ]
       },
-      "artifactName": "${productName}-mac-${arch}.${ext}",
+      "artifactName": "${productName}.${ext}",
       "icon": "assets/icons/icon.icns"
     },
     "win": {
       "target": "portable",
-      "artifactName": "${productName}-Windows-${arch}.${ext}",
+      "artifactName": "${productName}.${ext}",
       "icon": "assets/icons/icon.ico"
     },
     "publish": null

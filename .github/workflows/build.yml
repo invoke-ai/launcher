@@ -43,8 +43,8 @@ jobs:
       - name: Publish artifact - GUI
         uses: actions/upload-artifact@v4
         with:
-          name: Invoke-Installer-linux-x86_64.AppImage
-          path: dist/Invoke-Installer-linux-x86_64.AppImage
+          name: 'Invoke Community Edition.AppImage'
+          path: 'dist/Invoke Community Edition.AppImage'
 
   build-macos:
     runs-on: macos-latest
@@ -75,8 +75,8 @@ jobs:
       - name: Publish artifact - GUI
         uses: actions/upload-artifact@v4
         with:
-          name: Invoke-Installer-mac-arm64.dmg
-          path: dist/Invoke-Installer-mac-arm64.dmg
+          name: 'Invoke Community Edition.dmg'
+          path: 'dist/Invoke Community Edition.dmg'
 
   build-windows:
     runs-on: windows-latest
@@ -105,5 +105,5 @@ jobs:
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
         with:
-          name: Invoke-Installer-windows-x64-UNSIGNED.exe
-          path: dist/Invoke-Installer-windows-x64.exe
+          name: 'Invoke Community Edition.exe - UNSIGNED'
+          path: 'dist/Invoke Community Edition.exe'

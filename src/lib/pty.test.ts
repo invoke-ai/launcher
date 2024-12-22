@@ -15,6 +15,7 @@ describe('PtyManager', () => {
   let mockPtyProcess: any;
 
   beforeEach(() => {
+    (process as any).resourcesPath = '/mock/path';
     ptyManager = new PtyManager();
     mockPtyProcess = {
       onData: vi.fn(),

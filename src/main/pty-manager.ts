@@ -1,9 +1,8 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
 import { ipcMain } from 'electron';
-import path from 'path';
 
 import { PtyManager } from '@/lib/pty';
-import { getActivateVenvCommand, getHomeDirectory, getInstallationDetails, getUVExecutablePath } from '@/main/util';
+import { getActivateVenvCommand, getBundledBinPath, getHomeDirectory, getInstallationDetails } from '@/main/util';
 import type { IpcEvents, IpcRendererEvents, PtyOptions } from '@/shared/types';
 
 export const createPtyManager = (arg: {
@@ -29,23 +28,21 @@ export const createPtyManager = (arg: {
     const options: PtyOptions = {
       cwd: getHomeDirectory(),
     };
-
     const entry = ptyManager.create({ onData, onExit, options });
 
-    // Add the UV executable path to the PATH environment variable
-    const newPath = `${getUVExecutablePath()}${path.delimiter}${process.env.PATH}`;
-
+    // Add the bundled bin dir to the PATH env var
     if (process.platform === 'win32') {
-      entry.process.write(`$env:PATH="${newPath}"\r`);
+      entry.process.write(`$env:Path='${getBundledBinPath()}';$env:Path\r`);
     } else {
       // macOS, Linux
-      entry.process.write(`export PATH=${newPath}\r`);
+      entry.process.write(`export PATH="${getBundledBinPath()}:$PATH"\r`);
     }
 
     if (cwd) {
       const installDetails = await getInstallationDetails(cwd);
       if (installDetails.isInstalled) {
-        entry.process.write(getActivateVenvCommand(installDetails.path));
+        const activateVenvCmd = getActivateVenvCommand(installDetails.path);
+        entry.process.write(`${activateVenvCmd}\r`);
       }
     }
 

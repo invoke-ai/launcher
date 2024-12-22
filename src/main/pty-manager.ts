@@ -32,7 +32,7 @@ export const createPtyManager = (arg: {
 
     // Add the bundled bin dir to the PATH env var
     if (process.platform === 'win32') {
-      entry.process.write(`$env:Path='${getBundledBinPath()}';$env:Path\r`);
+      entry.process.write(`$env:Path='${getBundledBinPath()};'+$env:Path\r`);
     } else {
       // macOS, Linux
       entry.process.write(`export PATH="${getBundledBinPath()}:$PATH"\r`);

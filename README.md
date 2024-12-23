@@ -4,7 +4,15 @@ The launcher is a desktop application for Windows, macOS (Apple Silicon) and Lin
 
 It can install, update, reinstall and run Invoke Community Edition. It is self-contained, so you don't need to worry about having the right python version installed.
 
-Download the launcher from the [releases](https://github.com/invoke-ai/launcher/releases) page.
+## How to get the Launcher
+
+Click the link for your system to download the latest version of the launcher.
+
+- [Download for Windows](https://download.invoke.ai/Invoke%20Community%20Edition.exe)
+- [Download for macOS](https://download.invoke.ai/Invoke%20Community%20Edition.dmg)
+- [Download for Linux](https://download.invoke.ai/Invoke%20Community%20Edition.AppImage)
+
+You can also download all releases, including prerelease versions, from this repo's [GitHub releases](https://github.com/invoke-ai/launcher/releases).
 
 <img width="912" alt="image" src="https://github.com/user-attachments/assets/cd676db3-b8e6-4dcc-b7a9-e442ed98a616" />
 
@@ -19,6 +27,8 @@ You can install the latest stable release or latest prerelease versions of Invok
 > Note: This section discusses updating launcher itself, _not_ updating the Invoke application.
 
 Currently, the launcher is not able to auto-update itself, but we are working on this now.
+
+To update to the latest version, replace the old launcher executable file with the new version.
 
 ### 🚨 macOS: security warning / unable to run
 

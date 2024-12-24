@@ -13,7 +13,7 @@ import type { InvokeProcessStatus } from '@/shared/types';
 
 const getMessage = (status: InvokeProcessStatus) => {
   if (status.type === 'running') {
-    return `Running at ${status.data.url}`;
+    return `Running at ${status.data.loopbackUrl}`;
   }
   return startCase(status.type);
 };

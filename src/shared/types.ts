@@ -212,7 +212,26 @@ export type InstallProcessStatus = Status<
  */
 export type InvokeProcessStatus =
   | Status<'uninitialized' | 'starting' | 'exiting' | 'exited'>
-  | OkStatus<'running', { url: string }>;
+  | OkStatus<
+      'running',
+      {
+        /**
+         * The URL at which the server is running. The user can access the server from the host machine using this URL.
+         */
+        loopbackUrl: string;
+        /**
+         * The URL at which the server is running on the LAN. The user can access the server from other devices on the
+         * same network using this URL. This field is only present if the server is accessible on the LAN.
+         */
+        lanUrl?: string;
+        /**
+         * The URL at which the server is running as reported by uvicorn. It may have 0.0.0.0 as the host.
+         *
+         * You probably want to use `loopbackUrl` instead.
+         */
+        url: string;
+      }
+    >;
 
 /**
  * A logging level.

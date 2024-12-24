@@ -147,18 +147,25 @@ export class InvokeManager {
       filter: (data) => data.includes('Uvicorn running') || data.includes('Invoke running'),
       onMatch: (url) => {
         // Stop watching the process output
-        invokeProcess?.stderr?.off('data', urlWatcher.checkForMatch);
-        invokeProcess?.stdout?.off('data', urlWatcher.checkForMatch);
+        invokeProcess.stderr?.off('data', urlWatcher.checkForMatch);
+        invokeProcess.stdout?.off('data', urlWatcher.checkForMatch);
 
-        // If running with `host: 0.0.0.0`, replace with the local IP address
-        const urlProcessed = url.replace('0.0.0.0', ip.address());
+        const data: Extract<InvokeProcessStatus, { type: 'running' }>['data'] = {
+          url,
+          loopbackUrl: url.replace('0.0.0.0', '127.0.0.1'),
+        };
 
-        // If server mode is enabled, don't open the window
-        if (!this.store.get('serverMode')) {
-          this.createWindow(urlProcessed);
+        // If uvicorn prints the URL with 0.0.0.0 for the host, that means it's accessible on the LAN
+        if (url.includes('0.0.0.0')) {
+          data.lanUrl = url.replace('0.0.0.0', ip.address());
         }
 
-        this.updateStatus({ type: 'running', data: { url: urlProcessed } });
+        // Only open the window if server mode is not enabled
+        if (!this.store.get('serverMode')) {
+          this.createWindow(data.loopbackUrl);
+        }
+
+        this.updateStatus({ type: 'running', data });
 
         if (isFirstRun) {
           // This is the first run after an install or update - remove the first run marker

@@ -81,6 +81,12 @@ export class InvokeManager {
       env.INVOKEAI_HOST = '0.0.0.0';
     }
 
+    // Some torch operations are not yet supported on MPS. This tells torch to use CPU for those operations.
+    // See: https://pytorch.org/docs/stable/mps_environment_variables.html
+    if (process.platform === 'darwin') {
+      env.PYTORCH_ENABLE_MPS_FALLBACK = '1';
+    }
+
     const invokeProcess = execFile(dirDetails.invokeExecPath, [], { env });
     this.process = invokeProcess;
 

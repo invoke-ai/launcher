@@ -49,12 +49,12 @@ export class InstallManager {
     this.onStatusChange(this.status);
   };
 
-  startInstall = async (location: string, gpuType: GpuType, version: string) => {
+  startInstall = async (location: string, gpuType: GpuType, version: string, repair?: boolean) => {
     /**
      * Installation is a 3-step process:
-     * - Install Python
-     * - Create a virtual environment
-     * - Install the invokeai package
+     * - Install Python. If repair is true, we'll forcibly reinstall the python version.
+     * - Create a virtual environment. If repair is true, we'll forcibly recreate the venv.
+     * - Install the invokeai package.
      */
 
     // Use an AbortController to cancel the installation process
@@ -96,9 +96,16 @@ export class InstallManager {
     const withXformers = gpuType === 'nvidia<30xx';
     const invokeaiPackageSpecifier = withXformers ? 'invokeai[xformers]' : 'invokeai';
 
+    this.log.info('Installation parameters:\r\n');
     this.log.info(`- Install location: ${location}\r\n`);
     this.log.info(`- GPU type: ${gpuType}\r\n`);
     this.log.info(`- Torch Platform: ${torchPlatform}\r\n`);
+
+    if (repair) {
+      this.log.info('Repair mode enabled:\r\n');
+      this.log.info('- Force-reinstalling python\r\n');
+      this.log.info('- Deleting and recreating virtual environment\r\n');
+    }
 
     // Get the Python version and torch index URL for the target version
     const pinsResult = await withResult(() => getPins(version));
@@ -157,6 +164,11 @@ export class InstallManager {
       'only-managed',
     ];
 
+    // In repair mode, we'll forcibly reinstall python
+    if (repair) {
+      installPythonArgs.push('--reinstall');
+    }
+
     this.log.info('Installing Python...\r\n');
     this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
 
@@ -194,6 +206,14 @@ export class InstallManager {
 
     // Second step - create a virtual environment
     const venvPath = path.resolve(path.join(location, '.venv'));
+
+    // In repair mode, we will delete the .venv first if it exists
+    if (repair && (await isDirectory(venvPath))) {
+      await fs.rm(venvPath, { recursive: true, force: true }).catch(() => {
+        this.log.warn('Failed to delete virtual environment\r\n');
+      });
+    }
+
     const createVenvArgs = [
       // Use `uv`'s venv interface to create a virtual environment
       'venv',
@@ -349,8 +369,8 @@ export const createInstallManager = (arg: {
       sendToWindow('install-process:status', status);
     },
   });
-  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version) => {
-    installManager.startInstall(installationPath, gpuType, version);
+  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
+    installManager.startInstall(installationPath, gpuType, version, repair);
   });
   ipc.handle('install-process:cancel-install', () => {
     installManager.cancelInstall();

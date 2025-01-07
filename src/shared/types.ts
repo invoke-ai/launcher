@@ -297,7 +297,7 @@ type InstallProcessIpcEvents = Namespaced<
   'install-process',
   {
     'get-status': () => WithTimestamp<InstallProcessStatus>;
-    'start-install': (location: string, gpuType: GpuType, version: string) => void;
+    'start-install': (location: string, gpuType: GpuType, version: string, repair?: boolean) => void;
     'cancel-install': () => void;
   }
 >;

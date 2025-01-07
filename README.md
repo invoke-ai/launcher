@@ -39,7 +39,7 @@ This is related to Apple's strict code signing restrictions. We are getting set 
 Until this is resolved, you can manually flag the launcher as safe with `xattr` and it will run.:
 
 ```zsh
-xattr -d 'com.apple.quarantine' /Applications/Invoke-Installer.app
+xattr -d 'com.apple.quarantine' /Applications/Invoke\ Community\ Edition.app
 ```
 
 ### Compared to the "old" install/invoke scripts
@@ -128,5 +128,5 @@ As a result, the builds from this repo may require you to manually allow them to
 Windows will prompt you to allow the app to run, but on macOS it may refuse, saying the app is damaged. Remove the quarantine flag from the `.app` package to resolve this:
 
 ```zsh
-xattr -d 'com.apple.quarantine' /Applications/Invoke-Installer.app
+xattr -d 'com.apple.quarantine' /Applications/Invoke\ Community\ Edition.app
 ```

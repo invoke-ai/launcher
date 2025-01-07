@@ -1,4 +1,4 @@
-import { Box, Divider, Flex } from '@invoke-ai/ui-library';
+import { Box, Divider, Flex, useGlobalModifiersInit } from '@invoke-ai/ui-library';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { ErrorBoundaryFallback } from '@/renderer/app/ErrorBoundaryFallback';
@@ -13,6 +13,8 @@ import { ConsoleOpenButton } from '@/renderer/features/Console/ConsoleOpenButton
 import { SettingsModal } from '@/renderer/features/SettingsModal/SettingsModal';
 
 export const App = () => {
+  useGlobalModifiersInit();
+
   return (
     <ThemeProvider>
       <SystemInfoProvider>

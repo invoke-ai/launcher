@@ -90,14 +90,20 @@ export const installFlowApi = {
     $activeStep.set(0);
     $isStarted.set(false);
   },
-  startInstall: () => {
+  startInstall: (repair?: boolean) => {
     const { dirDetails, gpuType, release } = $choices.get();
     if (!dirDetails || !dirDetails.canInstall || !release || !gpuType) {
       return;
     }
     $installProcessLogs.set([]);
-    emitter.invoke('install-process:start-install', dirDetails.path, gpuType, release.version);
+    emitter.invoke('install-process:start-install', dirDetails.path, gpuType, release.version, repair);
     installFlowApi.nextStep();
+  },
+  startInstallWithoutRepair: () => {
+    installFlowApi.startInstall(false);
+  },
+  startInstallWithRepair: () => {
+    installFlowApi.startInstall(true);
   },
   cancelInstall: async () => {
     await emitter.invoke('install-process:cancel-install');

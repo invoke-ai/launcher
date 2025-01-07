@@ -1,4 +1,4 @@
-import { Button, Divider, Heading, ListItem, Text, UnorderedList } from '@invoke-ai/ui-library';
+import { Button, Divider, Heading, ListItem, Text, UnorderedList, useShiftModifier } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo } from 'react';
 import { assert } from 'tsafe';
@@ -20,6 +20,8 @@ const GPU_LABEL_MAP: Record<GpuType, string> = {
 export const InstallFlowStepReview = memo(() => {
   const { dirDetails, gpuType, release } = useStore(installFlowApi.$choices);
   const installType = useStore(installFlowApi.$installType);
+
+  const shift = useShiftModifier();
 
   assert(dirDetails !== null);
   assert(gpuType !== null);
@@ -63,9 +65,16 @@ export const InstallFlowStepReview = memo(() => {
           Back
         </Button>
         <Divider orientation="vertical" />
-        <Button onClick={installFlowApi.startInstall} colorScheme="invokeYellow">
-          Install
-        </Button>
+        {shift && (
+          <Button onClick={installFlowApi.startInstallWithRepair} colorScheme="invokeRed">
+            Repair
+          </Button>
+        )}
+        {!shift && (
+          <Button onClick={installFlowApi.startInstallWithoutRepair} colorScheme="invokeYellow">
+            Install
+          </Button>
+        )}
       </BodyFooter>
     </BodyContainer>
   );

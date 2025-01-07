@@ -14,6 +14,7 @@ import {
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
 
+import { SettingsModalEnablePartialLoading } from '@/renderer/features/SettingsModal/SettingsModalEnablePartialLoading';
 import { SettingsModalNotifyForPrereleaseUpdates } from '@/renderer/features/SettingsModal/SettingsModalNotifyForPrereleaseUpdates';
 import { SettingsModalResetButton } from '@/renderer/features/SettingsModal/SettingsModalResetButton';
 import { SettingsModalServerMode } from '@/renderer/features/SettingsModal/SettingsModalServerMode';
@@ -36,6 +37,8 @@ export const SettingsModal = memo(() => {
           <SettingsModalServerMode />
           <Divider />
           <SettingsModalNotifyForPrereleaseUpdates />
+          <Divider />
+          <SettingsModalEnablePartialLoading />
         </ModalBody>
         <ModalFooter pt={16}>
           <SettingsModalResetButton />

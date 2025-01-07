@@ -36,7 +36,7 @@ const PACKAGE_PINS: Record<string, Pins> = {
       },
       linux: {
         cpu: 'https://download.pytorch.org/whl/cpu',
-        rocm: 'https://download.pytorch.org/whl/rocm62',
+        rocm: 'https://download.pytorch.org/whl/rocm6.2',
       },
       darwin: {},
     },
@@ -49,7 +49,7 @@ const PACKAGE_PINS: Record<string, Pins> = {
       },
       linux: {
         cpu: 'https://download.pytorch.org/whl/cpu',
-        rocm: 'https://download.pytorch.org/whl/rocm52',
+        rocm: 'https://download.pytorch.org/whl/rocm5.2',
       },
       darwin: {},
     },

@@ -11,7 +11,7 @@ import { assert } from 'tsafe';
 import { withResult, withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
-import { getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
+import { getBundledBinPath, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import { getPins } from '@/shared/pins';
 import type {
   GpuType,
@@ -56,10 +56,6 @@ export class InstallManager {
      * - Create a virtual environment. If repair is true, we'll forcibly recreate the venv.
      * - Install the invokeai package.
      */
-
-    // Use an AbortController to cancel the installation process
-    const abortController = new AbortController();
-    this.abortController = abortController;
 
     this.updateStatus({ type: 'starting' });
     this.log.info('Starting up...\r\n');
@@ -153,6 +149,25 @@ export class InstallManager {
       this.log.info(data);
     };
 
+    const runProcessCallbacks = {
+      onStdout: onOutput,
+      onStderr: onOutput,
+    };
+
+    // Use an AbortController to cancel the installation process
+    const abortController = new AbortController();
+    this.abortController = abortController;
+
+    const runProcessOptions = {
+      signal: abortController.signal,
+      env: {
+        ...process.env,
+        // This is used by `uv` to determine where to install python. We'll install python here so there's no chance
+        // of conflicts with any other `uv`-managed python installations.
+        UV_PYTHON_INSTALL_DIR: getBundledBinPath(),
+      },
+    };
+
     // First step - install python
     const installPythonArgs = [
       // Use `uv`'s python interface to install the specific python version
@@ -173,17 +188,7 @@ export class InstallManager {
     this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
 
     const installPythonResult = await withResultAsync(() =>
-      runProcess(
-        uvPath,
-        installPythonArgs,
-        {
-          onStdout: onOutput,
-          onStderr: onOutput,
-        },
-        {
-          signal: abortController.signal,
-        }
-      )
+      runProcess(uvPath, installPythonArgs, runProcessCallbacks, runProcessOptions)
     );
 
     if (installPythonResult.isErr()) {
@@ -235,17 +240,7 @@ export class InstallManager {
     this.log.info(`> ${uvPath} ${createVenvArgs.join(' ')}\r\n`);
 
     const createVenvResult = await withResultAsync(() =>
-      runProcess(
-        uvPath,
-        createVenvArgs,
-        {
-          onStdout: onOutput,
-          onStderr: onOutput,
-        },
-        {
-          signal: abortController.signal,
-        }
-      )
+      runProcess(uvPath, createVenvArgs, runProcessCallbacks, runProcessOptions)
     );
 
     if (createVenvResult.isErr()) {
@@ -292,15 +287,7 @@ export class InstallManager {
     this.log.info(`> ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
 
     const installAppResult = await withResultAsync(() =>
-      runProcess(
-        uvPath,
-        installInvokeArgs,
-        { onStdout: onOutput, onStderr: onOutput },
-        {
-          cwd: location,
-          signal: abortController.signal,
-        }
-      )
+      runProcess(uvPath, installInvokeArgs, runProcessCallbacks, { ...runProcessOptions, cwd: location })
     );
 
     if (installAppResult.isErr()) {

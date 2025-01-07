@@ -19,6 +19,8 @@ type Pins = {
    * is installed, else you can end up with CPU torch on a GPU machine or vice versa.
    *
    * Each platform has a set of indices for each torch device.
+   *
+   * See: https://pytorch.org/get-started/previous-versions/
    */
   torchIndexUrl: {
     win32: PlatformIndices;
@@ -30,17 +32,24 @@ type Pins = {
 const PACKAGE_PINS: Record<string, Pins> = {
   '5.0.0': {
     python: '3.11',
+    // Indices for pytorch 2.4.1
     torchIndexUrl: {
       win32: {
         cuda: 'https://download.pytorch.org/whl/cu124',
       },
       linux: {
         cpu: 'https://download.pytorch.org/whl/cpu',
-        rocm: 'https://download.pytorch.org/whl/rocm6.2',
+        rocm: 'https://download.pytorch.org/whl/rocm6.1',
       },
       darwin: {},
     },
   },
+  // This fallback 0.0.0 version represents pins for all versions of invoke from initial release to v5.0.0. Throughout
+  // this period, we used many versions of torch. That means the below indices are not correct! However, because the
+  // launcher was released after v5.0.0, this should not be a problem.
+  //
+  // TODO(psyche): I'm not sure why these pins are even necessary given that the launcher does not support installing
+  // invokeai versions prior to v5.0.0. I think this is a mistake and we should remove this entry.
   '0.0.0': {
     python: '3.11',
     torchIndexUrl: {

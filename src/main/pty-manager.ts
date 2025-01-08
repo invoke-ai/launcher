@@ -40,9 +40,15 @@ export const createPtyManager = (arg: {
 
     if (cwd) {
       const installDetails = await getInstallationDetails(cwd);
+      // If the cwd is a valid installation dir, we should activate the venv
       if (installDetails.isInstalled) {
         const activateVenvCmd = getActivateVenvCommand(installDetails.path);
         entry.process.write(`${activateVenvCmd}\r`);
+      }
+      // If the cwd is a directory, we should cd into it, even if it is not a valid installation dir - the user may
+      // want to run commands there to fix something.
+      if (installDetails.isDirectory) {
+        entry.process.write(`cd ${cwd}\r`);
       }
     }
 

@@ -6,6 +6,9 @@ import { assert } from 'tsafe';
 import { BannerInvokeLogoTag } from '@/renderer/features/Banner/BannerInvokeLogoTag';
 import { SettingsModalOpenButton } from '@/renderer/features/SettingsModal/SettingsModalOpenButton';
 
+// TODO(psyche): make this dynamic so we don't need to keep it synced with the package.json version
+const VERSION = '1.2.1';
+
 const MIN_PROBABILITY = 0.2;
 
 const getRand = (seed: number) => {
@@ -72,16 +75,9 @@ export const Banner = memo(() => {
       </GridItem>
       <GridItem as={Flex} position="relative" justifyContent="flex-end">
         <Grid {...grid.props}>{grid.children}</Grid>
-        <Button
-          onClick={reroll}
-          variant="unstyled"
-          position="absolute"
-          top="0"
-          right="0"
-          w={8}
-          h={8}
-          bg="transparent"
-        />
+        <Button onClick={reroll} variant="unstyled" position="absolute" top="0" right="2" size="sm" color="base.700">
+          {`v${VERSION}`}
+        </Button>
       </GridItem>
       <SettingsModalOpenButton position="absolute" insetBlockStart={3} insetInlineStart={3} />
     </Grid>

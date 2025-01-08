@@ -11,7 +11,7 @@ import { assert } from 'tsafe';
 import { withResult, withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
-import { getBundledBinPath, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
+import { getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import { getPins } from '@/shared/pins';
 import type {
   GpuType,
@@ -160,12 +160,7 @@ export class InstallManager {
 
     const runProcessOptions = {
       signal: abortController.signal,
-      env: {
-        ...process.env,
-        // This is used by `uv` to determine where to install python. We'll install python here so there's no chance
-        // of conflicts with any other `uv`-managed python installations.
-        UV_PYTHON_INSTALL_DIR: getBundledBinPath(),
-      },
+      env: process.env,
     };
 
     // First step - install python

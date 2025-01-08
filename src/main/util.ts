@@ -24,7 +24,8 @@ export const getOperatingSystem = (): OperatingSystem => {
 };
 
 /**
- * Get the path to the bundled bin directory
+ * Get the path to the bundled bin directory. This directory holds executables that are bundled with the app. These
+ * resources are extracted at runtime and deleted when the app is closed - do not store anything important here.
  */
 export const getBundledBinPath = (): string => {
   if (isDevelopment()) {

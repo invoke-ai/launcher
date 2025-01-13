@@ -51,10 +51,13 @@ export class InstallManager {
 
   startInstall = async (location: string, gpuType: GpuType, version: string, repair?: boolean) => {
     /**
-     * Installation is a 3-step process:
-     * - Install Python. If repair is true, we'll forcibly reinstall the python version.
-     * - Create a virtual environment. If repair is true, we'll forcibly recreate the venv.
+     * Installation is a 2-step process:
+     * - Create a virtual environment.
      * - Install the invokeai package.
+     *
+     * If repair mode is enabled, we do these additional steps before the above:
+     * - Forcibly reinstall the uv-managed python.
+     * - Delete any existing virtual environment.
      */
 
     this.updateStatus({ type: 'starting' });
@@ -163,48 +166,46 @@ export class InstallManager {
       env: process.env,
     };
 
-    // First step - install python
-    const installPythonArgs = [
-      // Use `uv`'s python interface to install the specific python version
-      'python',
-      'install',
-      pythonVersion,
-      // Always use a managed python version - never the system python
-      '--python-preference',
-      'only-managed',
-    ];
-
-    // In repair mode, we'll forcibly reinstall python
     if (repair) {
-      installPythonArgs.push('--reinstall');
+      // In repair mode, we'll forcibly reinstall python
+      const installPythonArgs = [
+        // Use `uv`'s python interface to install the specific python version
+        'python',
+        'install',
+        pythonVersion,
+        // Always use a managed python version - never the system python
+        '--python-preference',
+        'only-managed',
+        '--reinstall',
+      ];
+
+      this.log.info('Installing Python...\r\n');
+      this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
+
+      const installPythonResult = await withResultAsync(() =>
+        runProcess(uvPath, installPythonArgs, runProcessCallbacks, runProcessOptions)
+      );
+
+      if (installPythonResult.isErr()) {
+        this.log.error(`Failed to install Python: ${installPythonResult.error.message}\r\n`);
+        this.updateStatus({
+          type: 'error',
+          error: {
+            message: 'Failed to install Python',
+            context: serializeError(installPythonResult.error),
+          },
+        });
+        return;
+      }
+
+      if (installPythonResult.value === 'canceled') {
+        this.log.warn('Installation canceled\r\n');
+        this.updateStatus({ type: 'canceled' });
+        return;
+      }
     }
 
-    this.log.info('Installing Python...\r\n');
-    this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
-
-    const installPythonResult = await withResultAsync(() =>
-      runProcess(uvPath, installPythonArgs, runProcessCallbacks, runProcessOptions)
-    );
-
-    if (installPythonResult.isErr()) {
-      this.log.error(`Failed to install Python: ${installPythonResult.error.message}\r\n`);
-      this.updateStatus({
-        type: 'error',
-        error: {
-          message: 'Failed to install Python',
-          context: serializeError(installPythonResult.error),
-        },
-      });
-      return;
-    }
-
-    if (installPythonResult.value === 'canceled') {
-      this.log.warn('Installation canceled\r\n');
-      this.updateStatus({ type: 'canceled' });
-      return;
-    }
-
-    // Second step - create a virtual environment
+    // Create the virtual environment
     const venvPath = path.resolve(path.join(location, '.venv'));
 
     // In repair mode, we will delete the .venv first if it exists
@@ -225,7 +226,8 @@ export class InstallManager {
       // Ensure we install against the correct python version
       '--python',
       pythonVersion,
-      // Always use a managed python version - never the system python
+      // Always use a managed python version - never the system python. This installs the required python if it is not
+      // already installed.
       '--python-preference',
       'only-managed',
       venvPath,

@@ -1,4 +1,13 @@
-import { Button, Divider, Heading, ListItem, Text, UnorderedList, useShiftModifier } from '@invoke-ai/ui-library';
+import {
+  Button,
+  Divider,
+  Heading,
+  ListItem,
+  Text,
+  Tooltip,
+  UnorderedList,
+  useShiftModifier,
+} from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo } from 'react';
 import { assert } from 'tsafe';
@@ -59,6 +68,14 @@ export const InstallFlowStepReview = memo(() => {
             </Text>
           </ListItem>
         </UnorderedList>
+        {/* {shift && (
+          <Alert status="info" w="auto" mt={8}>
+            <AlertIcon />
+            <AlertDescription fontSize="sm">
+              Repair mode forcibly reinstalls python and recreates the virtual environment.
+            </AlertDescription>
+          </Alert>
+        )} */}
       </BodyContent>
       <BodyFooter>
         <Button onClick={installFlowApi.prevStep} variant="link">
@@ -66,12 +83,14 @@ export const InstallFlowStepReview = memo(() => {
         </Button>
         <Divider orientation="vertical" />
         {shift && (
-          <Button onClick={installFlowApi.startInstallWithRepair} colorScheme="invokeRed">
-            Repair
-          </Button>
+          <Tooltip isOpen label="Repair mode forcibly reinstalls python and recreates the virtual environment.">
+            <Button w={24} onClick={installFlowApi.startInstallWithRepair} colorScheme="invokeRed">
+              Repair
+            </Button>
+          </Tooltip>
         )}
         {!shift && (
-          <Button onClick={installFlowApi.startInstallWithoutRepair} colorScheme="invokeYellow">
+          <Button w={24} onClick={installFlowApi.startInstallWithoutRepair} colorScheme="invokeYellow">
             Install
           </Button>
         )}

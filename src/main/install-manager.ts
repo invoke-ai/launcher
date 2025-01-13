@@ -179,7 +179,7 @@ export class InstallManager {
         '--reinstall',
       ];
 
-      this.log.info('Installing Python...\r\n');
+      this.log.info('Reinstalling Python...\r\n');
       this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
 
       const installPythonResult = await withResultAsync(() =>
@@ -207,55 +207,74 @@ export class InstallManager {
 
     // Create the virtual environment
     const venvPath = path.resolve(path.join(location, '.venv'));
+    let hasVenv = await isDirectory(venvPath);
 
     // In repair mode, we will delete the .venv first if it exists
-    if (repair && (await isDirectory(venvPath))) {
+    if (repair && hasVenv) {
+      this.log.info('Deleting existing virtual environment...\r\n');
       await fs.rm(venvPath, { recursive: true, force: true }).catch(() => {
         this.log.warn('Failed to delete virtual environment\r\n');
       });
+      hasVenv = false;
     }
 
-    const createVenvArgs = [
-      // Use `uv`'s venv interface to create a virtual environment
-      'venv',
-      // We don't ever plan on relocating the venv but it doesn't hurt
-      '--relocatable',
-      // Note: the legacy install scripts used `.venv` as the prompt
-      '--prompt',
-      'invoke',
-      // Ensure we install against the correct python version
-      '--python',
-      pythonVersion,
-      // Always use a managed python version - never the system python. This installs the required python if it is not
-      // already installed.
-      '--python-preference',
-      'only-managed',
-      venvPath,
-    ];
+    /**
+     * If the venv doesn't already exist, create it. Reasons why it might not exist:
+     * - Fresh install.
+     * - The user has deleted the virtual environment.
+     * - We are running in repair mode, and just deleted it.
+     * - A previous install attempt failed before the virtual environment was created.
+     *
+     * In any case, we need to create the virtual environment if it does not exist.
+     *
+     * TODO(psyche): Is there a way to check if the venv folder exists but is corrupted? Currently, we rely on the
+     * app just breaking and the user learning to use repair mode to resolve the issue. Maybe this isn't a big deal.
+     */
+    if (!hasVenv) {
+      const createVenvArgs = [
+        // Use `uv`'s venv interface to create a virtual environment
+        'venv',
+        // We don't ever plan on relocating the venv but it doesn't hurt
+        '--relocatable',
+        // Note: the legacy install scripts used `.venv` as the prompt
+        '--prompt',
+        'invoke',
+        // Ensure we install against the correct python version
+        '--python',
+        pythonVersion,
+        // Always use a managed python version - never the system python. This installs the required python if it is not
+        // already installed.
+        '--python-preference',
+        'only-managed',
+        venvPath,
+      ];
 
-    this.log.info('Creating virtual environment...\r\n');
-    this.log.info(`> ${uvPath} ${createVenvArgs.join(' ')}\r\n`);
+      this.log.info('Creating virtual environment...\r\n');
+      this.log.info(`> ${uvPath} ${createVenvArgs.join(' ')}\r\n`);
 
-    const createVenvResult = await withResultAsync(() =>
-      runProcess(uvPath, createVenvArgs, runProcessCallbacks, runProcessOptions)
-    );
+      const createVenvResult = await withResultAsync(() =>
+        runProcess(uvPath, createVenvArgs, runProcessCallbacks, runProcessOptions)
+      );
 
-    if (createVenvResult.isErr()) {
-      this.log.error(`Failed to create virtual environment: ${createVenvResult.error.message}\r\n`);
-      this.updateStatus({
-        type: 'error',
-        error: {
-          message: 'Failed to create virtual environment',
-          context: serializeError(createVenvResult.error),
-        },
-      });
-      return;
-    }
+      if (createVenvResult.isErr()) {
+        this.log.error(`Failed to create virtual environment: ${createVenvResult.error.message}\r\n`);
+        this.updateStatus({
+          type: 'error',
+          error: {
+            message: 'Failed to create virtual environment',
+            context: serializeError(createVenvResult.error),
+          },
+        });
+        return;
+      }
 
-    if (createVenvResult.value === 'canceled') {
-      this.log.warn('Installation canceled\r\n');
-      this.updateStatus({ type: 'canceled' });
-      return;
+      if (createVenvResult.value === 'canceled') {
+        this.log.warn('Installation canceled\r\n');
+        this.updateStatus({ type: 'canceled' });
+        return;
+      }
+    } else {
+      this.log.info('Virtual environment already exists, skipping...\r\n');
     }
 
     // Third step - install the invokeai package

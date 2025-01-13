@@ -117,17 +117,20 @@ export class InvokeManager {
       this.log.info(data.toString());
     });
 
-    invokeProcess.on('close', (code) => {
-      if (code === 0 || code === null) {
-        // The process exited normally or was killed via signal - treat as a normal exit
-        // Windows does not have signals so we will not bother checking the signal
+    invokeProcess.on('close', (code, signal) => {
+      if (code === 0) {
+        // Process exited on its own with no error
         this.updateStatus({ type: 'exited' });
-      } else if (code !== 0) {
-        // The process exited with a non-zero code
+        this.log.info('Process exited normally\r\n');
+      } else if (code !== null) {
+        // Process exited on its own, with a non-zero code, indicating an error
         this.updateStatus({ type: 'error', error: { message: `Process exited with code ${code}` } });
+        this.log.info(`Process exited with code ${code}\r\n`);
+      } else if (signal !== null) {
+        // Process exited due to a signal (e.g. user pressed clicked Shutdown)
+        this.updateStatus({ type: 'exited' });
+        this.log.info(`Process exited with signal ${signal}\r\n`);
       }
-
-      this.log.info(`Process exited with code: ${code ?? 0}\r\n`);
 
       this.closeWindow();
 

@@ -277,7 +277,7 @@ export class InstallManager {
       this.log.info('Virtual environment already exists, skipping...\r\n');
     }
 
-    // Third step - install the invokeai package
+    // Install the invokeai package
     const installInvokeArgs = [
       // Use `uv`s pip interface to install the invokeai package
       'pip',
@@ -324,7 +324,9 @@ export class InstallManager {
       return;
     }
 
-    // Create a marker file to indicate that the next run is the first run since installation
+    // Create a marker file to indicate that the next run is the first run since installation.
+    // The first run takes a while, presumably due to python bytecode compilation. When we run the app, we check
+    // for this marker file and log a message if it exists. Once started up, we delete the marker file.
     const firstRunMarkerPath = join(location, FIRST_RUN_MARKER_FILENAME);
     fs.writeFile(firstRunMarkerPath, '').catch(() => {
       this.log.warn('Failed to create first run marker file\r\n');

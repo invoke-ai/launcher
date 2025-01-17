@@ -108,7 +108,7 @@ export const GPU_TYPE_MAP: Record<GpuType, string> = {
   'nvidia<30xx': 'Nvidia (20xx and below)',
   'nvidia>=30xx': 'Nvidia (30xx and above)',
   amd: 'AMD',
-  nogpu: 'No GPU',
+  nogpu: 'No dedicated GPU',
 };
 
 /**

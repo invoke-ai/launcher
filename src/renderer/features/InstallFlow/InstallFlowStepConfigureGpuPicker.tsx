@@ -19,7 +19,7 @@ export const InstallFlowStepConfigureGpuPicker = memo(() => {
         <GpuButton type="amd" />
         <GpuButton type="nogpu" />
       </ButtonGroup>
-      {operatingSystem === 'macOS' && <Text fontSize="md">Tip: Macs usually have no discrete GPU.</Text>}
+      {operatingSystem === 'macOS' && <Text fontSize="md">Tip: Macs usually have no dedicated GPU.</Text>}
     </>
   );
 });

@@ -1,6 +1,6 @@
 # Release
 
-1. Bump the version in `package.json` & `Banner.tsx`.
+1. Bump the version by running `npm run version [<newversion> | major | minor | patch | etc]`.
 2. Merge all changes and let CI run on `main`. You'll have 3 builds, one for each of Windows, macOS and Linux. The Windows and macOS\* builds need to be signed.
 3. Upload the unsigned Windows and macOS builds to R2. **Do _not_ overwrite the previous release's stable builds!**
 4. On the private codesigning repo, kick off a codesign workflow for Windows and macOS. You'll need to provide the URL to the R2-hosted unsigned build for each platform.

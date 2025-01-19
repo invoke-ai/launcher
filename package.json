@@ -24,7 +24,8 @@
     "test:no-watch": "npm rebuild node-pty && vitest --no-watch",
     "rebuild": "electron-rebuild -f -w node-pty",
     "postinstall": "npm run rebuild",
-    "react-devtools": "react-devtools"
+    "react-devtools": "react-devtools",
+    "version": "npm version --message 'chore: bump version to v%s'"
   },
   "postinstall": "electron-builder install-app-deps",
   "devDependencies": {

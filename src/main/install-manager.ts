@@ -40,6 +40,11 @@ export class InstallManager {
     this.abortController = null;
   }
 
+  logRepairModeMessages = (): void => {
+    this.log.info('Try installing again with Repair mode enabled to fix this.\r\n');
+    this.log.info('Ask for help on Discord or GitHub if you continue to have issues.\r\n');
+  };
+
   getStatus = (): WithTimestamp<InstallProcessStatus> => {
     return this.status;
   };
@@ -188,6 +193,7 @@ export class InstallManager {
 
       if (installPythonResult.isErr()) {
         this.log.error(`Failed to install Python: ${installPythonResult.error.message}\r\n`);
+        this.logRepairModeMessages();
         this.updateStatus({
           type: 'error',
           error: {
@@ -258,6 +264,7 @@ export class InstallManager {
 
       if (createVenvResult.isErr()) {
         this.log.error(`Failed to create virtual environment: ${createVenvResult.error.message}\r\n`);
+        this.logRepairModeMessages();
         this.updateStatus({
           type: 'error',
           error: {
@@ -308,6 +315,7 @@ export class InstallManager {
 
     if (installAppResult.isErr()) {
       this.log.error(`Failed to install invokeai python package: ${installAppResult.error.message}\r\n`);
+      this.logRepairModeMessages();
       this.updateStatus({
         type: 'error',
         error: {

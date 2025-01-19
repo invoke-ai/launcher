@@ -1,15 +1,20 @@
 import {
   Button,
+  Checkbox,
   Divider,
+  Flex,
+  FormControl,
+  FormLabel,
   Heading,
   ListItem,
+  Spacer,
   Text,
   Tooltip,
   UnorderedList,
-  useShiftModifier,
 } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
-import { memo } from 'react';
+import type { ChangeEvent } from 'react';
+import { memo, useCallback } from 'react';
 import { assert } from 'tsafe';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
@@ -27,10 +32,12 @@ const GPU_LABEL_MAP: Record<GpuType, string> = {
 };
 
 export const InstallFlowStepReview = memo(() => {
-  const { dirDetails, gpuType, release } = useStore(installFlowApi.$choices);
+  const { dirDetails, gpuType, release, repairMode } = useStore(installFlowApi.$choices);
   const installType = useStore(installFlowApi.$installType);
 
-  const shift = useShiftModifier();
+  const onChangeRepairMode = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    installFlowApi.$choices.set({ ...installFlowApi.$choices.get(), repairMode: e.target.checked });
+  }, []);
 
   assert(dirDetails !== null);
   assert(gpuType !== null);
@@ -68,32 +75,32 @@ export const InstallFlowStepReview = memo(() => {
             </Text>
           </ListItem>
         </UnorderedList>
-        {/* {shift && (
-          <Alert status="info" w="auto" mt={8}>
-            <AlertIcon />
-            <AlertDescription fontSize="sm">
-              Repair mode forcibly reinstalls python and recreates the virtual environment.
-            </AlertDescription>
-          </Alert>
-        )} */}
+        <Spacer />
       </BodyContent>
       <BodyFooter>
+        <Tooltip
+          label={
+            <Flex flexDir="column" gap={1}>
+              <Text fontWeight="semibold">Repair mode can fix installation or update issues.</Text>
+              <Text>It reinstalls python and recreates the virtual environment.</Text>
+            </Flex>
+          }
+        >
+          <FormControl w="min-content">
+            <FormLabel m={0} fontWeight="normal" fontSize="md">
+              Repair mode
+            </FormLabel>
+            <Checkbox isChecked={repairMode} onChange={onChangeRepairMode} />
+          </FormControl>
+        </Tooltip>
+        <Divider orientation="vertical" />
         <Button onClick={installFlowApi.prevStep} variant="link">
           Back
         </Button>
         <Divider orientation="vertical" />
-        {shift && (
-          <Tooltip isOpen label="Repair mode forcibly reinstalls python and recreates the virtual environment.">
-            <Button w={24} onClick={installFlowApi.startInstallWithRepair} colorScheme="invokeRed">
-              Repair
-            </Button>
-          </Tooltip>
-        )}
-        {!shift && (
-          <Button w={24} onClick={installFlowApi.startInstallWithoutRepair} colorScheme="invokeYellow">
-            Install
-          </Button>
-        )}
+        <Button w={24} onClick={installFlowApi.startInstall} colorScheme="invokeYellow">
+          Install
+        </Button>
       </BodyFooter>
     </BodyContainer>
   );

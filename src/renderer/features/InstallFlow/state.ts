@@ -23,10 +23,12 @@ const $choices = map<{
   dirDetails: DirDetails | null;
   gpuType: GpuType | null;
   release: { version: string; isPrerelease: boolean } | null;
+  repairMode: boolean;
 }>({
   dirDetails: null,
   gpuType: null,
   release: null,
+  repairMode: false,
 });
 
 const $activeStep = atom(0);
@@ -77,7 +79,7 @@ export const installFlowApi = {
     $activeStep.set(clamp(currentStep - 1, 0, installFlowApi.steps.length - 1));
   },
   beginFlow: (dirDetails?: DirDetails) => {
-    $choices.set({ dirDetails: dirDetails ?? null, gpuType: null, release: null });
+    $choices.set({ dirDetails: dirDetails ?? null, gpuType: null, release: null, repairMode: false });
     $activeStep.set(0);
     $isStarted.set(true);
   },
@@ -86,24 +88,19 @@ export const installFlowApi = {
       dirDetails: null,
       gpuType: null,
       release: null,
+      repairMode: false,
     });
     $activeStep.set(0);
     $isStarted.set(false);
   },
-  startInstall: (repair?: boolean) => {
-    const { dirDetails, gpuType, release } = $choices.get();
+  startInstall: () => {
+    const { dirDetails, gpuType, release, repairMode } = $choices.get();
     if (!dirDetails || !dirDetails.canInstall || !release || !gpuType) {
       return;
     }
     $installProcessLogs.set([]);
-    emitter.invoke('install-process:start-install', dirDetails.path, gpuType, release.version, repair);
+    emitter.invoke('install-process:start-install', dirDetails.path, gpuType, release.version, repairMode);
     installFlowApi.nextStep();
-  },
-  startInstallWithoutRepair: () => {
-    installFlowApi.startInstall(false);
-  },
-  startInstallWithRepair: () => {
-    installFlowApi.startInstall(true);
   },
   cancelInstall: async () => {
     await emitter.invoke('install-process:cancel-install');

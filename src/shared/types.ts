@@ -329,6 +329,7 @@ type UtilIpcEvents = Namespaced<
     'get-dir-details': (path: string) => DirDetails;
     'get-default-install-dir': () => string;
     'open-directory': (path: string) => string;
+    'get-launcher-version': () => string;
   }
 >;
 

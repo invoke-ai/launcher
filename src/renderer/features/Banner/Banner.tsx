@@ -1,13 +1,12 @@
 import { Button, Flex, Grid, GridItem } from '@invoke-ai/ui-library';
+import { useStore } from '@nanostores/react';
 import type { ReactNode } from 'react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { assert } from 'tsafe';
 
 import { BannerInvokeLogoTag } from '@/renderer/features/Banner/BannerInvokeLogoTag';
+import { $launcherVersion } from '@/renderer/features/Banner/state';
 import { SettingsModalOpenButton } from '@/renderer/features/SettingsModal/SettingsModalOpenButton';
-
-// TODO(psyche): make this dynamic so we don't need to keep it synced with the package.json version
-const VERSION = '1.2.1';
 
 const MIN_PROBABILITY = 0.2;
 
@@ -58,6 +57,7 @@ const INITIAL_SEED = 1406667833; // experimentally determined
 const getSeed = () => Math.floor(Math.random() * 2147483647);
 
 export const Banner = memo(() => {
+  const launcherVersion = useStore($launcherVersion);
   const [seed, setSeed] = useState(INITIAL_SEED);
 
   const rand = useMemo(() => getRand(seed), [seed]);
@@ -75,9 +75,11 @@ export const Banner = memo(() => {
       </GridItem>
       <GridItem as={Flex} position="relative" justifyContent="flex-end">
         <Grid {...grid.props}>{grid.children}</Grid>
-        <Button onClick={reroll} variant="unstyled" position="absolute" top="0" right="2" size="sm" color="base.700">
-          {`v${VERSION}`}
-        </Button>
+        {launcherVersion && (
+          <Button onClick={reroll} variant="unstyled" position="absolute" top="0" right="2" size="sm" color="base.700">
+            {`v${launcherVersion}`}
+          </Button>
+        )}
       </GridItem>
       <SettingsModalOpenButton position="absolute" insetBlockStart={3} insetInlineStart={3} />
     </Grid>

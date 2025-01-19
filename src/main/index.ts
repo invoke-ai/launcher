@@ -112,5 +112,5 @@ main.ipc.handle('util:get-is-file', (_, path) => isFile(path));
 main.ipc.handle('util:get-path-exists', (_, path) => pathExists(path));
 main.ipc.handle('util:get-os', () => getOperatingSystem());
 main.ipc.handle('util:open-directory', (_, path) => shell.openPath(path));
-
+main.ipc.handle('util:get-launcher-version', () => app.getVersion());
 //#endregion

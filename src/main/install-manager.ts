@@ -182,6 +182,7 @@ export class InstallManager {
         '--python-preference',
         'only-managed',
         '--reinstall',
+        '--verbose',
       ];
 
       this.log.info('Reinstalling Python...\r\n');
@@ -254,6 +255,10 @@ export class InstallManager {
         'only-managed',
         venvPath,
       ];
+
+      if (repair) {
+        createVenvArgs.push('--verbose');
+      }
 
       this.log.info('Creating virtual environment...\r\n');
       this.log.info(`> ${uvPath} ${createVenvArgs.join(' ')}\r\n`);

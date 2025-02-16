@@ -22,7 +22,14 @@ const steps = ['Location', 'Version', 'Configure', 'Review', 'Install'] as const
 const $choices = map<{
   dirDetails: DirDetails | null;
   gpuType: GpuType | null;
-  release: { version: string; isPrerelease: boolean } | null;
+  release:
+    | {
+        type: 'gh';
+        version: string;
+        isPrerelease?: boolean;
+      }
+    | { type: 'manual'; version: string }
+    | null;
   repairMode: boolean;
 }>({
   dirDetails: null,
@@ -46,6 +53,10 @@ const $installType = computed($choices, ({ dirDetails, release }): InstallType |
   }
 
   const installedVersion = dirDetails.version;
+
+  if (release.type === 'manual') {
+    return { type: 'manual', newVersion, installedVersion };
+  }
 
   const comparison = compare(newVersion, installedVersion);
 
@@ -79,7 +90,12 @@ export const installFlowApi = {
     $activeStep.set(clamp(currentStep - 1, 0, installFlowApi.steps.length - 1));
   },
   beginFlow: (dirDetails?: DirDetails) => {
-    $choices.set({ dirDetails: dirDetails ?? null, gpuType: null, release: null, repairMode: false });
+    $choices.set({
+      dirDetails: dirDetails ?? null,
+      gpuType: null,
+      release: null,
+      repairMode: false,
+    });
     $activeStep.set(0);
     $isStarted.set(true);
   },
@@ -136,7 +152,7 @@ const syncReleaseChoiceWithLatestReleases = () => {
     return;
   }
 
-  $choices.setKey('release', { version: latestGHReleases.data.stable, isPrerelease: false });
+  $choices.setKey('release', { type: 'gh', version: latestGHReleases.data.stable, isPrerelease: false });
 };
 
 $latestGHReleases.listen(syncReleaseChoiceWithLatestReleases);

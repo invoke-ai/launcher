@@ -19,7 +19,10 @@ import { assert } from 'tsafe';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
 import { Strong } from '@/renderer/common/Strong';
-import { InstallFlowInstallTypeDescription } from '@/renderer/features/InstallFlow/InstallFlowInstallTypeDescription';
+import {
+  InstallFlowInstallTypeDescription,
+  ManualVersionWarning,
+} from '@/renderer/features/InstallFlow/InstallFlowInstallTypeDescription';
 import { InstallFlowStepper } from '@/renderer/features/InstallFlow/InstallFlowStepper';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
 import type { GpuType } from '@/shared/types';
@@ -55,18 +58,23 @@ export const InstallFlowStepReview = memo(() => {
           <ListItem>
             <InstallFlowInstallTypeDescription installType={installType} />
           </ListItem>
-          {release.isPrerelease && (
+          {release.type === 'gh' && release.isPrerelease && (
             <ListItem>
               <Text fontSize="md">
                 This is a <Strong>prerelease</Strong> of Invoke. Thanks for helping us test it!
               </Text>
             </ListItem>
           )}
-          {!release.isPrerelease && (
+          {release.type === 'gh' && !release.isPrerelease && (
             <ListItem>
               <Text fontSize="md">
                 This is a <Strong>stable</Strong> release of Invoke.
               </Text>
+            </ListItem>
+          )}
+          {release.type === 'manual' && (
+            <ListItem>
+              <ManualVersionWarning />
             </ListItem>
           )}
           <ListItem>

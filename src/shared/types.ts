@@ -162,7 +162,7 @@ export type InstallType =
       newVersion: string;
     }
   | {
-      type: 'reinstall' | 'upgrade' | 'downgrade';
+      type: 'reinstall' | 'upgrade' | 'downgrade' | 'manual';
       newVersion: string;
       installedVersion: string;
     };

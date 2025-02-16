@@ -1,5 +1,6 @@
 import { Button, Divider } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
+import { valid } from '@renovatebot/pep440';
 import { memo } from 'react';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
@@ -23,7 +24,11 @@ export const InstallFlowStepVersion = memo(() => {
           Back
         </Button>
         <Divider orientation="vertical" />
-        <Button onClick={installFlowApi.nextStep} isDisabled={!release} colorScheme="invokeYellow">
+        <Button
+          onClick={installFlowApi.nextStep}
+          isDisabled={!release || valid(release.version) === null}
+          colorScheme="invokeYellow"
+        >
           Next
         </Button>
       </BodyFooter>

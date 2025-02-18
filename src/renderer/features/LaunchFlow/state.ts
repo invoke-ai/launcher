@@ -2,7 +2,7 @@ import { isEqual } from 'lodash-es';
 import { atom, computed } from 'nanostores';
 
 import { LineBuffer } from '@/lib/line-buffer';
-import { POLL_INTERVAL } from '@/renderer/constants';
+import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import { syncInstallDirDetails } from '@/renderer/services/store';
 import type { InvokeProcessStatus, LogEntry, WithTimestamp } from '@/shared/types';
@@ -63,7 +63,7 @@ const listen = () => {
     $invokeProcessStatus.set(newStatus);
   };
 
-  setInterval(poll, POLL_INTERVAL);
+  setInterval(poll, STATUS_POLL_INTERVAL_MS);
 };
 
 listen();

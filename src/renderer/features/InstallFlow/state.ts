@@ -6,7 +6,7 @@ import { assert } from 'tsafe';
 
 import { LineBuffer } from '@/lib/line-buffer';
 import { withResultAsync } from '@/lib/result';
-import { POLL_INTERVAL } from '@/renderer/constants';
+import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { $latestGHReleases } from '@/renderer/services/gh';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import {
@@ -229,7 +229,7 @@ const listen = () => {
     $installProcessStatus.set(newStatus);
   };
 
-  setInterval(poll, POLL_INTERVAL);
+  setInterval(poll, STATUS_POLL_INTERVAL_MS);
 };
 
 listen();

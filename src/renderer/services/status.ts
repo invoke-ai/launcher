@@ -1,7 +1,7 @@
 import { isEqual } from 'lodash-es';
 import { atom } from 'nanostores';
 
-import { POLL_INTERVAL } from '@/renderer/constants';
+import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import type { MainProcessStatus, WithTimestamp } from '@/shared/types';
 
@@ -30,7 +30,7 @@ const listen = () => {
     $mainProcessStatus.set(newStatus);
   };
 
-  setInterval(poll, POLL_INTERVAL);
+  setInterval(poll, STATUS_POLL_INTERVAL_MS);
 };
 
 listen();

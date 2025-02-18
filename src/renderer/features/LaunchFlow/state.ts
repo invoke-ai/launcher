@@ -50,7 +50,11 @@ const listen = () => {
     $invokeProcessStatus.set(status);
     if (status.type === 'exited' || status.type === 'error') {
       // Flush the buffer when the process exits in case there were any remaining logs
-      buffer.flush();
+      const finalMessage = buffer.flush();
+      const lastLog = $invokeProcessLogs.get().slice(-1)[0];
+      if (lastLog && finalMessage) {
+        appendToInvokeProcessLogs({ ...lastLog, message: finalMessage });
+      }
 
       // If the invoke process errored, we need to force a sync of the install dir details in case something broke
       syncInstallDirDetails();

@@ -215,7 +215,11 @@ const listen = () => {
     $installProcessStatus.set(status);
     if (status.type === 'canceled' || status.type === 'completed' || status.type === 'error') {
       // Flush the buffer when the process exits in case there were any remaining logs
-      buffer.flush();
+      const finalMessage = buffer.flush();
+      const lastLog = $installProcessLogs.get().slice(-1)[0];
+      if (lastLog && finalMessage) {
+        appendToInstallProcessLogs({ ...lastLog, message: finalMessage });
+      }
 
       // If the install was canceled or errored, we need to force a sync of the install dir details in case something
       // broke

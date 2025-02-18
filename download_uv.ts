@@ -92,9 +92,6 @@ async function extractZip(filePath: string, destPath: string): Promise<[string, 
 async function download(platform: Platforms): Promise<void> {
   const config = packageJson.uv[platform];
 
-  const destPath = path.join(destBasePath, platform);
-  fs.mkdirSync(destPath);
-
   const tmpPath = tmp.dirSync({ unsafeCleanup: true });
 
   const fileName = path.basename(config.url);
@@ -121,15 +118,13 @@ async function download(platform: Platforms): Promise<void> {
     throw new Error('Unsupported archive file format');
   }
 
-  const destFilePath = path.join(destPath, extractedFileName);
+  const destFilePath = path.join(destBasePath, extractedFileName);
   console.log(`Copying extracted file to destination: ${destFilePath}`);
   fs.copyFileSync(extractedFilePath, destFilePath);
 }
 
 async function main(): Promise<void> {
-  if (!fs.existsSync(destBasePath)) {
-    fs.mkdirSync(destBasePath);
-  }
+  fs.mkdirSync(destBasePath, { recursive: true });
 
   const platform = process.argv[2];
   if (!isPlatform(platform)) {

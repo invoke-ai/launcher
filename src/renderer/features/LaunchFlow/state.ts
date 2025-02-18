@@ -2,7 +2,7 @@ import { isEqual } from 'lodash-es';
 import { atom, computed } from 'nanostores';
 
 import { LineBuffer } from '@/lib/line-buffer';
-import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
+import { INVOKE_PROCESS_LOG_LIMIT, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import { syncInstallDirDetails } from '@/renderer/services/store';
 import type { InvokeProcessStatus, LogEntry, WithTimestamp } from '@/shared/types';
@@ -32,6 +32,9 @@ $invokeProcessStatus.subscribe((status, oldStatus) => {
 });
 
 export const $invokeProcessLogs = atom<WithTimestamp<LogEntry>[]>([]);
+const appendToInvokeProcessLogs = (entry: WithTimestamp<LogEntry>) => {
+  $invokeProcessLogs.set([...$invokeProcessLogs.get(), entry].slice(-INVOKE_PROCESS_LOG_LIMIT));
+};
 
 const listen = () => {
   const buffer = new LineBuffer({ stripAnsi: true });
@@ -39,7 +42,7 @@ const listen = () => {
   ipc.on('invoke-process:log', (_, data) => {
     const buffered = buffer.append(data.message);
     for (const message of buffered) {
-      $invokeProcessLogs.set([...$invokeProcessLogs.get(), { ...data, message }]);
+      appendToInvokeProcessLogs({ ...data, message });
     }
   });
 

@@ -6,7 +6,7 @@ import { assert } from 'tsafe';
 
 import { LineBuffer } from '@/lib/line-buffer';
 import { withResultAsync } from '@/lib/result';
-import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
+import { INSTALL_PROCESS_LOG_LIMIT, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { $latestGHReleases } from '@/renderer/services/gh';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import {
@@ -185,6 +185,9 @@ $installProcessStatus.subscribe((status, oldStatus) => {
 });
 
 export const $installProcessLogs = atom<WithTimestamp<LogEntry>[]>([]);
+const appendToInstallProcessLogs = (entry: WithTimestamp<LogEntry>) => {
+  $installProcessLogs.set([...$installProcessLogs.get(), entry].slice(-INSTALL_PROCESS_LOG_LIMIT));
+};
 
 export const getIsActiveInstallProcessStatus = (status: InstallProcessStatus) => {
   switch (status.type) {
@@ -204,7 +207,7 @@ const listen = () => {
   ipc.on('install-process:log', (_, data) => {
     const buffered = buffer.append(data.message);
     for (const message of buffered) {
-      $installProcessLogs.set([...$installProcessLogs.get(), { ...data, message }]);
+      appendToInstallProcessLogs({ ...data, message });
     }
   });
 

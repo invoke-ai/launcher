@@ -1,13 +1,14 @@
 import { Checkbox, Flex, FormControl, FormHelperText, FormLabel } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
+import type { ChangeEvent } from 'react';
 import { memo, useCallback } from 'react';
 
 import { persistedStoreApi } from '@/renderer/services/store';
 
 export const SettingsModalNotifyForPrereleaseUpdates = memo(() => {
   const { notifyForPrereleaseUpdates } = useStore(persistedStoreApi.$atom);
-  const onChange = useCallback(() => {
-    persistedStoreApi.setKey('notifyForPrereleaseUpdates', !persistedStoreApi.$atom.get().notifyForPrereleaseUpdates);
+  const onChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    persistedStoreApi.setKey('notifyForPrereleaseUpdates', e.target.checked);
   }, []);
 
   return (

@@ -6,9 +6,6 @@ on:
     types: [released]
   workflow_dispatch:
 
-env:
-  UV_VERSION: '0.5.14'
-
 concurrency:
   group: ${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
@@ -20,25 +17,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download uv
-        run: |
-          mkdir temp
-          mkdir -p ./assets/bin
-          curl -L https://github.com/astral-sh/uv/releases/download/${{ env.UV_VERSION }}/uv-x86_64-unknown-linux-gnu.tar.gz -o uv.tar.gz
-          tar -xzf uv.tar.gz -C ./temp
-          mv ./temp/uv-x86_64-unknown-linux-gnu/uv ./assets/bin/uv
-          rm -rf ./temp/uv-x86_64-unknown-linux-gnu
-
       - name: setup nodejs
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install deps and build GUI
-        run: |
-          npm install --include=dev
-          npm run app:dist
+      - name: Install deps
+        run: npm install --include=dev
+
+      - name: Download uv
+        run: npm run download linux
+
+      - name: Build GUI
+        run: npm run app:dist
 
       - name: Publish artifact - GUI
         uses: actions/upload-artifact@v4
@@ -52,25 +44,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download uv
-        run: |
-          mkdir temp
-          mkdir -p ./assets/bin
-          curl -L https://github.com/astral-sh/uv/releases/download/${{ env.UV_VERSION }}/uv-aarch64-apple-darwin.tar.gz -o uv.tar.gz
-          tar -xzf uv.tar.gz -C ./temp
-          mv ./temp/uv-aarch64-apple-darwin/uv ./assets/bin/uv
-          rm -rf ./temp/uv-aarch64-apple-darwin
-
       - name: setup nodejs
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install deps and build GUI
-        run: |
-          npm install --include=dev
-          npm run app:dist
+      - name: Install deps
+        run: npm install --include=dev
+
+      - name: Download uv
+        run: npm run download mac
+
+      - name: Build GUI
+        run: npm run app:dist
 
       - name: Publish artifact - GUI
         uses: actions/upload-artifact@v4
@@ -83,24 +70,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download uv
-        run: |
-          mkdir temp
-          mkdir -p ./assets/bin
-          curl -L https://github.com/astral-sh/uv/releases/download/${{ env.UV_VERSION }}/uv-x86_64-pc-windows-msvc.zip -o uv.zip
-          unzip uv.zip -d temp/
-          mv temp/uv.exe assets/bin/uv.exe
-
       - name: setup nodejs
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install deps and build GUI
-        run: |
-          npm install --include=dev
-          npm run app:dist
+      - name: Install deps
+        run: npm install --include=dev
+
+      - name: Download uv
+        run: npm run download win
+
+      - name: Build GUI
+        run: npm run app:dist
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4

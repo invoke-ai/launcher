@@ -121,16 +121,24 @@ As described in the next section, you do need to manually download the `uv` bina
 
 ### Getting `uv` for local dev
 
-The GitHub build workflow downloads `uv` during the build step, but you do need to download it manually to build locally or run the launcher in dev mode locally.
+The `uv` binary is required to build the project locally or run the launcher in development mode.
 
-- Check `.github/workflows/build.yml` for the version of `uv` used in the build.
-- Download that version from [`uv`'s releases page on GH](https://github.com/astral-sh/uv/releases).
-- Move the `uv` binary to `assets/`, which mirrors the file structure expected by the build process.
+To fetch the `uv` binary for your operating system, use the following script. Replace PLATFORM with one of the following options based on your system:
+
+- `linux` for Linux
+- `win` for Windows
+- `mac` for macOS
+
+```sh
+npm run download PLATFORM
+```
+
+This will download the appropriate `uv` binary and place it in the `assets/bin/` directory, which matches the file structure expected by the build process.
 
 On macOS, you may need to remove the quarantine flag from the `uv` binary:
 
 ```sh
-xattr -d 'com.apple.quarantine' assets/uv`
+xattr -d 'com.apple.quarantine' assets/bin/uv`
 ```
 
 ### Code Signing

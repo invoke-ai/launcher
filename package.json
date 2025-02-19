@@ -12,6 +12,8 @@
     "package": "electron-forge package",
     "app:dir": "npm run package && electron-builder --dir",
     "app:dist": "npm run package && electron-builder",
+    "download": "ts-node download_uv.ts",
+    "download:clean": "rimraf assets/bin/",
     "lint:knip": "knip --tags=-knipignore",
     "lint:dpdm": "dpdm --no-warning --no-tree --transform --exit-code circular:1 src/main/index.ts src/renderer/index.ts src/preload/index.ts",
     "lint:eslint": "eslint --max-warnings=0 .",
@@ -36,9 +38,12 @@
     "@electron/fuses": "^1.8.0",
     "@invoke-ai/eslint-config-react": "^0.0.14",
     "@invoke-ai/prettier-config-react": "^0.0.7",
+    "@types/follow-redirects": "^1.14.4",
     "@types/ip": "^1.1.3",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/tmp": "^0.2.6",
+    "@types/unzipper": "^0.10.10",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^4.3.4",
@@ -55,14 +60,19 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "eslint-plugin-unused-imports": "^4.1.4",
+    "follow-redirects": "^1.15.9",
     "globals": "^15.13.0",
     "jsdom": "^25.0.1",
     "knip": "^5.39.1",
     "prettier": "^3.4.1",
     "react-devtools": "^6.0.1",
+    "rimraf": "^6.0.1",
+    "tar": "^7.4.3",
+    "tmp": "^0.2.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.17.0",
+    "unzipper": "^0.12.3",
     "vite": "^5.4.11",
     "vite-plugin-eslint": "^1.8.1",
     "vite-plugin-html": "^3.2.2",
@@ -143,6 +153,20 @@
       "icon": "assets/icons/icon.ico"
     },
     "publish": null
+  },
+  "uv": {
+    "linux": {
+      "url": "https://github.com/astral-sh/uv/releases/download/0.5.14/uv-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "22034760075b92487b326da5aa1a2a3e1917e2e766c12c0fd466fccda77013c7"
+    },
+    "win": {
+      "url": "https://github.com/astral-sh/uv/releases/download/0.5.14/uv-x86_64-pc-windows-msvc.zip",
+      "sha256": "ee2468e40320a0a2a36435e66bbd0d861228c4c06767f22d97876528138f4ba0"
+    },
+    "mac": {
+      "url": "https://github.com/astral-sh/uv/releases/download/0.5.14/uv-aarch64-apple-darwin.tar.gz",
+      "sha256": "d548dffc256014c4c8c693e148140a3a21bcc2bf066a35e1d5f0d24c91d32112"
+    }
   },
   "peerDependencies": {
     "@emotion/react": "^11.13.5"

@@ -28,6 +28,15 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
+  "ts-node": {
+    "compilerOptions": {
+      "target": "ESNext",
+      "module": "commonjs",
+      "esModuleInterop": true,
+      "baseUrl": ".",
+      "moduleResolution": "node"
+    }
+  },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["src-installer/*", "node_modules", ".vite"]
 }

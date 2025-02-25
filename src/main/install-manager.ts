@@ -306,6 +306,10 @@ export class InstallManager {
       installInvokeArgs.push(`--index=${torchIndexUrl}`);
     }
 
+    // Manually set the VIRTUAL_ENV environment variable to the venv path to ensure `uv` uses it correctly.
+    // Unfortunately there is no way to specify this in the `uv` CLI.
+    runProcessOptions.env.VIRTUAL_ENV = venvPath;
+
     this.log.info('Installing invokeai package...\r\n');
     this.log.info(`> ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
 

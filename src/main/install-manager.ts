@@ -8,7 +8,7 @@ import path, { join } from 'path';
 import { serializeError } from 'serialize-error';
 import { assert } from 'tsafe';
 
-import { withResult, withResultAsync } from '@/lib/result';
+import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
@@ -112,7 +112,7 @@ export class InstallManager {
     }
 
     // Get the Python version and torch index URL for the target version
-    const pinsResult = await withResult(() => getPins(version));
+    const pinsResult = await withResultAsync(() => getPins(version));
 
     if (pinsResult.isErr()) {
       this.log.error(`Failed to get pins for version ${version}: ${pinsResult.error.message}\r\n`);

@@ -1,17 +1,20 @@
 import { compare } from '@renovatebot/pep440';
 import { assert, objectKeys } from 'tsafe';
+import { z } from 'zod';
 
-type PlatformIndices = {
-  cuda?: string;
-  cpu?: string;
-  rocm?: string;
-};
+import { withResultAsync } from '@/lib/result';
 
-type Pins = {
+const zPlatformIndicies = z.object({
+  cuda: z.string().optional(),
+  cpu: z.string().optional(),
+  rocm: z.string().optional(),
+});
+
+const zPins = z.object({
   /**
    * The python version to use for the given version of the invokeai package.
    */
-  python: string;
+  python: z.string(),
   /**
    * The index urls for the torch package for the given version of the invokeai package for each platform.
    *
@@ -22,12 +25,13 @@ type Pins = {
    *
    * See: https://pytorch.org/get-started/previous-versions/
    */
-  torchIndexUrl: {
-    win32: PlatformIndices;
-    linux: PlatformIndices;
-    darwin: PlatformIndices;
-  };
-};
+  torchIndexUrl: z.object({
+    win32: zPlatformIndicies,
+    linux: zPlatformIndicies,
+    darwin: zPlatformIndicies,
+  }),
+});
+type Pins = z.infer<typeof zPins>;
 
 const PACKAGE_PINS: Record<string, Pins> = {
   '5.0.0': {
@@ -78,7 +82,27 @@ const PACKAGE_PINS: Record<string, Pins> = {
  * @returns The python version and torch index urls
  * @throws If no pins are found for the given version
  */
-export const getPins = (targetVersion: string): Pins => {
+export const getPins = async (targetVersion: string): Promise<Pins> => {
+  // Fetch `pins.json` from the repo using the targetVersion as the tag
+  const tag = targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
+  const url = `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`;
+  console.log('Fetching pins from', url);
+  const result = await withResultAsync(async () => {
+    const res = await fetch(url);
+    assert(res.ok, `Failed to fetch pins.json from ${url}`);
+    const json = await res.json();
+    const pins = zPins.parse(json);
+    return pins;
+  });
+
+  if (result.isOk()) {
+    console.log('Fetched pins:', result.value);
+    return result.value;
+  }
+
+  console.log('Failed to fetch pins:', result.error);
+  // If the fetch fails, fall back to the hardcoded pins
+  console.log('Falling back to hardcoded pins');
   const versions = objectKeys(PACKAGE_PINS);
   const sortedVersions = versions.sort(compare).toReversed();
   const pinKey = sortedVersions.find((version) => compare(version, targetVersion) <= 0);

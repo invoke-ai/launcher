@@ -114,7 +114,8 @@
     "serialize-error": "^11.0.3",
     "strip-ansi": "^7.1.0",
     "tsafe": "^1.8.5",
-    "use-stick-to-bottom": "^1.0.42"
+    "use-stick-to-bottom": "^1.0.42",
+    "zod": "^3.24.2"
   },
   "build": {
     "appId": "com.invoke.invoke-community-edition",

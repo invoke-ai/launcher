@@ -2,6 +2,8 @@ name: Build Unsigned Binaries
 
 on:
   push:
+    branches:
+      - 'main'
   release:
     types: [released]
   pull_request:

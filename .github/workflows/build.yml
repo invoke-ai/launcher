@@ -4,6 +4,12 @@ on:
   push:
   release:
     types: [released]
+  pull_request:
+    types:
+      - 'ready_for_review'
+      - 'opened'
+      - 'synchronize'
+  merge_group:
   workflow_dispatch:
 
 env:

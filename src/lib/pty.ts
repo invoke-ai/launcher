@@ -27,12 +27,22 @@ type CreatePtyArgs = {
   options?: PtyOptions;
 };
 
-const PtyNotFound = Symbol('PtyNotFound');
+type CommandExecution = {
+  id: string; // PTY ID
+  marker: string;
+  resolve: (value: { exitCode: number; output: string }) => void;
+  reject: (reason: Error) => void;
+  output: string[];
+};
+
+export const PtyNotFound = Symbol('PtyNotFound');
 
 export class PtyManager {
   ptys: Map<string, PtyEntry> = new Map();
   options: PtyManagerOptions;
   subscriptions: Set<() => void> = new Set();
+  // Add this new property to track active commands
+  private activeCommands = new Map<string, CommandExecution>();
 
   constructor(options?: Partial<PtyManagerOptions>) {
     this.options = { ...DEFAULT_PTY_MANAGER_OPTIONS, ...options };
@@ -52,6 +62,9 @@ export class PtyManager {
     const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
 
     ptyProcess.onData((data) => {
+      // Check if this data contains a command completion marker
+      this.checkForCommandCompletion(id, data);
+
       const result = ansiSequenceBuffer.append(data);
       if (!result.hasIncomplete) {
         historyBuffer.push(result.complete);
@@ -60,6 +73,14 @@ export class PtyManager {
     });
 
     ptyProcess.onExit(({ exitCode }) => {
+      // Reject any pending commands for this PTY
+      for (const [marker, command] of this.activeCommands.entries()) {
+        if (command.id === id) {
+          command.reject(new Error(`Process exited with code ${exitCode} before command completed`));
+          this.activeCommands.delete(marker);
+        }
+      }
+
       ansiSequenceBuffer.clear();
       historyBuffer.clear();
       this.ptys.delete(id);
@@ -95,6 +116,14 @@ export class PtyManager {
   };
 
   dispose = (id: string): void => {
+    // Reject any pending commands for this PTY
+    for (const [marker, command] of this.activeCommands.entries()) {
+      if (command.id === id) {
+        command.reject(new Error('PTY was disposed'));
+        this.activeCommands.delete(marker);
+      }
+    }
+
     this.do(id, (entry) => {
       entry.process.kill();
       entry.ansiSequenceBuffer.clear();
@@ -104,6 +133,12 @@ export class PtyManager {
   };
 
   teardown = () => {
+    // Reject all pending commands
+    for (const [marker, command] of this.activeCommands.entries()) {
+      command.reject(new Error('PTY manager was torn down'));
+      this.activeCommands.delete(marker);
+    }
+
     const ids = this.ptys.keys();
     for (const id of ids) {
       this.dispose(id);
@@ -124,4 +159,100 @@ export class PtyManager {
     }
     return callback(entry);
   };
+
+  /**
+   * Run a command in a PTY and wait for it to complete.
+   * @returns Promise that resolves with the exit code and output when the command completes
+   */
+  runCommand = (
+    id: string,
+    command: string,
+    options?: { timeout?: number }
+  ): Promise<{ exitCode: number; output: string }> | typeof PtyNotFound => {
+    return this.do(id, (entry) => {
+      // Generate a unique marker for this command
+      const marker = `__CMD_MARKER_${nanoid(8)}__`;
+
+      // Create a promise that will resolve when the command completes
+      const commandPromise = new Promise<{ exitCode: number; output: string }>((resolve, reject) => {
+        // Store command tracking info
+        this.activeCommands.set(marker, {
+          id: id,
+          marker,
+          resolve,
+          reject,
+          output: [],
+        });
+
+        // Create the shell command that includes our marker
+        const wrappedCommand = this.wrapCommandForShell(command, marker);
+
+        // Send the command to the PTY
+        entry.process.write(`${wrappedCommand}\r`);
+      });
+
+      if (!options?.timeout) {
+        return commandPromise;
+      }
+
+      // Add timeout handling if specified
+      const timeoutPromise = new Promise<{ exitCode: number; output: string }>((_, reject) => {
+        setTimeout(() => {
+          if (this.activeCommands.has(marker)) {
+            this.activeCommands.delete(marker);
+            reject(new Error(`Command timed out after ${options.timeout}ms`));
+          }
+        }, options.timeout);
+      });
+
+      return Promise.race([commandPromise, timeoutPromise]);
+    });
+  };
+
+  /**
+   * Wrap a command so that it outputs a marker and exit code when done.
+   * Different shells need different syntax.
+   */
+  private wrapCommandForShell(command: string, marker: string): string {
+    const shell = getShell().toLowerCase();
+    const isWindows = process.platform === 'win32';
+
+    if (isWindows && (shell.includes('powershell') || shell.includes('pwsh'))) {
+      // PowerShell syntax
+      return `& { ${command}; Write-Host "${marker}:$LASTEXITCODE" }`;
+    } else if (isWindows && shell.includes('cmd')) {
+      // Windows CMD syntax
+      return `${command} & echo ${marker}:%ERRORLEVEL%`;
+    } else {
+      // Bash/sh/zsh syntax (default for macOS/Linux)
+      return `{ ${command}; } && echo "${marker}:$?"; true`;
+    }
+  }
+
+  /**
+   * Check if the data from a PTY contains a command completion marker.
+   */
+  private checkForCommandCompletion(ptyId: string, data: string): void {
+    // Check each active command
+    for (const [marker, command] of this.activeCommands.entries()) {
+      if (command.id !== ptyId) {
+        continue;
+      }
+
+      // Collect the output
+      command.output.push(data);
+
+      // Look for the marker pattern: MARKER:EXIT_CODE
+      const pattern = new RegExp(`${marker}:(\\d+)`);
+      const match = data.match(pattern);
+
+      if (match?.[1]) {
+        const exitCode = parseInt(match[1], 10);
+        const output = command.output.join('');
+
+        this.activeCommands.delete(marker);
+        command.resolve({ exitCode, output });
+      }
+    }
+  }
 }

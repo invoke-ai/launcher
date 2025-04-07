@@ -182,11 +182,11 @@ const buildGitHubReleaseChecker = (org: string, repo: string) => {
    * Given a current version, return the latest stable and pre-release versions if they are newer than the specified
    * version.
    */
-  const useAvailableUpdates = (currentVersion: string): UseAvailableUpdatesReturn => {
+  const useAvailableUpdates = (currentVersion?: string | null): UseAvailableUpdatesReturn => {
     const latestGHReleases = useStore($request);
 
     const updates = useMemo<UseAvailableUpdatesReturn>(() => {
-      if (!latestGHReleases.isSuccess) {
+      if (!currentVersion || !latestGHReleases.isSuccess) {
         return { stable: null, pre: null };
       }
       const { stable, pre } = latestGHReleases.data;
@@ -210,7 +210,17 @@ const buildGitHubReleaseChecker = (org: string, repo: string) => {
   return [$request, syncGHReleases, useAvailableUpdates] as const;
 };
 
-export const [$latestInvokeReleases, syncInvokeReleases, useInvokeAvailableUpdates] = buildGitHubReleaseChecker(
+export const [$latestInvokeReleases, _syncInvokeReleases, useInvokeAvailableUpdates] = buildGitHubReleaseChecker(
   'invoke-ai',
   'InvokeAI'
 );
+
+export const [$latestLauncherReleases, _syncLauncherReleases, useLauncherAvailableUpdates] = buildGitHubReleaseChecker(
+  'invoke-ai',
+  'launcher'
+);
+
+export const syncAllReleases = () => {
+  _syncInvokeReleases();
+  _syncLauncherReleases();
+};

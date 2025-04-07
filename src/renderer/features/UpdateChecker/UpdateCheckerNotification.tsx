@@ -5,25 +5,34 @@ import { PiArrowsCounterClockwise } from 'react-icons/pi';
 
 import { EllipsisLoadingText } from '@/renderer/common/EllipsisLoadingText';
 import { Strong } from '@/renderer/common/Strong';
+import { $launcherVersion } from '@/renderer/features/Banner/state';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
-import { $latestInvokeReleases, syncAllReleases, useInvokeAvailableUpdates } from '@/renderer/services/gh';
-import { persistedStoreApi } from '@/renderer/services/store';
-import type { DirDetails } from '@/shared/types';
+import {
+  $latestInvokeReleases,
+  $latestLauncherReleases,
+  syncAllReleases,
+  useInvokeAvailableUpdates,
+  useLauncherAvailableUpdates,
+} from '@/renderer/services/gh';
+import { $installDirDetails, persistedStoreApi } from '@/renderer/services/store';
 
-type Props = {
-  installDirDetails: Extract<DirDetails, { isInstalled: true }>;
-};
-
-export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: Props) => {
-  const latestInvokeReleases = useStore($latestInvokeReleases);
-  const availableInvokeUpdates = useInvokeAvailableUpdates(installDirDetails.version);
+export const UpdateCheckerNotification = memo(() => {
   const { notifyForPrereleaseUpdates } = useStore(persistedStoreApi.$atom);
+  const installDirDetails = useStore($installDirDetails);
+  const latestInvokeReleases = useStore($latestInvokeReleases);
+  const availableInvokeUpdates = useInvokeAvailableUpdates(
+    installDirDetails?.isInstalled ? installDirDetails.version : undefined
+  );
+
+  const launcherVersion = useStore($launcherVersion);
+  const latestLauncherReleases = useStore($latestLauncherReleases);
+  const availableLauncherUpdates = useLauncherAvailableUpdates(launcherVersion);
 
   const beginInstallFlow = useCallback(() => {
     installFlowApi.beginFlow(installDirDetails);
   }, [installDirDetails]);
 
-  if (latestInvokeReleases.isError) {
+  if (latestInvokeReleases.isError || latestLauncherReleases.isError) {
     return (
       <Flex as={Link} onClick={syncAllReleases} alignItems="center" gap={2} userSelect="none">
         <Text color="error.300">Unable to check for updates.</Text>
@@ -32,7 +41,12 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
     );
   }
 
-  if (latestInvokeReleases.isLoading || latestInvokeReleases.isUninitialized) {
+  if (
+    latestInvokeReleases.isLoading ||
+    latestInvokeReleases.isUninitialized ||
+    latestLauncherReleases.isLoading ||
+    latestLauncherReleases.isUninitialized
+  ) {
     return (
       <EllipsisLoadingText fontSize="sm" userSelect="none" color="base.300">
         Checking for updates
@@ -63,4 +77,4 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
     </Flex>
   );
 });
-LaunchFlowUpdateCheckerNotification.displayName = 'LaunchFlowUpdateCheckerNotification';
+UpdateCheckerNotification.displayName = 'UpdateCheckerNotification';

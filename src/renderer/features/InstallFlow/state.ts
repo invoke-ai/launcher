@@ -7,7 +7,7 @@ import { assert } from 'tsafe';
 import { LineBuffer } from '@/lib/line-buffer';
 import { withResultAsync } from '@/lib/result';
 import { INSTALL_PROCESS_LOG_LIMIT, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
-import { $latestGHReleases } from '@/renderer/services/gh';
+import { $latestInvokeReleases } from '@/renderer/services/gh';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import {
   $installDirDetails,
@@ -146,7 +146,7 @@ const syncReleaseChoiceWithLatestReleases = () => {
     return;
   }
 
-  const latestGHReleases = $latestGHReleases.get();
+  const latestGHReleases = $latestInvokeReleases.get();
 
   if (!latestGHReleases.isSuccess) {
     return;
@@ -155,7 +155,7 @@ const syncReleaseChoiceWithLatestReleases = () => {
   $choices.setKey('release', { type: 'gh', version: latestGHReleases.data.stable, isPrerelease: false });
 };
 
-$latestGHReleases.listen(syncReleaseChoiceWithLatestReleases);
+$latestInvokeReleases.listen(syncReleaseChoiceWithLatestReleases);
 $choices.listen(syncReleaseChoiceWithLatestReleases);
 
 const syncGpuTypeWithOperatingSystem = () => {

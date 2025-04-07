@@ -9,7 +9,7 @@ import {
   ManualVersionWarning,
 } from '@/renderer/features/InstallFlow/InstallFlowInstallTypeDescription';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
-import { $latestGHReleases, syncGHReleases } from '@/renderer/services/gh';
+import { $latestInvokeReleases, syncInvokeReleases } from '@/renderer/services/gh';
 
 export const InstallFlowStepVersionVersionPicker = memo(() => {
   return (
@@ -22,13 +22,13 @@ export const InstallFlowStepVersionVersionPicker = memo(() => {
 InstallFlowStepVersionVersionPicker.displayName = 'InstallFlowStepVersionVersionPicker';
 
 const VersionPicker = memo(() => {
-  const latestGHReleases = useStore($latestGHReleases);
+  const latestGHReleases = useStore($latestInvokeReleases);
   const { release } = useStore(installFlowApi.$choices);
   const installType = useStore(installFlowApi.$installType);
 
   if (latestGHReleases.isError) {
     return (
-      <Text role="button" onClick={syncGHReleases} fontSize="md" color="error.300" fontWeight="semibold">
+      <Text role="button" onClick={syncInvokeReleases} fontSize="md" color="error.300" fontWeight="semibold">
         Unable to get available releases from GitHub. Click here to retry.
       </Text>
     );

@@ -210,7 +210,7 @@ const buildGitHubReleaseChecker = (org: string, repo: string) => {
   return [$request, syncGHReleases, useAvailableUpdates] as const;
 };
 
-export const [$latestGHReleases, syncGHReleases, useAvailableUpdates] = buildGitHubReleaseChecker(
+export const [$latestInvokeReleases, syncInvokeReleases, useInvokeAvailableUpdates] = buildGitHubReleaseChecker(
   'invoke-ai',
   'InvokeAI'
 );

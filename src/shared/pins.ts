@@ -34,6 +34,20 @@ const zPins = z.object({
 type Pins = z.infer<typeof zPins>;
 
 const PACKAGE_PINS: Record<string, Pins> = {
+  '5.12.0': {
+    python: '3.12',
+    // Indices for pytorch 2.7.0
+    torchIndexUrl: {
+      win32: {
+        cuda: 'https://download.pytorch.org/whl/cu128',
+      },
+      linux: {
+        cpu: 'https://download.pytorch.org/whl/cpu',
+        rocm: 'https://download.pytorch.org/whl/rocm6.3',
+      },
+      darwin: {},
+    },
+  },
   '5.0.0': {
     python: '3.11',
     // Indices for pytorch 2.4.1

@@ -100,7 +100,8 @@ export const getPins = async (targetVersion: string): Promise<Pins> => {
   const tag = targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
   for (const url of [
     `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`,
-    `https://fastly.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`
+    `https://cdn.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`,
+    `https://fastly.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`,
   ]) {
     console.log('Fetching pins from', url);
     const result = await withResultAsync(async () => {

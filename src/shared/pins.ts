@@ -98,22 +98,27 @@ const PACKAGE_PINS: Record<string, Pins> = {
 export const getPins = async (targetVersion: string): Promise<Pins> => {
   // Fetch `pins.json` from the repo using the targetVersion as the tag
   const tag = targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
-  const url = `https://fastly.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`;
-  console.log('Fetching pins from', url);
-  const result = await withResultAsync(async () => {
-    const res = await fetch(url);
-    assert(res.ok, `Failed to fetch pins.json from ${url}`);
-    const json = await res.json();
-    const pins = zPins.parse(json);
-    return pins;
-  });
+  for (const url of [
+    `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`,
+    `https://fastly.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`
+  ]) {
+    console.log('Fetching pins from', url);
+    const result = await withResultAsync(async () => {
+      const res = await fetch(url);
+      assert(res.ok, `Failed to fetch pins.json from ${url}`);
+      const json = await res.json();
+      const pins = zPins.parse(json);
+      return pins;
+    });
+  
+    if (result.isOk()) {
+      console.log('Fetched pins:', result.value);
+      return result.value;
+    }
 
-  if (result.isOk()) {
-    console.log('Fetched pins:', result.value);
-    return result.value;
+    console.log('Failed to fetch pins:', result.error);
   }
 
-  console.log('Failed to fetch pins:', result.error);
   // If the fetch fails, fall back to the hardcoded pins
   console.log('Falling back to hardcoded pins');
   const versions = objectKeys(PACKAGE_PINS);

@@ -38,15 +38,14 @@ const PACKAGE_PINS: Record<string, Pins> = {
     python: '3.12',
     // Indices for pytorch 2.7.0
     torchIndexUrl: {
-      win32: {
-        cuda: 'https://download.pytorch.org/whl/cu128',
-      },
+      win32: { cuda: 'https://download.pytorch.org/whl/cu128' },
       linux: {
         cpu: 'https://download.pytorch.org/whl/cpu',
         rocm: 'https://download.pytorch.org/whl/rocm6.3',
+        cuda: 'https://download.pytorch.org/whl/cu128'
       },
-      darwin: {},
-    },
+      darwin: {}
+    }
   },
   '5.0.0': {
     python: '3.11',
@@ -99,7 +98,7 @@ const PACKAGE_PINS: Record<string, Pins> = {
 export const getPins = async (targetVersion: string): Promise<Pins> => {
   // Fetch `pins.json` from the repo using the targetVersion as the tag
   const tag = targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
-  const url = `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`;
+  const url = `https://fastly.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`;
   console.log('Fetching pins from', url);
   const result = await withResultAsync(async () => {
     const res = await fetch(url);

@@ -34,19 +34,6 @@ const zPins = z.object({
 type Pins = z.infer<typeof zPins>;
 
 const PACKAGE_PINS: Record<string, Pins> = {
-  '5.12.0': {
-    python: '3.12',
-    // Indices for pytorch 2.7.0
-    torchIndexUrl: {
-      win32: { cuda: 'https://download.pytorch.org/whl/cu128' },
-      linux: {
-        cpu: 'https://download.pytorch.org/whl/cpu',
-        rocm: 'https://download.pytorch.org/whl/rocm6.3',
-        cuda: 'https://download.pytorch.org/whl/cu128'
-      },
-      darwin: {}
-    }
-  },
   '5.0.0': {
     python: '3.11',
     // Indices for pytorch 2.4.1
@@ -101,7 +88,6 @@ export const getPins = async (targetVersion: string): Promise<Pins> => {
   for (const url of [
     `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`,
     `https://cdn.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`,
-    `https://fastly.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`,
   ]) {
     console.log('Fetching pins from', url);
     const result = await withResultAsync(async () => {

@@ -9,6 +9,7 @@ import path, { join } from 'path';
 import { serializeError } from 'serialize-error';
 import { assert } from 'tsafe';
 
+import type { PtyManager } from '@/lib/pty';
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
@@ -29,8 +30,13 @@ export class InstallManager {
   private onStatusChange: (status: WithTimestamp<InstallProcessStatus>) => void;
   private log: SimpleLogger;
   private abortController: AbortController | null;
+  private ptyManager: PtyManager;
 
-  constructor(arg: { ipcLogger: InstallManager['ipcLogger']; onStatusChange: InstallManager['onStatusChange'] }) {
+  constructor(arg: {
+    ipcLogger: InstallManager['ipcLogger'];
+    onStatusChange: InstallManager['onStatusChange'];
+    ptyManager: InstallManager['ptyManager'];
+  }) {
     this.ipcLogger = arg.ipcLogger;
     this.onStatusChange = arg.onStatusChange;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
@@ -39,6 +45,7 @@ export class InstallManager {
       console[entry.level](entry.message);
     });
     this.abortController = null;
+    this.ptyManager = arg.ptyManager;
   }
 
   logRepairModeMessages = (): void => {
@@ -65,6 +72,27 @@ export class InstallManager {
      * - Forcibly reinstall the uv-managed python.
      * - Delete any existing virtual environment.
      */
+
+    // Create a new PTY for the installation process
+    const installationPty = this.ptyManager.create({
+      onData: (id, data) => {
+        // This just handles the visual output in the UI
+      },
+      onExit: (id, exitCode) => {
+        // Handle unexpected PTY exit
+        if (this.status.type !== 'completed' && this.status.type !== 'canceled') {
+          this.updateStatus({
+            type: 'error',
+            error: {
+              message: `Installation process exited unexpectedly with code ${exitCode}`,
+            },
+            ptyId: id,
+          });
+        }
+      },
+    });
+
+    const ptyId = installationPty.id;
 
     this.updateStatus({ type: 'starting' });
     this.log.info('Starting up...\r\n');
@@ -400,6 +428,7 @@ export class InstallManager {
 export const createInstallManager = (arg: {
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  ptyManager: PtyManager;
 }) => {
   const { ipc, sendToWindow } = arg;
 
@@ -410,6 +439,7 @@ export const createInstallManager = (arg: {
     onStatusChange: (status) => {
       sendToWindow('install-process:status', status);
     },
+    ptyManager,
   });
   ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
     installManager.startInstall(installationPath, gpuType, version, repair);

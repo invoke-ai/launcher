@@ -135,6 +135,8 @@ export type DirDetails =
       isDirectory: true;
       isFirstRun: boolean;
       version: string;
+      pythonVersion: string;
+      pythonPath: string;
       invokeExecPath: string;
       activateVenvPath: string;
     }

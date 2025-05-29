@@ -153,6 +153,18 @@ const getPythonPathForVenv = (venvPath: string): string => {
 };
 
 /**
+ * Get the version of python at the provided path.
+ *
+ * @param pythonPath
+ * @returns The python version as a string.
+ */
+const getPythonVersion = async (pythonPath: string): Promise<string> => {
+  const cmd = `"${pythonPath}" -c "import sys; print(sys.version.split()[0]);"`;
+  const { stdout } = await execAsync(cmd);
+  return stdout.replace(/[\r\n]+/g, '');
+};
+
+/**
  * Get the version of a Python package installed
  *
  * @param pythonPath Path to python executable to use (probably in a virtualenv)
@@ -230,6 +242,8 @@ export const getInstallationDetails = async (installLocation: string): Promise<D
     isFirstRun,
     canInstall: true,
     version: version.startsWith('v') ? version : `v${version}`, // Make it consistent w/ our tagging format
+    pythonVersion: await getPythonVersion(pythonPath),
+    pythonPath,
     invokeExecPath: getInvokeExecPath(installLocation),
     activateVenvPath: getActivateVenvPath(installLocation),
   };

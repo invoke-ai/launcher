@@ -1,7 +1,7 @@
 {
   "name": "invoke-community-edition",
   "productName": "Invoke Community Edition",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Invoke Community Edition",
   "main": ".vite/build/main.js",
   "engines": {

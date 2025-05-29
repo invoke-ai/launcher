@@ -1,4 +1,5 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
+import { major, minor } from '@renovatebot/pep440';
 import type { ExecFileOptions } from 'child_process';
 import { execFile } from 'child_process';
 import { ipcMain } from 'electron';
@@ -11,7 +12,7 @@ import { assert } from 'tsafe';
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
-import { getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
+import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import { getPins } from '@/shared/pins';
 import type {
   GpuType,
@@ -100,17 +101,6 @@ export class InstallManager {
     const withXformers = gpuType === 'nvidia<30xx';
     const invokeaiPackageSpecifier = withXformers ? 'invokeai[xformers]' : 'invokeai';
 
-    this.log.info('Installation parameters:\r\n');
-    this.log.info(`- Install location: ${location}\r\n`);
-    this.log.info(`- GPU type: ${gpuType}\r\n`);
-    this.log.info(`- Torch Platform: ${torchPlatform}\r\n`);
-
-    if (repair) {
-      this.log.info('Repair mode enabled:\r\n');
-      this.log.info('- Force-reinstalling python\r\n');
-      this.log.info('- Deleting and recreating virtual environment\r\n');
-    }
-
     // Get the Python version and torch index URL for the target version
     const pinsResult = await withResultAsync(() => getPins(version));
 
@@ -128,6 +118,41 @@ export class InstallManager {
 
     const pythonVersion = pinsResult.value.python;
     const torchIndexUrl = pinsResult.value.torchIndexUrl[systemPlatform][torchPlatform];
+
+    const installationDetails = await getInstallationDetails(location);
+
+    let shouldInstallPython = false;
+
+    if (installationDetails.isInstalled) {
+      this.log.info(`Detected existing installation at ${location}:\r\n`);
+      this.log.info(`- Invoke version: ${installationDetails.version}\r\n`);
+      this.log.info(`- Python version: ${installationDetails.pythonVersion}\r\n`);
+
+      // If the existing installation has a different python version than is required for this version of Invoke,
+      // we (re)install python.
+      const majorVersionMatch = major(installationDetails.pythonVersion) === major(pythonVersion);
+      const minorVersionMatch = minor(installationDetails.pythonVersion) === minor(pythonVersion);
+
+      if (!majorVersionMatch || !minorVersionMatch) {
+        shouldInstallPython = true;
+      }
+    } else {
+      shouldInstallPython = true;
+    }
+
+    this.log.info('Installation parameters:\r\n');
+    this.log.info(`- Invoke version: ${version}\r\n`);
+    this.log.info(`- Install location: ${location}\r\n`);
+    this.log.info(`- Python version: ${pythonVersion}\r\n`);
+    this.log.info(`- GPU type: ${gpuType}\r\n`);
+    this.log.info(`- Torch platform: ${torchPlatform}\r\n`);
+    this.log.info(`- Using torch index: ${torchIndexUrl ?? 'default'}\r\n`);
+
+    if (repair) {
+      this.log.info('Repair mode enabled:\r\n');
+      this.log.info('- Force-reinstalling python\r\n');
+      this.log.info('- Deleting and recreating virtual environment\r\n');
+    }
 
     // Double-check that the UV executable exists and is a file - could be other problems but this is a good start
     const uvPath = getUVExecutablePath();
@@ -171,7 +196,7 @@ export class InstallManager {
       env: process.env,
     };
 
-    if (repair) {
+    if (repair || shouldInstallPython) {
       // In repair mode, we'll forcibly reinstall python
       const installPythonArgs = [
         // Use `uv`'s python interface to install the specific python version
@@ -184,7 +209,7 @@ export class InstallManager {
         '--reinstall',
       ];
 
-      this.log.info('Reinstalling Python...\r\n');
+      this.log.info(`Installing Python ${pythonVersion}...\r\n`);
       this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
 
       const installPythonResult = await withResultAsync(() =>
@@ -281,7 +306,7 @@ export class InstallManager {
         return;
       }
     } else {
-      this.log.info('Virtual environment already exists, skipping...\r\n');
+      this.log.info('Using existing virtual environment...\r\n');
     }
 
     // Install the invokeai package

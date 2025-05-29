@@ -1,8 +1,5 @@
-import { compare } from '@renovatebot/pep440';
-import { assert, objectKeys } from 'tsafe';
+import { assert } from 'tsafe';
 import { z } from 'zod';
-
-import { withResultAsync } from '@/lib/result';
 
 const zPlatformIndicies = z.object({
   cuda: z.string().optional(),
@@ -33,86 +30,37 @@ const zPins = z.object({
 });
 type Pins = z.infer<typeof zPins>;
 
-const PACKAGE_PINS: Record<string, Pins> = {
-  '5.0.0': {
-    python: '3.11',
-    // Indices for pytorch 2.4.1
-    torchIndexUrl: {
-      win32: {
-        cuda: 'https://download.pytorch.org/whl/cu124',
-      },
-      linux: {
-        cpu: 'https://download.pytorch.org/whl/cpu',
-        rocm: 'https://download.pytorch.org/whl/rocm6.1',
-      },
-      darwin: {},
-    },
-  },
-  // This fallback 0.0.0 version represents pins for all versions of invoke from initial release to v5.0.0. Throughout
-  // this period, we used many versions of torch. That means the below indices are not correct! However, because the
-  // launcher was released after v5.0.0, this should not be a problem.
-  //
-  // TODO(psyche): I'm not sure why these pins are even necessary given that the launcher does not support installing
-  // invokeai versions prior to v5.0.0. I think this is a mistake and we should remove this entry.
-  '0.0.0': {
-    python: '3.11',
-    torchIndexUrl: {
-      win32: {
-        cuda: 'https://download.pytorch.org/whl/cu124',
-      },
-      linux: {
-        cpu: 'https://download.pytorch.org/whl/cpu',
-        rocm: 'https://download.pytorch.org/whl/rocm5.2',
-      },
-      darwin: {},
-    },
-  },
-};
-
 /**
- * Get python versions and torch index urls for a given version of the invokeai package.
+ * Fetch the python version and PyTorch version pins required to install the target version.
  *
- * The pins are categorized by the first version that they are valid for. For example, if the pins are valid for
- * versions 5.0.0 and above, they will be stored under the key '5.0.0'.
+ * The pins are fetched from the GitHub repo.
  *
- * The highest pin version that is less than or equal to the target version is selected. For example, if the target
- * version is 5.5.0, the 5.0.0 pins will be returned.
+ * Note: Prior to Invoke v5.10.0, (e.g. v5.9.1 and earlier), we hardcoded the python version and
+ * PyTorch indices in this launcher repo. This was problematic, because it meant we needed to
+ * update the launcher whenever the app's PyTorch dependency or target python version changed.
  *
  * @param targetVersion - The version of the invokeai package
  * @returns The python version and torch index urls
  * @throws If no pins are found for the given version
  */
 export const getPins = async (targetVersion: string): Promise<Pins> => {
-  // Fetch `pins.json` from the repo using the targetVersion as the tag
   const tag = targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
+
   for (const url of [
     `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`,
     `https://cdn.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`,
   ]) {
-    console.log('Fetching pins from', url);
-    const result = await withResultAsync(async () => {
+    console.log(`Fetching pins from ${url}`);
+    try {
       const res = await fetch(url);
-      assert(res.ok, `Failed to fetch pins.json from ${url}`);
+      assert(res.ok, 'Network error');
       const json = await res.json();
       const pins = zPins.parse(json);
       return pins;
-    });
-
-    if (result.isOk()) {
-      console.log('Fetched pins:', result.value);
-      return result.value;
+    } catch (err) {
+      console.warn('Failed to fetch pins', err);
     }
-
-    console.log('Failed to fetch pins:', result.error);
   }
 
-  // If the fetch fails, fall back to the hardcoded pins
-  console.log('Falling back to hardcoded pins');
-  const versions = objectKeys(PACKAGE_PINS);
-  const sortedVersions = versions.sort(compare).toReversed();
-  const pinKey = sortedVersions.find((version) => compare(version, targetVersion) <= 0);
-  assert(pinKey !== undefined, `No pins found for version ${targetVersion}`);
-  const pins = PACKAGE_PINS[pinKey];
-  assert(pins !== undefined, `No pins found for version ${targetVersion}`);
-  return pins;
+  throw new Error('Failed to fetch pins');
 };

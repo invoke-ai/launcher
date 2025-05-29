@@ -97,7 +97,7 @@ export const getPins = async (targetVersion: string): Promise<Pins> => {
       const pins = zPins.parse(json);
       return pins;
     });
-  
+
     if (result.isOk()) {
       console.log('Fetched pins:', result.value);
       return result.value;

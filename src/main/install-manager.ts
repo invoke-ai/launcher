@@ -121,7 +121,7 @@ export class InstallManager {
 
     const installationDetails = await getInstallationDetails(location);
 
-    let shouldInstallPython = false;
+    let pythonVersionMismatch = false;
 
     if (installationDetails.isInstalled) {
       this.log.info(`Detected existing installation at ${location}:\r\n`);
@@ -134,10 +134,10 @@ export class InstallManager {
       const minorVersionMatch = minor(installationDetails.pythonVersion) === minor(pythonVersion);
 
       if (!majorVersionMatch || !minorVersionMatch) {
-        shouldInstallPython = true;
+        pythonVersionMismatch = true;
       }
     } else {
-      shouldInstallPython = true;
+      pythonVersionMismatch = true;
     }
 
     this.log.info('Installation parameters:\r\n');
@@ -196,7 +196,7 @@ export class InstallManager {
       env: process.env,
     };
 
-    if (repair || shouldInstallPython) {
+    if (repair || pythonVersionMismatch) {
       // In repair mode, we'll forcibly reinstall python
       const installPythonArgs = [
         // Use `uv`'s python interface to install the specific python version
@@ -241,7 +241,7 @@ export class InstallManager {
     let hasVenv = await isDirectory(venvPath);
 
     // In repair mode, we will delete the .venv first if it exists
-    if (repair && hasVenv) {
+    if ((repair || pythonVersionMismatch) && hasVenv) {
       this.log.info('Deleting existing virtual environment...\r\n');
       await fs.rm(venvPath, { recursive: true, force: true }).catch(() => {
         this.log.warn('Failed to delete virtual environment\r\n');

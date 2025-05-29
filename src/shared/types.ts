@@ -51,6 +51,7 @@ export type StoreData = {
   notifyForPrereleaseUpdates: boolean;
   launcherWindowProps?: WindowProps;
   appWindowProps?: WindowProps;
+  enablePartialLoading?: boolean;
 };
 
 // The electron store uses JSON schema to validate its data.
@@ -87,6 +88,10 @@ export const schema: Schema<StoreData> = {
     default: false,
   },
   notifyForPrereleaseUpdates: {
+    type: 'boolean',
+    default: true,
+  },
+  enablePartialLoading: {
     type: 'boolean',
     default: true,
   },

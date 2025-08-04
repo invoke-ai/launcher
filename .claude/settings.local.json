@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(rm:*)",
+      "Bash(set NODE_PTY_PREBUILT_BINARY=1)"
+    ],
+    "deny": []
+  }
+}

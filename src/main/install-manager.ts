@@ -11,6 +11,7 @@ import { assert } from 'tsafe';
 
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
+import { MemoryTracker } from '@/lib/memory-tracker';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import { getPins } from '@/shared/pins';
@@ -29,11 +30,13 @@ export class InstallManager {
   private onStatusChange: (status: WithTimestamp<InstallProcessStatus>) => void;
   private log: SimpleLogger;
   private abortController: AbortController | null;
+  private installMemoryTracker: MemoryTracker | null;
 
   constructor(arg: { ipcLogger: InstallManager['ipcLogger']; onStatusChange: InstallManager['onStatusChange'] }) {
     this.ipcLogger = arg.ipcLogger;
     this.onStatusChange = arg.onStatusChange;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
+    this.installMemoryTracker = null;
     this.log = new SimpleLogger((entry) => {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
@@ -44,6 +47,14 @@ export class InstallManager {
   logRepairModeMessages = (): void => {
     this.log.info('Try installing again with Repair mode enabled to fix this.\r\n');
     this.log.info('Ask for help on Discord or GitHub if you continue to have issues.\r\n');
+  };
+
+  private cleanupMemoryTracking = (): void => {
+    if (this.installMemoryTracker) {
+      this.installMemoryTracker.stop();
+      this.log.info('Stopped memory tracking due to installation error\r\n');
+      this.installMemoryTracker = null;
+    }
   };
 
   getStatus = (): WithTimestamp<InstallProcessStatus> => {
@@ -175,6 +186,16 @@ export class InstallManager {
 
     // Ready to start the installation process
     this.updateStatus({ type: 'installing' });
+    
+    // Start memory tracking for the installation process
+    this.installMemoryTracker = new MemoryTracker({
+      logger: this.log,
+      intervalMs: 10000, // 10 seconds for frequent monitoring during intensive installation
+      maxSnapshots: 200, // Keep reasonable number of snapshots
+    });
+    
+    this.installMemoryTracker.start();
+    this.log.info('Started memory tracking for installation process\r\n');
 
     // The install processes will log stdout/stderr with this, but it seems to be a toss of as to which messages
     // go to stdout and which to stderr. So we'll just log everything as info and handle actual errors separately
@@ -219,6 +240,7 @@ export class InstallManager {
       if (installPythonResult.isErr()) {
         this.log.error(`Failed to install Python: ${installPythonResult.error.message}\r\n`);
         this.logRepairModeMessages();
+        this.cleanupMemoryTracking();
         this.updateStatus({
           type: 'error',
           error: {
@@ -231,6 +253,7 @@ export class InstallManager {
 
       if (installPythonResult.value === 'canceled') {
         this.log.warn('Installation canceled\r\n');
+        this.cleanupMemoryTracking();
         this.updateStatus({ type: 'canceled' });
         return;
       }
@@ -290,6 +313,7 @@ export class InstallManager {
       if (createVenvResult.isErr()) {
         this.log.error(`Failed to create virtual environment: ${createVenvResult.error.message}\r\n`);
         this.logRepairModeMessages();
+        this.cleanupMemoryTracking();
         this.updateStatus({
           type: 'error',
           error: {
@@ -302,6 +326,7 @@ export class InstallManager {
 
       if (createVenvResult.value === 'canceled') {
         this.log.warn('Installation canceled\r\n');
+        this.cleanupMemoryTracking();
         this.updateStatus({ type: 'canceled' });
         return;
       }
@@ -345,6 +370,7 @@ export class InstallManager {
     if (installAppResult.isErr()) {
       this.log.error(`Failed to install invokeai python package: ${installAppResult.error.message}\r\n`);
       this.logRepairModeMessages();
+      this.cleanupMemoryTracking();
       this.updateStatus({
         type: 'error',
         error: {
@@ -357,6 +383,7 @@ export class InstallManager {
 
     if (installAppResult.value === 'canceled') {
       this.log.warn('Installation canceled\r\n');
+      this.cleanupMemoryTracking();
       this.updateStatus({ type: 'canceled' });
       return;
     }
@@ -368,6 +395,28 @@ export class InstallManager {
     fs.writeFile(firstRunMarkerPath, '').catch(() => {
       this.log.warn('Failed to create first run marker file\r\n');
     });
+
+    // Stop memory tracking and generate final report
+    if (this.installMemoryTracker) {
+      this.installMemoryTracker.stop();
+      this.log.info('Stopped memory tracking for installation process\r\n');
+      
+      // Generate final memory report for installation
+      const finalReport = this.installMemoryTracker.generateReport();
+      this.log.info('=== FINAL INSTALLATION MEMORY REPORT ===\r\n');
+      finalReport.split('\n').forEach(line => {
+        if (line.trim()) this.log.info(`${line}\r\n`);
+      });
+      this.log.info('=== END FINAL INSTALLATION MEMORY REPORT ===\r\n');
+      
+      // Check for memory leaks during installation
+      const leakInfo = this.installMemoryTracker.detectMemoryLeaks();
+      if (leakInfo.hasLeak) {
+        this.log.warn(`Memory leak detected during installation: ${leakInfo.message}\r\n`);
+      }
+      
+      this.installMemoryTracker = null;
+    }
 
     // Hey it worked!
     this.updateStatus({ type: 'completed' });
@@ -389,6 +438,14 @@ export class InstallManager {
 
     this.log.warn('Canceling installation...\r\n');
     this.updateStatus({ type: 'canceling' });
+    
+    // Stop memory tracking if installation is being canceled
+    if (this.installMemoryTracker) {
+      this.installMemoryTracker.stop();
+      this.log.info('Stopped memory tracking due to installation cancellation\r\n');
+      this.installMemoryTracker = null;
+    }
+    
     this.abortController.abort();
   };
 }

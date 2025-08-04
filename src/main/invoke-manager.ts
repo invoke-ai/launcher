@@ -9,6 +9,7 @@ import { assert } from 'tsafe';
 
 import { SimpleLogger } from '@/lib/simple-logger';
 import { StringMatcher } from '@/lib/string-matcher';
+import { MemoryTracker } from '@/lib/memory-tracker';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { getInstallationDetails, killProcess, manageWindowSize, pathExists } from '@/main/util';
 import type {
@@ -28,6 +29,7 @@ export class InvokeManager {
   private log: SimpleLogger;
   private window: BrowserWindow | null;
   private store: Store<StoreData>;
+  private childProcessMemoryTracker: MemoryTracker | null;
 
   constructor(arg: {
     store: Store<StoreData>;
@@ -40,6 +42,7 @@ export class InvokeManager {
     this.onStatusChange = arg.onStatusChange;
     this.process = null;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
+    this.childProcessMemoryTracker = null;
     this.log = new SimpleLogger((entry) => {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
@@ -92,6 +95,16 @@ export class InvokeManager {
 
     invokeProcess.on('spawn', () => {
       this.log.info(`Started Invoke process with PID: ${invokeProcess.pid}\r\n`);
+      
+      // Start memory tracking for the child process
+      this.childProcessMemoryTracker = new MemoryTracker({
+        logger: this.log,
+        intervalMs: 20000, // 20 seconds for child process monitoring
+        maxSnapshots: 300, // Keep last 300 snapshots
+      });
+      
+      this.childProcessMemoryTracker.start();
+      this.log.info('Started memory tracking for InvokeAI child process\r\n');
     });
 
     invokeProcess.on('error', (error) => {
@@ -118,6 +131,28 @@ export class InvokeManager {
     });
 
     invokeProcess.on('close', (code, signal) => {
+      // Stop child process memory tracking and generate final report
+      if (this.childProcessMemoryTracker) {
+        this.childProcessMemoryTracker.stop();
+        this.log.info('Stopped memory tracking for InvokeAI child process\r\n');
+        
+        // Generate final memory report
+        const finalReport = this.childProcessMemoryTracker.generateReport();
+        this.log.info('=== FINAL INVOKEAI PROCESS MEMORY REPORT ===\r\n');
+        finalReport.split('\n').forEach(line => {
+          if (line.trim()) this.log.info(`${line}\r\n`);
+        });
+        this.log.info('=== END FINAL INVOKEAI PROCESS MEMORY REPORT ===\r\n');
+        
+        // Check for memory leaks
+        const leakInfo = this.childProcessMemoryTracker.detectMemoryLeaks();
+        if (leakInfo.hasLeak) {
+          this.log.warn(`Memory leak detected in InvokeAI process: ${leakInfo.message}\r\n`);
+        }
+        
+        this.childProcessMemoryTracker = null;
+      }
+
       if (code === 0) {
         // Process exited on its own with no error
         this.updateStatus({ type: 'exited' });
@@ -240,6 +275,14 @@ export class InvokeManager {
   exitInvoke = () => {
     this.log.info('Shutting down...\r\n');
     this.updateStatus({ type: 'exiting' });
+    
+    // Stop child process memory tracking before killing the process
+    if (this.childProcessMemoryTracker) {
+      this.childProcessMemoryTracker.stop();
+      this.log.info('Stopped memory tracking for InvokeAI child process during shutdown\r\n');
+      this.childProcessMemoryTracker = null;
+    }
+    
     this.closeWindow();
     this.killProcess();
   };

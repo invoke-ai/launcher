@@ -15,6 +15,9 @@ import {
   isFile,
   pathExists,
 } from '@/main/util';
+import { SimpleLogger } from '@/lib/simple-logger';
+import { MemoryTracker } from '@/lib/memory-tracker';
+import { SignalMonitor } from '@/lib/signal-monitor';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -22,6 +25,29 @@ if (require('electron-squirrel-startup')) {
 }
 
 const main = new MainProcessManager({ store });
+
+// Initialize memory tracking and signal monitoring
+const logger = new SimpleLogger((entry) => {
+  console.log(`[${entry.level.toUpperCase()}] ${new Date(entry.timestamp).toISOString()} ${entry.message}`);
+  // Also send to renderer for display in console
+  main.sendToWindow('log:entry', entry);
+});
+
+const memoryTracker = new MemoryTracker({
+  logger,
+  intervalMs: 15000, // 15 seconds for more frequent monitoring during debugging
+  maxSnapshots: 400, // Keep last 400 snapshots (~1.7 hours at 15s intervals)
+});
+
+const signalMonitor = new SignalMonitor({
+  logger,
+  memoryTracker,
+});
+
+// Start monitoring
+logger.info('Initializing memory tracking and signal monitoring');
+memoryTracker.start();
+signalMonitor.start();
 
 const [install, cleanupInstall] = createInstallManager({
   ipc: main.ipc,
@@ -47,10 +73,18 @@ main.ipc.handle('invoke-process:get-status', () => invoke.getStatus());
  * Cleans up any running processes (installation or invoke).
  */
 function cleanup() {
+  logger.info('Starting application cleanup');
+  
+  // Stop monitoring first
+  signalMonitor.stop();
+  memoryTracker.stop();
+  
   cleanupInstall();
   cleanupInvoke();
   cleanupPty();
   main.cleanup();
+  
+  logger.info('Application cleanup completed');
 }
 
 /**
@@ -113,4 +147,17 @@ main.ipc.handle('util:get-path-exists', (_, path) => pathExists(path));
 main.ipc.handle('util:get-os', () => getOperatingSystem());
 main.ipc.handle('util:open-directory', (_, path) => shell.openPath(path));
 main.ipc.handle('util:get-launcher-version', () => app.getVersion());
+
+// Memory tracking and signal monitoring API
+main.ipc.handle('memory:get-snapshots', () => memoryTracker.getSnapshots());
+main.ipc.handle('memory:get-latest-snapshot', () => memoryTracker.getLatestSnapshot());
+main.ipc.handle('memory:generate-report', () => memoryTracker.generateReport());
+main.ipc.handle('memory:detect-leaks', () => memoryTracker.detectMemoryLeaks());
+main.ipc.handle('memory:force-gc', () => memoryTracker.forceGarbageCollection());
+main.ipc.handle('memory:take-snapshot', () => memoryTracker.takeSnapshot());
+
+main.ipc.handle('signal:get-events', () => signalMonitor.getSignalEvents());
+main.ipc.handle('signal:get-latest-event', () => signalMonitor.getLatestSignalEvent());
+main.ipc.handle('signal:trigger-dump', () => signalMonitor.triggerMemoryDump());
+
 //#endregion

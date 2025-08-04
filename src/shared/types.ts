@@ -351,6 +351,33 @@ type TerminalIpcEvents = Namespaced<
 >;
 
 /**
+ * Memory tracking API. Main process handles these events, renderer process invokes them.
+ */
+type MemoryIpcEvents = Namespaced<
+  'memory',
+  {
+    'get-snapshots': () => any[];
+    'get-latest-snapshot': () => any;
+    'generate-report': () => string;
+    'detect-leaks': () => { hasLeak: boolean; trend: number; message: string };
+    'force-gc': () => void;
+    'take-snapshot': () => any;
+  }
+>;
+
+/**
+ * Signal monitoring API. Main process handles these events, renderer process invokes them.
+ */
+type SignalIpcEvents = Namespaced<
+  'signal',
+  {
+    'get-events': () => any[];
+    'get-latest-event': () => any;
+    'trigger-dump': () => void;
+  }
+>;
+
+/**
  * Intersection of all the events that the renderer can invoke and main process can handle.
  */
 export type IpcEvents = MainProcessIpcEvents &
@@ -358,6 +385,8 @@ export type IpcEvents = MainProcessIpcEvents &
   InvokeProcessIpcEvents &
   UtilIpcEvents &
   TerminalIpcEvents &
+  MemoryIpcEvents &
+  SignalIpcEvents &
   StoreIpcEvents;
 
 /**
@@ -424,6 +453,16 @@ type DevIpcRendererEvents = Namespaced<
 >;
 
 /**
+ * Logging events. Main process emits these events, renderer process listens to them.
+ */
+type LogIpcRendererEvents = Namespaced<
+  'log',
+  {
+    entry: [WithTimestamp<LogEntry>];
+  }
+>;
+
+/**
  * Intersection of all the events emitted by main process that the renderer can listen to.
  */
 export type IpcRendererEvents = TerminalIpcRendererEvents &
@@ -431,4 +470,5 @@ export type IpcRendererEvents = TerminalIpcRendererEvents &
   InstallProcessIpcRendererEvents &
   InvokeProcessIpcRendererEvents &
   DevIpcRendererEvents &
+  LogIpcRendererEvents &
   StoreIpcRendererEvents;

@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react';
-import { startCase } from 'lodash-es';
+import { startCase } from 'es-toolkit/compat';
 import { memo } from 'react';
 
 import {

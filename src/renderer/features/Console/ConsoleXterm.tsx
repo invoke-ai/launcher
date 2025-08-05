@@ -1,5 +1,5 @@
 import { Box } from '@invoke-ai/ui-library';
-import { debounce } from 'lodash-es';
+import { debounce } from 'es-toolkit/compat';
 import { memo, useEffect, useRef } from 'react';
 import { assert } from 'tsafe';
 

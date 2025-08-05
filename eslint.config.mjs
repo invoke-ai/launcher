@@ -196,6 +196,11 @@ export default [
               message: 'Please use objectEquals from @observ33r/object-equals instead.',
             },
             {
+              name: 'es-toolkit/compat',
+              importNames: ['isEqual'],
+              message: 'Please use objectEquals from @observ33r/object-equals instead.',
+            },
+            {
               name: 'zod/v3',
               message: 'Import from zod instead.',
             },
@@ -239,6 +244,31 @@ export default [
         'error',
         {
           paths: [
+            // Keep the original lodash-es restrictions
+            {
+              name: 'lodash-es',
+              importNames: ['isEqual'],
+              message: 'Please use objectEquals from @observ33r/object-equals instead.',
+            },
+            {
+              name: 'lodash-es',
+              message: 'Please use es-toolkit instead.',
+            },
+            {
+              name: 'es-toolkit',
+              importNames: ['isEqual'],
+              message: 'Please use objectEquals from @observ33r/object-equals instead.',
+            },
+            {
+              name: 'es-toolkit/compat',
+              importNames: ['isEqual'],
+              message: 'Please use objectEquals from @observ33r/object-equals instead.',
+            },
+            {
+              name: 'zod/v3',
+              message: 'Import from zod instead.',
+            },
+            // Add the renderer-specific restriction
             {
               name: '@/main',
               message:
@@ -259,6 +289,31 @@ export default [
         'error',
         {
           paths: [
+            // Keep the original lodash-es restrictions
+            {
+              name: 'lodash-es',
+              importNames: ['isEqual'],
+              message: 'Please use objectEquals from @observ33r/object-equals instead.',
+            },
+            {
+              name: 'lodash-es',
+              message: 'Please use es-toolkit instead.',
+            },
+            {
+              name: 'es-toolkit',
+              importNames: ['isEqual'],
+              message: 'Please use objectEquals from @observ33r/object-equals instead.',
+            },
+            {
+              name: 'es-toolkit/compat',
+              importNames: ['isEqual'],
+              message: 'Please use objectEquals from @observ33r/object-equals instead.',
+            },
+            {
+              name: 'zod/v3',
+              message: 'Import from zod instead.',
+            },
+            // Add the main-specific restriction
             {
               name: '@/renderer',
               message:

@@ -1,4 +1,4 @@
-import { isEqual } from 'lodash-es';
+import { objectEquals } from '@observ33r/object-equals';
 import { atom } from 'nanostores';
 
 import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
@@ -24,7 +24,7 @@ const listen = () => {
   const poll = async () => {
     const oldStatus = $mainProcessStatus.get();
     const newStatus = await emitter.invoke('main-process:get-status');
-    if (isEqual(oldStatus, newStatus)) {
+    if (objectEquals(oldStatus, newStatus)) {
       return;
     }
     $mainProcessStatus.set(newStatus);

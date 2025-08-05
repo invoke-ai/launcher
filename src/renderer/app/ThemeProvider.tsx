@@ -1,9 +1,9 @@
+import '@/renderer/styles/global.css';
 import '@fontsource-variable/inter';
 import '@xterm/xterm/css/xterm.css';
-import '@/renderer/styles/global.css';
 
 import { ChakraProvider, DarkMode, extendTheme, theme as invokeTheme, TOAST_OPTIONS } from '@invoke-ai/ui-library';
-import { cloneDeep, unset } from 'lodash-es';
+import { cloneDeep, unset } from 'es-toolkit/compat';
 import type { PropsWithChildren } from 'react';
 import { memo } from 'react';
 

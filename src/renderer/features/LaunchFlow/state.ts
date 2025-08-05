@@ -1,4 +1,4 @@
-import { isEqual } from 'lodash-es';
+import { objectEquals } from '@observ33r/object-equals';
 import { atom, computed } from 'nanostores';
 
 import { LineBuffer } from '@/lib/line-buffer';
@@ -64,7 +64,7 @@ const listen = () => {
   const poll = async () => {
     const oldStatus = $invokeProcessStatus.get();
     const newStatus = await emitter.invoke('invoke-process:get-status');
-    if (isEqual(oldStatus, newStatus)) {
+    if (objectEquals(oldStatus, newStatus)) {
       return;
     }
     $invokeProcessStatus.set(newStatus);

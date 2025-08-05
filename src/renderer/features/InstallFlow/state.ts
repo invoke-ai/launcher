@@ -1,5 +1,6 @@
+import { objectEquals } from '@observ33r/object-equals';
 import { compare } from '@renovatebot/pep440';
-import { clamp, isEqual } from 'lodash-es';
+import { clamp } from 'es-toolkit/compat';
 import type { ReadableAtom } from 'nanostores';
 import { atom, computed, map } from 'nanostores';
 import { assert } from 'tsafe';
@@ -230,7 +231,7 @@ const listen = () => {
   const poll = async () => {
     const oldStatus = $installProcessStatus.get();
     const newStatus = await emitter.invoke('install-process:get-status');
-    if (isEqual(oldStatus, newStatus)) {
+    if (objectEquals(oldStatus, newStatus)) {
       return;
     }
     $installProcessStatus.set(newStatus);

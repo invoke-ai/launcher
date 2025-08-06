@@ -7,6 +7,7 @@ import {
   $invokeProcessStatus,
   getIsInvokeProcessActive,
 } from '@/renderer/features/LaunchFlow/state';
+import { UIMemoryMonitor } from '@/renderer/features/LaunchFlow/UIMemoryMonitor';
 import { LogViewer } from '@/renderer/features/LogViewer/LogViewer';
 import { LogViewerStatusIndicator } from '@/renderer/features/LogViewer/LogViewerStatusIndicator';
 import type { InvokeProcessStatus } from '@/shared/types';
@@ -24,7 +25,13 @@ export const LaunchFlowLogViewer = memo(() => {
 
   return (
     <LogViewer logs={invokeProcessLogs}>
-      <LogViewerStatusIndicator isLoading={getIsInvokeProcessActive(invokeProcessStatus)}>
+      <UIMemoryMonitor position="absolute" top={2} left={2} />
+      <LogViewerStatusIndicator
+        isLoading={getIsInvokeProcessActive(invokeProcessStatus)}
+        position="absolute"
+        top={2}
+        right={2}
+      >
         {getMessage(invokeProcessStatus)}
       </LogViewerStatusIndicator>
     </LogViewer>

@@ -1,4 +1,4 @@
-import type { SystemStyleObject, TextProps } from '@invoke-ai/ui-library';
+import type { BoxProps, SystemStyleObject } from '@invoke-ai/ui-library';
 import { Box, Text } from '@invoke-ai/ui-library';
 import Linkify from 'linkify-react';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
@@ -23,14 +23,11 @@ const linkifyOptions: LinkifyOpts = {
 
 type Props = {
   isLoading: boolean;
-} & TextProps;
+} & BoxProps;
 
-export const LogViewerStatusIndicator = ({ isLoading, children, ...textProps }: Props) => {
+export const LogViewerStatusIndicator = ({ isLoading, children, ...boxProps }: Props) => {
   return (
     <Box
-      position="absolute"
-      top={2}
-      right={2}
       bg="base.900"
       borderRadius="base"
       userSelect="none"
@@ -39,8 +36,9 @@ export const LogViewerStatusIndicator = ({ isLoading, children, ...textProps }: 
       opacity={0.8}
       borderWidth={1}
       shadow="dark-lg"
+      {...boxProps}
     >
-      <Text sx={sx} data-loading={isLoading} {...textProps}>
+      <Text sx={sx} data-loading={isLoading}>
         <Linkify options={linkifyOptions}>{children}</Linkify>
       </Text>
     </Box>

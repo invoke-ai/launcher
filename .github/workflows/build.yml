@@ -1,4 +1,4 @@
-name: Build Unsigned Binaries
+name: Build (Unsigned)
 
 on:
   push:
@@ -39,11 +39,13 @@ jobs:
 
       - name: Build GUI
         run: npm run app:dist
+        env:
+          ENABLE_CODE_SIGNING: false
 
-      - name: Publish artifact - GUI
+      - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
         with:
-          name: 'Invoke Community Edition.AppImage'
+          name: 'Invoke Community Edition.AppImage - UNSIGNED'
           path: 'dist/Invoke Community Edition.AppImage'
 
   build-macos:
@@ -66,11 +68,13 @@ jobs:
 
       - name: Build GUI
         run: npm run app:dist
+        env:
+          ENABLE_CODE_SIGNING: false
 
-      - name: Publish artifact - GUI
+      - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
         with:
-          name: 'Invoke Community Edition.dmg'
+          name: 'Invoke Community Edition.dmg - UNSIGNED'
           path: 'dist/Invoke Community Edition.dmg'
 
   build-windows:
@@ -92,6 +96,8 @@ jobs:
 
       - name: Build GUI
         run: npm run app:dist
+        env:
+          ENABLE_CODE_SIGNING: false
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
@@ -99,151 +105,3 @@ jobs:
           name: 'Invoke Community Edition.exe - UNSIGNED'
           path: 'dist/Invoke Community Edition.exe'
 
-  codesign-windows:
-    needs: build-windows
-    runs-on: windows-latest
-    environment:
-      name: code-signing
-    timeout-minutes: 35
-
-    steps:
-      - name: Download unsigned artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: 'Invoke Community Edition.exe - UNSIGNED'
-          path: ./unsigned
-
-      - name: Prepare for signing
-        run: |
-          Move-Item "./unsigned/Invoke Community Edition.exe" "./Invoke Community Edition.exe"
-        shell: powershell
-
-      - name: Set up for code signing with Software Trust Manager
-        uses: digicert/ssm-code-signing@v1.0.0
-
-      - name: Set up certificate
-        run: |
-          # Create secure temp directory
-          $tempDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP\cert_$(New-Guid)" -Force
-          $certPath = Join-Path $tempDir "cert.p12"
-
-          # Decode certificate to temp location
-          $certData = [System.Convert]::FromBase64String('${{ secrets.SM_CLIENT_CERT_FILE_B64 }}')
-          [System.IO.File]::WriteAllBytes($certPath, $certData)
-
-          # Store paths for later steps
-          echo "SM_CLIENT_CERT_FILE=$certPath" >> $env:GITHUB_ENV
-          echo "TEMP_CERT_DIR=$tempDir" >> $env:GITHUB_ENV
-        shell: powershell
-
-      - name: Set tool paths
-        run: |
-          # Add tool paths
-          echo "C:\Program Files (x86)\Windows Kits\10\App Certification Kit" >> $GITHUB_PATH
-          echo "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools" >> $GITHUB_PATH
-          echo "C:\Program Files\DigiCert\DigiCert One Signing Manager Tools" >> $GITHUB_PATH
-        shell: bash
-
-      - name: Setup SSM KSP tools
-        env:
-          SM_HOST: ${{ secrets.SM_HOST }}
-          SM_API_KEY: ${{ secrets.SM_API_KEY }}
-          SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
-          SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
-        run: |
-          echo Downloading DigiCert SSM tools...
-          curl -X GET "https://one.digicert.com/signingmanager/api-ui/v1/releases/smtools-windows-x64.msi/download" -H "x-api-key: %SM_API_KEY%" -o smtools-windows-x64.msi --fail --silent --show-error
-
-          if not exist smtools-windows-x64.msi (
-            echo Failed to download SSM tools
-            exit /b 1
-          )
-
-          echo Installing SSM tools...
-          msiexec /i smtools-windows-x64.msi /quiet /qn /norestart
-          if %ERRORLEVEL% NEQ 0 (
-            echo Failed to install SSM tools
-            exit /b 1
-          )
-
-          echo Configuring SSM KSP...
-          smksp_registrar.exe list
-          smctl.exe keypair ls
-          C:\Windows\System32\certutil.exe -csp "DigiCert Signing Manager KSP" -key -user
-          smksp_cert_sync.exe
-        shell: cmd
-
-      - name: Sign binary
-        env:
-          SM_HOST: ${{ secrets.SM_HOST }}
-          SM_API_KEY: ${{ secrets.SM_API_KEY }}
-          SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
-          SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
-          SM_CODE_SIGNING_CERT_SHA1_HASH: ${{ secrets.SM_CODE_SIGNING_CERT_SHA1_HASH }}
-        run: |
-          $filename = "Invoke Community Edition.exe"
-
-          Write-Host "Signing $filename..."
-
-          # Sign with error handling
-          $signResult = & signtool.exe sign `
-            /sha1 $env:SM_CODE_SIGNING_CERT_SHA1_HASH `
-            /tr http://timestamp.digicert.com `
-            /td SHA256 `
-            /fd SHA256 `
-            /v `
-            $filename 2>&1
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Signing failed:"
-            Write-Error ($signResult -join "`n")
-            exit 1
-          }
-
-          Write-Host "Signing successful. Verifying signature..."
-
-          # Verify signature
-          $verifyResult = & signtool.exe verify /v /pa $filename 2>&1
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Signature verification failed:"
-            Write-Error ($verifyResult -join "`n")
-            exit 1
-          }
-
-          Write-Host "Signature verification successful"
-        shell: powershell
-
-      - name: Clean up sensitive files
-        if: always()
-        run: |
-          # Remove certificate and temp directory
-          if (Test-Path env:TEMP_CERT_DIR) {
-            Write-Host "Cleaning up certificate directory..."
-            Remove-Item -Path $env:TEMP_CERT_DIR -Recurse -Force -ErrorAction SilentlyContinue
-          }
-
-          # Remove SSM installer
-          if (Test-Path "smtools-windows-x64.msi") {
-            Write-Host "Removing SSM installer..."
-            Remove-Item "smtools-windows-x64.msi" -Force -ErrorAction SilentlyContinue
-          }
-
-          # Clear sensitive environment variables
-          [Environment]::SetEnvironmentVariable("SM_API_KEY", $null, "Process")
-          [Environment]::SetEnvironmentVariable("SM_CLIENT_CERT_PASSWORD", $null, "Process")
-          [Environment]::SetEnvironmentVariable("SM_HOST", $null, "Process")
-          [Environment]::SetEnvironmentVariable("SM_CODE_SIGNING_CERT_SHA1_HASH", $null, "Process")
-
-          # Clear GITHUB_ENV file if it exists
-          if (Test-Path $env:GITHUB_ENV) {
-            Clear-Content $env:GITHUB_ENV -Force -ErrorAction SilentlyContinue
-          }
-        shell: powershell
-
-      - name: Upload signed artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: 'Invoke Community Edition.exe - SIGNED'
-          path: 'Invoke Community Edition.exe'
-          retention-days: 90

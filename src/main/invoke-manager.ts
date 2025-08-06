@@ -243,11 +243,11 @@ export class InvokeManager {
     window.webContents.loadURL(localUrl);
   };
 
-  exitInvoke = () => {
+  exitInvoke = async () => {
     this.log.info('Shutting down...\r\n');
     this.updateStatus({ type: 'exiting' });
     this.closeWindow();
-    this.killProcess();
+    await this.killProcess();
   };
 
   closeWindow = (): void => {
@@ -260,11 +260,11 @@ export class InvokeManager {
     this.window = null;
   };
 
-  killProcess = (): void => {
+  killProcess = async (): Promise<void> => {
     if (!this.process) {
       return;
     }
-    killProcess(this.process);
+    await killProcess(this.process);
   };
 }
 
@@ -295,10 +295,10 @@ export const createInvokeManager = (arg: {
     invokeManager.exitInvoke();
   });
 
-  const cleanupInvokeManager = () => {
+  const cleanupInvokeManager = async () => {
     const status = invokeManager.getStatus();
     if (status.type === 'running' || status.type === 'starting') {
-      invokeManager.exitInvoke();
+      await invokeManager.exitInvoke();
     }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');

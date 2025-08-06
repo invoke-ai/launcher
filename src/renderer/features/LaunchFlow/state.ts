@@ -42,7 +42,7 @@ const appendToInvokeProcessLogs = (entry: WithTimestamp<LogEntry>) => {
   $invokeProcessLogs.set([...invokeLogBuffer.get()]);
 };
 
-export const clearInvokeProcessLogs = () => {
+const clearInvokeProcessLogs = () => {
   invokeLogBuffer.clear();
   $invokeProcessLogs.set([]);
 };

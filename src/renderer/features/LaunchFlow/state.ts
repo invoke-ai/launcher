@@ -2,6 +2,7 @@ import { objectEquals } from '@observ33r/object-equals';
 import { atom, computed } from 'nanostores';
 
 import { LineBuffer } from '@/lib/line-buffer';
+import { SlidingBuffer } from '@/lib/sliding-buffer';
 import { INVOKE_PROCESS_LOG_LIMIT, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import { syncInstallDirDetails } from '@/renderer/services/store';
@@ -31,9 +32,14 @@ $invokeProcessStatus.subscribe((status, oldStatus) => {
   }
 });
 
+// Create reactive log buffer using SlidingBuffer for better performance
+const invokeLogBuffer = new SlidingBuffer<WithTimestamp<LogEntry>>(INVOKE_PROCESS_LOG_LIMIT);
 export const $invokeProcessLogs = atom<WithTimestamp<LogEntry>[]>([]);
+
 const appendToInvokeProcessLogs = (entry: WithTimestamp<LogEntry>) => {
-  $invokeProcessLogs.set([...$invokeProcessLogs.get(), entry].slice(-INVOKE_PROCESS_LOG_LIMIT));
+  invokeLogBuffer.push(entry);
+  // Create new array for React reactivity - reduces from 3 array operations to 1
+  $invokeProcessLogs.set([...invokeLogBuffer.get()]);
 };
 
 const listen = () => {

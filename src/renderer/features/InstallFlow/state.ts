@@ -7,6 +7,7 @@ import { assert } from 'tsafe';
 
 import { LineBuffer } from '@/lib/line-buffer';
 import { withResultAsync } from '@/lib/result';
+import { SlidingBuffer } from '@/lib/sliding-buffer';
 import { INSTALL_PROCESS_LOG_LIMIT, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { $latestGHReleases } from '@/renderer/services/gh';
 import { emitter, ipc } from '@/renderer/services/ipc';
@@ -185,9 +186,14 @@ $installProcessStatus.subscribe((status, oldStatus) => {
   }
 });
 
+// Create reactive log buffer using SlidingBuffer for better performance
+const installLogBuffer = new SlidingBuffer<WithTimestamp<LogEntry>>(INSTALL_PROCESS_LOG_LIMIT);
 export const $installProcessLogs = atom<WithTimestamp<LogEntry>[]>([]);
+
 const appendToInstallProcessLogs = (entry: WithTimestamp<LogEntry>) => {
-  $installProcessLogs.set([...$installProcessLogs.get(), entry].slice(-INSTALL_PROCESS_LOG_LIMIT));
+  installLogBuffer.push(entry);
+  // Create new array for React reactivity - reduces from 3 array operations to 1
+  $installProcessLogs.set([...installLogBuffer.get()]);
 };
 
 export const getIsActiveInstallProcessStatus = (status: InstallProcessStatus) => {

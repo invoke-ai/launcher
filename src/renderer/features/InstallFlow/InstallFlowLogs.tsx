@@ -15,7 +15,12 @@ export const InstallFlowLogs = memo(() => {
   const installProcessStatus = useStore($installProcessStatus);
   return (
     <LogViewer logs={installProcessLogs}>
-      <LogViewerStatusIndicator isLoading={getIsActiveInstallProcessStatus(installProcessStatus)}>
+      <LogViewerStatusIndicator
+        isLoading={getIsActiveInstallProcessStatus(installProcessStatus)}
+        position="absolute"
+        top={2}
+        right={2}
+      >
         {startCase(installProcessStatus.type)}
       </LogViewerStatusIndicator>
     </LogViewer>

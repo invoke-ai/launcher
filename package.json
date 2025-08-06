@@ -101,6 +101,7 @@
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^10.1.0",
     "es-toolkit": "^1.39.8",
+    "filesize": "^11.0.2",
     "ip": "^2.0.1",
     "linkify-react": "^4.3.2",
     "linkifyjs": "^4.3.2",

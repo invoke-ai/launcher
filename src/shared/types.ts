@@ -234,6 +234,21 @@ export type InvokeProcessStatus =
          */
         url: string;
       }
+    >
+  | OkStatus<
+      'window-crashed',
+      {
+        /**
+         * The URL at which the server is still running. The process is alive but the window crashed.
+         */
+        loopbackUrl: string;
+        lanUrl?: string;
+        url: string;
+        /**
+         * The reason for the crash if available.
+         */
+        crashReason?: string;
+      }
     >;
 
 /**
@@ -314,6 +329,7 @@ type InvokeProcessIpcEvents = Namespaced<
     'get-status': () => WithTimestamp<InvokeProcessStatus>;
     'start-invoke': (location: string) => void;
     'exit-invoke': () => void;
+    'reopen-window': () => void;
   }
 >;
 

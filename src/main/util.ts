@@ -272,7 +272,7 @@ export const killProcess = async (childProcess: ChildProcess): Promise<void> => 
     if (childProcess.killed || childProcess.exitCode !== null) {
       return false;
     }
-    
+
     try {
       // process.kill(pid, 0) checks if process exists without killing it
       // This can have false positives due to PID reuse, so we check childProcess.killed first
@@ -290,12 +290,12 @@ export const killProcess = async (childProcess: ChildProcess): Promise<void> => 
       const exitHandler = () => {
         resolve(true);
       };
-      
+
       // Try to attach exit handler if process is still alive
       if (!childProcess.killed) {
         childProcess.once('exit', exitHandler);
       }
-      
+
       const startTime = Date.now();
       const checkInterval = setInterval(() => {
         if (!isProcessRunning()) {
@@ -313,7 +313,7 @@ export const killProcess = async (childProcess: ChildProcess): Promise<void> => 
 
   if (process.platform === 'win32') {
     // Windows: Try graceful shutdown first, then escalate if needed
-    
+
     // Stage 1: Try graceful shutdown (sends WM_CLOSE)
     try {
       execFile('taskkill', ['/pid', pid.toString(), '/T'], (error) => {
@@ -322,7 +322,7 @@ export const killProcess = async (childProcess: ChildProcess): Promise<void> => 
           console.debug(`Graceful shutdown failed for PID ${pid}: ${error.message}`);
         }
       });
-      
+
       // Wait up to 5 seconds for graceful exit
       const exitedGracefully = await waitForExit(5000);
       if (exitedGracefully) {
@@ -336,7 +336,7 @@ export const killProcess = async (childProcess: ChildProcess): Promise<void> => 
     // Stage 2: Try Node's kill (might work for some processes)
     try {
       childProcess.kill('SIGTERM');
-      
+
       // Wait 2 more seconds
       const exitedWithSigterm = await waitForExit(2000);
       if (exitedWithSigterm) {
@@ -354,7 +354,7 @@ export const killProcess = async (childProcess: ChildProcess): Promise<void> => 
           console.error(`Force kill failed for PID ${pid}: ${error.message}`);
         }
       });
-      
+
       // Wait for force kill to complete
       const exitedForcefully = await waitForExit(2000);
       if (!exitedForcefully) {
@@ -368,7 +368,7 @@ export const killProcess = async (childProcess: ChildProcess): Promise<void> => 
   } else {
     // Unix-like systems: Use SIGTERM
     childProcess.kill('SIGTERM');
-    
+
     // Wait for process to exit
     const exited = await waitForExit(5000);
     if (!exited) {

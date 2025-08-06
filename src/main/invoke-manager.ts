@@ -33,6 +33,7 @@ export class InvokeManager {
   private store: Store<StoreData>;
   private metricsInterval: NodeJS.Timeout | null;
   private lastMetrics: { memoryBytes: number; cpuPercent: number } | null;
+  private lastRunningData: { url: string; loopbackUrl: string; lanUrl?: string } | null;
 
   constructor(arg: {
     store: Store<StoreData>;
@@ -49,6 +50,7 @@ export class InvokeManager {
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.metricsInterval = null;
     this.lastMetrics = null;
+    this.lastRunningData = null;
     this.log = new SimpleLogger((entry) => {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
@@ -246,6 +248,9 @@ export class InvokeManager {
           data.lanUrl = url.replace('0.0.0.0', ip.address());
         }
 
+        // Store the running data for potential window reopening
+        this.lastRunningData = data;
+
         // Only open the window if server mode is not enabled
         if (!this.store.get('serverMode')) {
           this.createWindow(data.loopbackUrl);
@@ -333,6 +338,22 @@ export class InvokeManager {
       if (details.reason === 'oom') {
         this.log.error(`[OOM] The Invoke UI window crashed due to insufficient memory.\r\n`);
       }
+
+      // Update status to window-crashed if we still have the running data
+      if (this.lastRunningData && this.process) {
+        this.updateStatus({
+          type: 'window-crashed',
+          data: {
+            ...this.lastRunningData,
+            crashReason: reasonMessage,
+          },
+        });
+        this.log.info(`[CRASH] Window can be reopened - server is still running\r\n`);
+      }
+
+      // Clean up the window reference
+      this.window = null;
+      this.stopMetricsMonitoring();
     });
 
     window.webContents.on('unresponsive', () => {
@@ -369,6 +390,30 @@ export class InvokeManager {
 
     const localUrl = url.replace('0.0.0.0', '127.0.0.1');
     window.webContents.loadURL(localUrl);
+  };
+
+  reopenWindow = (): void => {
+    // Check if we can reopen the window
+    if (this.window && !this.window.isDestroyed()) {
+      this.log.warn('Window is already open\r\n');
+      return;
+    }
+
+    if (!this.lastRunningData) {
+      this.log.error('Cannot reopen window - no running data available\r\n');
+      return;
+    }
+
+    if (!this.process) {
+      this.log.error('Cannot reopen window - process is not running\r\n');
+      return;
+    }
+
+    this.log.info('Reopening Invoke UI window...\r\n');
+    this.createWindow(this.lastRunningData.loopbackUrl);
+
+    // Update status back to running
+    this.updateStatus({ type: 'running', data: this.lastRunningData });
   };
 
   exitInvoke = async () => {
@@ -425,6 +470,9 @@ export const createInvokeManager = (arg: {
   });
   ipc.handle('invoke-process:exit-invoke', () => {
     invokeManager.exitInvoke();
+  });
+  ipc.handle('invoke-process:reopen-window', () => {
+    invokeManager.reopenWindow();
   });
 
   const cleanupInvokeManager = async () => {

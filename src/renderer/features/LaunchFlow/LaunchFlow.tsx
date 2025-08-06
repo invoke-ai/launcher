@@ -7,7 +7,12 @@ import { LaunchFlowInvalidInstall } from '@/renderer/features/LaunchFlow/LaunchF
 import { LaunchFlowNotRunning } from '@/renderer/features/LaunchFlow/LaunchFlowNotRunning';
 import { LaunchFlowPendingDismissal } from '@/renderer/features/LaunchFlow/LaunchFlowPendingDismissal';
 import { LaunchFlowRunning } from '@/renderer/features/LaunchFlow/LaunchFlowRunning';
-import { $isInvokeProcessActive, $isInvokeProcessPendingDismissal } from '@/renderer/features/LaunchFlow/state';
+import { LaunchFlowWindowCrashed } from '@/renderer/features/LaunchFlow/LaunchFlowWindowCrashed';
+import {
+  $invokeProcessStatus,
+  $isInvokeProcessActive,
+  $isInvokeProcessPendingDismissal,
+} from '@/renderer/features/LaunchFlow/state';
 import { emitter } from '@/renderer/services/ipc';
 import type { DirDetails } from '@/shared/types';
 
@@ -16,8 +21,13 @@ type Props = {
 };
 
 const LaunchFlowContent = memo(({ installDirDetails }: Props) => {
+  const invokeProcessStatus = useStore($invokeProcessStatus);
   const isInvokeProcessActive = useStore($isInvokeProcessActive);
   const isInvokeProcessPendingDismissal = useStore($isInvokeProcessPendingDismissal);
+
+  if (invokeProcessStatus.type === 'window-crashed') {
+    return <LaunchFlowWindowCrashed />;
+  }
 
   if (isInvokeProcessActive) {
     return <LaunchFlowRunning />;

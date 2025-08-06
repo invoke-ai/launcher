@@ -42,6 +42,11 @@ const appendToInvokeProcessLogs = (entry: WithTimestamp<LogEntry>) => {
   $invokeProcessLogs.set([...invokeLogBuffer.get()]);
 };
 
+export const clearInvokeProcessLogs = () => {
+  invokeLogBuffer.clear();
+  $invokeProcessLogs.set([]);
+};
+
 const listen = () => {
   const buffer = new LineBuffer({ stripAnsi: true });
 
@@ -50,6 +55,10 @@ const listen = () => {
     for (const message of buffered) {
       appendToInvokeProcessLogs({ ...data, message });
     }
+  });
+
+  ipc.on('invoke-process:clear-logs', () => {
+    clearInvokeProcessLogs();
   });
 
   ipc.on('invoke-process:status', (_, status) => {

@@ -28,6 +28,7 @@ export class InvokeManager {
   private ipcLogger: (entry: WithTimestamp<LogEntry>) => void;
   private onStatusChange: (status: WithTimestamp<InvokeProcessStatus>) => void;
   private onMetricsUpdate: (metrics: { memoryBytes: number; cpuPercent: number }) => void;
+  private sendClearLogs?: () => void;
   private log: SimpleLogger;
   private window: BrowserWindow | null;
   private store: Store<StoreData>;
@@ -40,12 +41,14 @@ export class InvokeManager {
     ipcLogger: InvokeManager['ipcLogger'];
     onStatusChange: InvokeManager['onStatusChange'];
     onMetricsUpdate: InvokeManager['onMetricsUpdate'];
+    sendClearLogs?: InvokeManager['sendClearLogs'];
   }) {
     this.window = null;
     this.store = arg.store;
     this.ipcLogger = arg.ipcLogger;
     this.onStatusChange = arg.onStatusChange;
     this.onMetricsUpdate = arg.onMetricsUpdate;
+    this.sendClearLogs = arg.sendClearLogs;
     this.process = null;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.metricsInterval = null;
@@ -142,6 +145,10 @@ export class InvokeManager {
 
   startInvoke = async (location: string) => {
     this.updateStatus({ type: 'starting' });
+    
+    // Clear logs from previous session
+    this.sendClearLogs?.();
+    
     this.log.info('Starting up...\r\n');
 
     const dirDetails = await getInstallationDetails(location);
@@ -467,6 +474,9 @@ export const createInvokeManager = (arg: {
     },
     onMetricsUpdate: (metrics) => {
       sendToWindow('invoke-process:metrics', metrics);
+    },
+    sendClearLogs: () => {
+      sendToWindow('invoke-process:clear-logs');
     },
   });
 

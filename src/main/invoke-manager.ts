@@ -145,10 +145,10 @@ export class InvokeManager {
 
   startInvoke = async (location: string) => {
     this.updateStatus({ type: 'starting' });
-    
+
     // Clear logs from previous session
     this.sendClearLogs?.();
-    
+
     this.log.info('Starting up...\r\n');
 
     const dirDetails = await getInstallationDetails(location);

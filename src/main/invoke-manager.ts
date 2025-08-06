@@ -1,11 +1,13 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
-import { type ChildProcess, execFile } from 'child_process';
-import { BrowserWindow, ipcMain, shell } from 'electron';
+import { type ChildProcess, exec, execFile } from 'child_process';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import type Store from 'electron-store';
 import fs from 'fs/promises';
 import ip from 'ip';
+import os from 'os';
 import { join } from 'path';
 import { assert } from 'tsafe';
+import { promisify } from 'util';
 
 import { SimpleLogger } from '@/lib/simple-logger';
 import { StringMatcher } from '@/lib/string-matcher';
@@ -25,21 +27,28 @@ export class InvokeManager {
   private status: WithTimestamp<InvokeProcessStatus>;
   private ipcLogger: (entry: WithTimestamp<LogEntry>) => void;
   private onStatusChange: (status: WithTimestamp<InvokeProcessStatus>) => void;
+  private onMetricsUpdate: (metrics: { memoryBytes: number; cpuPercent: number }) => void;
   private log: SimpleLogger;
   private window: BrowserWindow | null;
   private store: Store<StoreData>;
+  private metricsInterval: NodeJS.Timeout | null;
+  private lastMetrics: { memoryBytes: number; cpuPercent: number } | null;
 
   constructor(arg: {
     store: Store<StoreData>;
     ipcLogger: InvokeManager['ipcLogger'];
     onStatusChange: InvokeManager['onStatusChange'];
+    onMetricsUpdate: InvokeManager['onMetricsUpdate'];
   }) {
     this.window = null;
     this.store = arg.store;
     this.ipcLogger = arg.ipcLogger;
     this.onStatusChange = arg.onStatusChange;
+    this.onMetricsUpdate = arg.onMetricsUpdate;
     this.process = null;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
+    this.metricsInterval = null;
+    this.lastMetrics = null;
     this.log = new SimpleLogger((entry) => {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
@@ -53,6 +62,80 @@ export class InvokeManager {
   updateStatus = (status: InvokeProcessStatus): void => {
     this.status = { ...status, timestamp: Date.now() };
     this.onStatusChange(this.status);
+  };
+
+  startMetricsMonitoring = (): void => {
+    if (this.metricsInterval) {
+      return;
+    }
+
+    const execAsync = promisify(exec);
+    const platform = os.platform();
+
+    const getProcessMemory = async (pid: number): Promise<number> => {
+      try {
+        if (platform === 'darwin') {
+          // macOS: Use ps to get RSS (resident set size) in KB
+          const { stdout } = await execAsync(`ps -o rss= -p ${pid}`);
+          const kb = parseInt(stdout.trim(), 10);
+          return kb * 1024; // Convert KB to bytes
+        } else if (platform === 'linux') {
+          // Linux: Read from /proc/[pid]/status
+          const status = await fs.readFile(`/proc/${pid}/status`, 'utf-8');
+          const match = status.match(/VmRSS:\s+(\d+)\s+kB/);
+          if (match) {
+            return parseInt(match[1]!, 10) * 1024; // Convert KB to bytes
+          }
+        } else if (platform === 'win32') {
+          // Windows: Use wmic to get WorkingSetSize in bytes
+          const { stdout } = await execAsync(`wmic process where ProcessId=${pid} get WorkingSetSize /format:value`);
+          const match = stdout.match(/WorkingSetSize=(\d+)/);
+          if (match) {
+            return parseInt(match[1]!, 10); // Already in bytes
+          }
+        }
+      } catch {
+        // Silently fall back to 0 if we can't get memory
+      }
+      return 0;
+    };
+
+    const sampleMetrics = async () => {
+      try {
+        if (!this.window || this.window.isDestroyed()) {
+          return;
+        }
+
+        // Get the renderer process PID
+        const rendererPid = this.window.webContents.getOSProcessId();
+
+        // Get native memory usage from OS in bytes
+        const memoryBytes = await getProcessMemory(rendererPid);
+
+        // Get CPU from Electron metrics
+        const metrics = app.getAppMetrics();
+        const rendererMetric = metrics.find((m) => m.pid === rendererPid);
+        const cpuPercent = rendererMetric ? Math.round(rendererMetric.cpu.percentCPUUsage) : 0;
+
+        this.lastMetrics = { memoryBytes, cpuPercent };
+        this.onMetricsUpdate(this.lastMetrics);
+      } catch (error) {
+        console.error('Error sampling metrics:', error);
+      }
+    };
+
+    // Initial sample
+    sampleMetrics();
+
+    // Set up 1-second interval
+    this.metricsInterval = setInterval(sampleMetrics, 1000);
+  };
+
+  stopMetricsMonitoring = (): void => {
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
+      this.metricsInterval = null;
+    }
   };
 
   startInvoke = async (location: string) => {
@@ -192,9 +275,9 @@ export class InvokeManager {
         devTools: true,
         backgroundThrottling: false, // Prevent memory spikes from throttling when window loses focus
         additionalArguments: [
-          '--enable-gpu-rasterization',      // Offload canvas to GPU
-          '--enable-zero-copy',              // Reduce memory copies
-          '--enable-accelerated-2d-canvas',  // GPU acceleration for 2D canvas
+          '--enable-gpu-rasterization', // Offload canvas to GPU
+          '--enable-zero-copy', // Reduce memory copies
+          '--enable-accelerated-2d-canvas', // GPU acceleration for 2D canvas
         ],
       },
       autoHideMenuBar: true,
@@ -218,8 +301,53 @@ export class InvokeManager {
     window.on('ready-to-show', () => {
       window.webContents.insertCSS(`* { outline: none; }`);
       window.show();
+      // Start metrics monitoring when window is ready
+      this.startMetricsMonitoring();
     });
     window.on('close', this.exitInvoke);
+
+    // Add crash/OOM detection
+    let unresponsiveTimestamp: number | null = null;
+
+    window.webContents.on('render-process-gone', (event, details) => {
+      const reasonMessage =
+        details.reason === 'oom'
+          ? 'Out of Memory (OOM)'
+          : details.reason === 'crashed'
+            ? 'Crashed'
+            : details.reason === 'killed'
+              ? 'Killed'
+              : `Unknown (${details.reason})`;
+
+      this.log.error(`[CRASH] Invoke UI window process unexpectedly gone: ${reasonMessage}\r\n`);
+      this.log.error(`[CRASH] Exit code: ${details.exitCode}\r\n`);
+
+      // Log last known metrics
+      if (this.lastMetrics) {
+        const memoryMB = Math.round(this.lastMetrics.memoryBytes / 1024 / 1024);
+        this.log.error(
+          `[CRASH] Last known metrics - Memory: ${memoryMB} MB (${this.lastMetrics.memoryBytes} bytes), CPU: ${this.lastMetrics.cpuPercent}%\r\n`
+        );
+      }
+
+      if (details.reason === 'oom') {
+        this.log.error(`[OOM] The Invoke UI window crashed due to insufficient memory.\r\n`);
+      }
+    });
+
+    window.webContents.on('unresponsive', () => {
+      unresponsiveTimestamp = Date.now();
+      this.log.warn(`[UNRESPONSIVE] Invoke UI has become unresponsive\r\n`);
+    });
+
+    window.webContents.on('responsive', () => {
+      if (unresponsiveTimestamp) {
+        const duration = Date.now() - unresponsiveTimestamp;
+        this.log.info(`[RESPONSIVE] Invoke UI is responsive again (was unresponsive for ${duration}ms)\r\n`);
+        unresponsiveTimestamp = null;
+      }
+    });
+
     window.webContents.setWindowOpenHandler((handlerDetails) => {
       // If the URL is the same as the main URL, allow it to open in an electron window. This is for things like
       // opening images in a new tab
@@ -251,6 +379,7 @@ export class InvokeManager {
   };
 
   closeWindow = (): void => {
+    this.stopMetricsMonitoring();
     if (!this.window) {
       return;
     }
@@ -285,6 +414,9 @@ export const createInvokeManager = (arg: {
     },
     onStatusChange: (status) => {
       sendToWindow('invoke-process:status', status);
+    },
+    onMetricsUpdate: (metrics) => {
+      sendToWindow('invoke-process:metrics', metrics);
     },
   });
 

@@ -49,6 +49,7 @@ export const ConsoleXterm = memo(({ terminal }: { terminal: TerminalState }) => 
       for (const unsubscribe of subscriptions) {
         unsubscribe();
       }
+      terminal.xterm.dispose();
     };
   }, [terminal.fitAddon, terminal.id, terminal.xterm, theme]);
 

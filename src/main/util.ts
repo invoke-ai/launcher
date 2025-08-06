@@ -256,17 +256,130 @@ export const getInstallationDetails = async (installLocation: string): Promise<D
 /**
  * Kills a child process using the appropriate method for the platform
  * @param childProcess The child process to kill
+ * @returns Promise that resolves when the process has been terminated
  */
-export const killProcess = (childProcess: ChildProcess): void => {
+export const killProcess = async (childProcess: ChildProcess): Promise<void> => {
   if (childProcess.pid === undefined) {
     // He's dead, Jim
     return;
   }
 
+  const pid = childProcess.pid;
+
+  // Helper to check if process is still running
+  const isProcessRunning = (): boolean => {
+    // First check if Node.js knows the process is dead
+    if (childProcess.killed || childProcess.exitCode !== null) {
+      return false;
+    }
+    
+    try {
+      // process.kill(pid, 0) checks if process exists without killing it
+      // This can have false positives due to PID reuse, so we check childProcess.killed first
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Helper to wait for process exit with timeout
+  const waitForExit = (timeoutMs: number): Promise<boolean> => {
+    return new Promise((resolve) => {
+      // If process has exit handler, use it for more reliable detection
+      const exitHandler = () => {
+        resolve(true);
+      };
+      
+      // Try to attach exit handler if process is still alive
+      if (!childProcess.killed) {
+        childProcess.once('exit', exitHandler);
+      }
+      
+      const startTime = Date.now();
+      const checkInterval = setInterval(() => {
+        if (!isProcessRunning()) {
+          clearInterval(checkInterval);
+          childProcess.removeListener('exit', exitHandler);
+          resolve(true);
+        } else if (Date.now() - startTime > timeoutMs) {
+          clearInterval(checkInterval);
+          childProcess.removeListener('exit', exitHandler);
+          resolve(false);
+        }
+      }, 100);
+    });
+  };
+
   if (process.platform === 'win32') {
-    execFile('taskkill', ['/pid', childProcess.pid.toString(), '/T', '/F']);
+    // Windows: Try graceful shutdown first, then escalate if needed
+    
+    // Stage 1: Try graceful shutdown (sends WM_CLOSE)
+    try {
+      execFile('taskkill', ['/pid', pid.toString(), '/T'], (error) => {
+        // Ignore error - process might resist graceful shutdown
+        if (error) {
+          console.debug(`Graceful shutdown failed for PID ${pid}: ${error.message}`);
+        }
+      });
+      
+      // Wait up to 5 seconds for graceful exit
+      const exitedGracefully = await waitForExit(5000);
+      if (exitedGracefully) {
+        console.debug(`Process ${pid} terminated gracefully`);
+        return;
+      }
+    } catch (error) {
+      console.debug(`Failed to send graceful shutdown signal: ${error}`);
+    }
+
+    // Stage 2: Try Node's kill (might work for some processes)
+    try {
+      childProcess.kill('SIGTERM');
+      
+      // Wait 2 more seconds
+      const exitedWithSigterm = await waitForExit(2000);
+      if (exitedWithSigterm) {
+        console.debug(`Process ${pid} terminated with SIGTERM`);
+        return;
+      }
+    } catch (error) {
+      console.debug(`SIGTERM failed: ${error}`);
+    }
+
+    // Stage 3: Force kill as last resort
+    try {
+      execFile('taskkill', ['/pid', pid.toString(), '/T', '/F'], (error) => {
+        if (error) {
+          console.error(`Force kill failed for PID ${pid}: ${error.message}`);
+        }
+      });
+      
+      // Wait for force kill to complete
+      const exitedForcefully = await waitForExit(2000);
+      if (!exitedForcefully) {
+        console.error(`Process ${pid} could not be terminated even with force kill`);
+      } else {
+        console.debug(`Process ${pid} force terminated`);
+      }
+    } catch (error) {
+      console.error(`Critical error killing process ${pid}: ${error}`);
+    }
   } else {
+    // Unix-like systems: Use SIGTERM
     childProcess.kill('SIGTERM');
+    
+    // Wait for process to exit
+    const exited = await waitForExit(5000);
+    if (!exited) {
+      // Try SIGKILL as last resort
+      try {
+        childProcess.kill('SIGKILL');
+        await waitForExit(2000);
+      } catch (error) {
+        console.error(`Failed to kill process ${pid}: ${error}`);
+      }
+    }
   }
 };
 

@@ -61,9 +61,9 @@ main.ipc.handle('invoke-process:get-status', () => invoke.getStatus());
 /**
  * Cleans up any running processes (installation or invoke).
  */
-function cleanup() {
+async function cleanup() {
   cleanupInstall();
-  cleanupInvoke();
+  await cleanupInvoke();
   cleanupPty();
   main.cleanup();
 }

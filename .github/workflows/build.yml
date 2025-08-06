@@ -40,7 +40,7 @@ jobs:
       - name: Build GUI
         run: npm run app:dist
         env:
-          ENABLE_CODE_SIGNING: false
+          ENABLE_MACOS_CODE_SIGNING: false
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
@@ -69,7 +69,7 @@ jobs:
       - name: Build GUI
         run: npm run app:dist
         env:
-          ENABLE_CODE_SIGNING: false
+          ENABLE_MACOS_CODE_SIGNING: false
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
@@ -97,7 +97,7 @@ jobs:
       - name: Build GUI
         run: npm run app:dist
         env:
-          ENABLE_CODE_SIGNING: false
+          ENABLE_MACOS_CODE_SIGNING: false
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4

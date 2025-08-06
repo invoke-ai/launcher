@@ -351,6 +351,11 @@ export class InvokeManager {
         this.log.info(`[CRASH] Window can be reopened - server is still running\r\n`);
       }
 
+      // Close the crashed window (it may still be visible but unresponsive)
+      if (this.window && !this.window.isDestroyed()) {
+        this.window.destroy();
+      }
+
       // Clean up the window reference
       this.window = null;
       this.stopMetricsMonitoring();

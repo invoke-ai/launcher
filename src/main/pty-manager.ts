@@ -11,7 +11,7 @@ export const createPtyManager = (arg: {
 }) => {
   const { ipc, sendToWindow } = arg;
   const options: PtyManager['options'] = {
-    maxHistorySize: 10_000,
+    maxHistorySize: 2_000,
   };
 
   const ptyManager = new PtyManager(options);

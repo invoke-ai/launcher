@@ -9,7 +9,7 @@ const DEFAULT_XTERM_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions = {
   cursorBlink: true,
   fontSize: 12,
   fontFamily: 'JetBrainsMonoNerdFont, monospace',
-  scrollback: 10_000,
+  scrollback: 2_000,
   allowTransparency: true,
 };
 

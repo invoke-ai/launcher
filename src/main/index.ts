@@ -16,6 +16,21 @@ import {
   pathExists,
 } from '@/main/util';
 
+// Configure Chrome/Electron flags for better memory management
+
+// Windows-specific, disables some fancy desktop window effects that can use a lot of memory
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
+// Prevent memory spikes from throttling when the app is in the background and moves to foreground
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+
+// Keep renderer active when minimized to avoid memory spikes when restoring
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
+// Remove limits on number of backing stores, which are per-window/tab. Theoretically, the launcher should only have two
+// windows open at a time so this should have no effect. But just in case, we disable the limit.
+app.commandLine.appendSwitch('disable-backing-store-limit');
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();

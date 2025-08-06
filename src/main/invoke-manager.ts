@@ -190,6 +190,12 @@ export class InvokeManager {
       minHeight: 600,
       webPreferences: {
         devTools: true,
+        backgroundThrottling: false, // Prevent memory spikes from throttling when window loses focus
+        additionalArguments: [
+          '--enable-gpu-rasterization',      // Offload canvas to GPU
+          '--enable-zero-copy',              // Reduce memory copies
+          '--enable-accelerated-2d-canvas',  // GPU acceleration for 2D canvas
+        ],
       },
       autoHideMenuBar: true,
       frame: true,

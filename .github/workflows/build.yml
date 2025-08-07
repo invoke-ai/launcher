@@ -37,10 +37,8 @@ jobs:
       - name: Download uv
         run: npm run download linux
 
-      - name: Build GUI
-        run: npm run app:dist
-        env:
-          ENABLE_MACOS_CODE_SIGNING: false
+      - name: Build
+        run: npm run dist
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
@@ -66,10 +64,8 @@ jobs:
       - name: Download uv
         run: npm run download mac
 
-      - name: Build GUI
-        run: npm run app:dist
-        env:
-          ENABLE_MACOS_CODE_SIGNING: false
+      - name: Build
+        run: npm run dist
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
@@ -94,14 +90,11 @@ jobs:
       - name: Download uv
         run: npm run download win
 
-      - name: Build GUI
-        run: npm run app:dist
-        env:
-          ENABLE_MACOS_CODE_SIGNING: false
+      - name: Build
+        run: npm run dist
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
         with:
           name: 'Invoke Community Edition.exe - UNSIGNED'
           path: 'dist/Invoke Community Edition.exe'
-

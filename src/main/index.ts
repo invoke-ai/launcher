@@ -31,11 +31,6 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding');
 // windows open at a time so this should have no effect. But just in case, we disable the limit.
 app.commandLine.appendSwitch('disable-backing-store-limit');
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require('electron-squirrel-startup')) {
-  app.quit();
-}
-
 const main = new MainProcessManager({ store });
 
 const [install, cleanupInstall] = createInstallManager({

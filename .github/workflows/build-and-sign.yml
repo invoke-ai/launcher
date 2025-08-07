@@ -29,7 +29,7 @@ jobs:
         run: npm run download linux
 
       - name: Build application
-        run: npm run app:dist
+        run: npm run dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -67,7 +67,7 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERT_FILE_PASSWORD }}
 
       - name: Build and sign application
-        run: npm run app:dist
+        run: npm run dist
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -103,7 +103,7 @@ jobs:
         run: npm run download win
 
       - name: Build application
-        run: npm run app:dist
+        run: npm run dist
 
       - name: Set up for code signing with Software Trust Manager
         uses: digicert/ssm-code-signing@v1.0.0

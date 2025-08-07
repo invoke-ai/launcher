@@ -1,10 +1,16 @@
+import { resolve } from 'path';
 import { defineConfig, mergeConfig } from 'vitest/config';
 
-import viteConfig from './vite.renderer.config.mjs';
+import electronViteConfig from './electron.vite.config';
 
 export default mergeConfig(
-  viteConfig,
+  electronViteConfig,
   defineConfig({
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, './src'),
+      },
+    },
     test: {
       globals: true,
       environment: 'jsdom',

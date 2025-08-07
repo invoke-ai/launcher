@@ -1,5 +1,5 @@
 import { IpcEmitter, IpcListener } from '@electron-toolkit/typed-ipc/main';
-import { BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
 import type Store from 'electron-store';
 import path from 'path';
@@ -8,9 +8,6 @@ import { isDevelopment, manageWindowSize } from '@/main/util';
 import type { IpcEvents, IpcRendererEvents, MainProcessStatus, StoreData, WithTimestamp } from '@/shared/types';
 
 const NOT_INITIALIZED_MESSAGE = 'Main window is not initialized';
-
-declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
-declare const MAIN_WINDOW_VITE_NAME: string;
 
 export class MainProcessManager {
   private window: BrowserWindow | null;
@@ -75,7 +72,7 @@ export class MainProcessManager {
       minWidth: 800,
       minHeight: 600,
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
+        preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: true,
         contextIsolation: true,
         devTools: true,
@@ -123,10 +120,13 @@ export class MainProcessManager {
 
     this.window = window;
 
-    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-      window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    // Load the window based on whether we're in development or production
+    if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+      // Development: load from Vite dev server
+      window.loadURL(process.env['ELECTRON_RENDERER_URL']);
     } else {
-      window.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+      // Production: load from local file
+      window.loadFile(path.join(__dirname, '../renderer/index.html'));
     }
   };
 

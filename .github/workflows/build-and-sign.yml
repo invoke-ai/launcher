@@ -30,8 +30,6 @@ jobs:
 
       - name: Build application
         run: npm run app:dist
-        env:
-          ENABLE_MACOS_CODE_SIGNING: false
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -65,18 +63,15 @@ jobs:
       - name: Import macOS certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
-          p12-file-base64: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
-          p12-password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+          p12-file-base64: ${{ secrets.APPLE_CERT_FILE_B64 }}
+          p12-password: ${{ secrets.APPLE_CERT_FILE_PASSWORD }}
 
       - name: Build and sign application
         run: npm run app:dist
         env:
-          ENABLE_MACOS_CODE_SIGNING: true
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # electron-builder wants it set to this env var
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
 
       - name: Upload artifact - SIGNED
         uses: actions/upload-artifact@v4
@@ -109,8 +104,6 @@ jobs:
 
       - name: Build application
         run: npm run app:dist
-        env:
-          ENABLE_MACOS_CODE_SIGNING: false
 
       - name: Set up for code signing with Software Trust Manager
         uses: digicert/ssm-code-signing@v1.0.0

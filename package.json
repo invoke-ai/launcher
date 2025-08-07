@@ -1,17 +1,21 @@
 {
   "name": "invoke-community-edition",
   "productName": "Invoke Community Edition",
+  "homepage": "https://github.com/invoke-ai/launcher",
   "version": "1.6.0",
   "description": "Invoke Community Edition",
-  "main": ".vite/build/main.js",
+  "main": "out/main/index.js",
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "NODE_ENV=development electron-forge start",
-    "package": "electron-forge package",
-    "app:dir": "npm run package && electron-builder --dir",
-    "app:dist": "npm run package && electron-builder",
+    "dev": "electron-vite dev --watch",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "dotenv -e .env -- electron-builder --config electron-builder.config.mjs",
+    "dist": "npm run clean && npm run build && npm run package",
+    "start": "npm run build && npm run preview",
+    "clean": "rimraf out/ dist/",
     "download": "ts-node download_uv.ts",
     "download:clean": "rimraf assets/bin/",
     "lint:knip": "knip --tags=-knipignore",
@@ -31,10 +35,6 @@
   },
   "postinstall": "electron-builder install-app-deps",
   "devDependencies": {
-    "@electron-forge/cli": "^7.8.2",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.8.2",
-    "@electron-forge/plugin-fuses": "^7.8.2",
-    "@electron-forge/plugin-vite": "^7.8.2",
     "@electron/fuses": "^2.0.0",
     "@eslint/js": "^9.32.0",
     "@types/follow-redirects": "^1.14.4",
@@ -50,9 +50,11 @@
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
     "concurrently": "^9.2.0",
+    "dotenv-cli": "^10.0.0",
     "dpdm": "^3.14.0",
     "electron": "^37.2.5",
     "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.0",
     "eslint": "^9.32.0",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-path": "^2.0.3",
@@ -98,7 +100,6 @@
     "@xterm/xterm": "^5.5.0",
     "ansi-regex": "^6.1.0",
     "electron-context-menu": "^4.1.0",
-    "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^10.1.0",
     "es-toolkit": "^1.39.8",
     "filesize": "^11.0.2",
@@ -118,44 +119,6 @@
     "tsafe": "^1.8.5",
     "use-stick-to-bottom": "^1.1.1",
     "zod": "^4.0.14"
-  },
-  "build": {
-    "appId": "com.invoke.invoke-community-edition",
-    "productName": "Invoke Community Edition",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "package.json",
-      ".vite/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "assets/bin",
-        "to": "./bin"
-      }
-    ],
-    "linux": {
-      "target": "AppImage",
-      "artifactName": "${productName}.${ext}",
-      "icon": "assets/icons/icon.png"
-    },
-    "mac": {
-      "target": {
-        "target": "dmg",
-        "arch": [
-          "arm64"
-        ]
-      },
-      "artifactName": "${productName}.${ext}",
-      "icon": "assets/icons/icon.icns"
-    },
-    "win": {
-      "target": "portable",
-      "artifactName": "${productName}.${ext}",
-      "icon": "assets/icons/icon.ico"
-    },
-    "publish": null
   },
   "uv": {
     "linux": {

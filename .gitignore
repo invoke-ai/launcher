@@ -110,3 +110,5 @@ uv.exe
 uvx.exe
 
 .claude/
+
+.env

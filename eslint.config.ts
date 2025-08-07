@@ -1,3 +1,6 @@
+import { fileURLToPath } from 'node:url';
+
+import { includeIgnoreFile } from '@eslint/compat';
 import js from '@eslint/js';
 import typescriptEslint from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';
@@ -10,9 +13,11 @@ import pluginSimpleImportSort from 'eslint-plugin-simple-import-sort';
 import pluginUnusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 
+const gitignorePath = fileURLToPath(new URL('.gitignore', import.meta.url));
+
 export default [
   js.configs.recommended,
-
+  includeIgnoreFile(gitignorePath, 'Imported .gitignore patterns'),
   {
     languageOptions: {
       parser: typescriptParser,

@@ -33,7 +33,11 @@ export default {
     artifactName: '${productName}.${ext}',
     icon: 'assets/icons/icon.ico',
     signtoolOptions: {
+      // Delegate signing to our own script. This script is called once for each executable. The script contains
+      // logic to skip signing for executables that are not meant to be signed, such as the bundled uv binary.
       sign: './scripts/customSign.js',
+      // We use a custom signing script to handle the signing process, so the selected algorithms are essentially
+      // placeholders. We only want to sign the executable once, so we select a single algo.
       signingHashAlgorithms: ['sha256'],
     },
   },

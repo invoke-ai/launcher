@@ -12,8 +12,13 @@ const quit = async () => {
   $isInvokeProcessPendingDismissal.set(true);
 };
 
+const dismissPostInvoke = () => {
+  $isInvokeProcessPendingDismissal.set(false);
+};
+
 export const LaunchFlowRunning = memo(() => {
   const invokeProcessStatus = useStore($invokeProcessStatus);
+  const isInvokeProcessPendingDismissal = useStore($isInvokeProcessPendingDismissal);
 
   return (
     <BodyContainer>
@@ -21,14 +26,21 @@ export const LaunchFlowRunning = memo(() => {
         <LaunchFlowLogViewer />
       </BodyContent>
       <BodyFooter>
-        <Button
-          onClick={quit}
-          isLoading={invokeProcessStatus.type === 'exiting'}
-          loadingText="Shutting down"
-          colorScheme="error"
-        >
-          Shutdown
-        </Button>
+        {isInvokeProcessPendingDismissal && (
+          <Button variant="ghost" onClick={dismissPostInvoke}>
+            Back
+          </Button>
+        )}
+        {!isInvokeProcessPendingDismissal && (
+          <Button
+            onClick={quit}
+            isLoading={invokeProcessStatus.type === 'exiting'}
+            loadingText="Shutting down"
+            colorScheme="error"
+          >
+            Shutdown
+          </Button>
+        )}
       </BodyFooter>
     </BodyContainer>
   );

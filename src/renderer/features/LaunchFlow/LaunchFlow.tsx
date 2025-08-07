@@ -5,7 +5,6 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { ErrorBoundaryFallback } from '@/renderer/app/ErrorBoundaryFallback';
 import { LaunchFlowInvalidInstall } from '@/renderer/features/LaunchFlow/LaunchFlowCannotFindInstall';
 import { LaunchFlowNotRunning } from '@/renderer/features/LaunchFlow/LaunchFlowNotRunning';
-import { LaunchFlowPendingDismissal } from '@/renderer/features/LaunchFlow/LaunchFlowPendingDismissal';
 import { LaunchFlowRunning } from '@/renderer/features/LaunchFlow/LaunchFlowRunning';
 import { LaunchFlowWindowCrashed } from '@/renderer/features/LaunchFlow/LaunchFlowWindowCrashed';
 import {
@@ -29,12 +28,8 @@ const LaunchFlowContent = memo(({ installDirDetails }: Props) => {
     return <LaunchFlowWindowCrashed />;
   }
 
-  if (isInvokeProcessActive) {
+  if (isInvokeProcessActive || isInvokeProcessPendingDismissal) {
     return <LaunchFlowRunning />;
-  }
-
-  if (isInvokeProcessPendingDismissal) {
-    return <LaunchFlowPendingDismissal />;
   }
 
   if (!installDirDetails.isInstalled) {

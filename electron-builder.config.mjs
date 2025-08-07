@@ -27,6 +27,7 @@ export default {
     {
       from: 'assets/bin',
       to: './bin',
+      filter: 'uv*',
     },
   ],
   linux: {

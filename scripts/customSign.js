@@ -18,6 +18,12 @@ function sign(configuration) {
   console.log(`Starting DigiCert KeyLocker signing for: ${filePath}`);
   console.log(`Hash algorithm: ${hash}, isNest: ${isNest}`);
 
+  // Skip signing for bundled uv.exe binary
+  if (filePath.includes('\\bin\\uv.exe') || filePath.includes('/bin/uv.exe')) {
+    console.log(`Skipping signing for bundled uv.exe binary: ${filePath}`);
+    return;
+  }
+
   // Check required environment variables
   const requiredVars = [
     'SM_HOST',

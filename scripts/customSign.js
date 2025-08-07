@@ -154,11 +154,6 @@ function sign(configuration) {
 
     // Clear sensitive environment variables from process
     delete process.env.SM_CLIENT_CERT_FILE;
-    delete process.env.SM_API_KEY;
-    delete process.env.SM_CLIENT_CERT_PASSWORD;
-    delete process.env.SM_HOST;
-    delete process.env.SM_CODE_SIGNING_CERT_SHA1_HASH;
-    delete process.env.SM_CLIENT_CERT_FILE_B64;
   }
 }
 

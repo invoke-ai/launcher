@@ -32,6 +32,9 @@ export default {
     target: 'portable',
     artifactName: '${productName}.${ext}',
     icon: 'assets/icons/icon.ico',
+    signtoolOptions: {
+      sign: './scripts/customSign.js',
+    },
   },
   publish: null,
   electronFuses: {

@@ -32,7 +32,7 @@ jobs:
           cache: 'npm'
 
       - name: Install deps
-        run: npm install --include=dev
+        run: npm ci
 
       - name: Download uv
         run: npm run download linux
@@ -59,7 +59,7 @@ jobs:
           cache: 'npm'
 
       - name: Install deps
-        run: npm install --include=dev
+        run: npm ci
 
       - name: Download uv
         run: npm run download mac
@@ -85,7 +85,7 @@ jobs:
           cache: 'npm'
 
       - name: Install deps
-        run: npm install --include=dev
+        run: npm ci
 
       - name: Download uv
         run: npm run download win

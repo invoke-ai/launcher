@@ -56,5 +56,6 @@ export default {
     enableNodeCliInspectArguments: false,
     enableEmbeddedAsarIntegrityValidation: true,
     onlyLoadAppFromAsar: true,
+    resetAdHocDarwinSignature: true,
   },
 };

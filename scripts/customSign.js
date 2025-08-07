@@ -13,14 +13,13 @@ const { tmpdir } = require('os');
  * @returns {Promise<void>}
  */
 function sign(configuration) {
-  const { path: filePath, hash, isNest } = configuration;
+  const { path: filePath } = configuration;
 
   console.log(`Starting DigiCert KeyLocker signing for: ${filePath}`);
-  console.log(`Hash algorithm: ${hash}, isNest: ${isNest}`);
 
-  // Skip signing for bundled uv.exe binary
-  if (filePath.includes('\\bin\\uv.exe') || filePath.includes('/bin/uv.exe')) {
-    console.log(`Skipping signing for bundled uv.exe binary: ${filePath}`);
+  // electron-builder will attempt to sign _all_ executables. We only want to sign the main binary.
+  if (!filePath.includes('Invoke Community Edition.exe')) {
+    console.log(`Skipping signing for binary: ${filePath}`);
     return;
   }
 

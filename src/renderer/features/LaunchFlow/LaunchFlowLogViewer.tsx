@@ -3,13 +3,13 @@ import { startCase } from 'es-toolkit/compat';
 import { memo } from 'react';
 
 import {
-  $invokeProcessLogs,
   $invokeProcessStatus,
+  $invokeProcessTerminal,
   getIsInvokeProcessActive,
 } from '@/renderer/features/LaunchFlow/state';
 import { UIMemoryMonitor } from '@/renderer/features/LaunchFlow/UIMemoryMonitor';
-import { LogViewer } from '@/renderer/features/LogViewer/LogViewer';
-import { LogViewerStatusIndicator } from '@/renderer/features/LogViewer/LogViewerStatusIndicator';
+import { XtermLogViewer } from '@/renderer/features/XTermLogViewer/XtermLogViewer';
+import { XTermLogViewerStatusIndicator } from '@/renderer/features/XTermLogViewer/XTermLogViewerStatusIndicator';
 import type { InvokeProcessStatus } from '@/shared/types';
 
 const getMessage = (status: InvokeProcessStatus) => {
@@ -20,21 +20,20 @@ const getMessage = (status: InvokeProcessStatus) => {
 };
 
 export const LaunchFlowLogViewer = memo(() => {
-  const invokeProcessLogs = useStore($invokeProcessLogs);
   const invokeProcessStatus = useStore($invokeProcessStatus);
 
   return (
-    <LogViewer logs={invokeProcessLogs}>
+    <XtermLogViewer $terminal={$invokeProcessTerminal}>
       <UIMemoryMonitor position="absolute" top={2} left={2} />
-      <LogViewerStatusIndicator
+      <XTermLogViewerStatusIndicator
         isLoading={getIsInvokeProcessActive(invokeProcessStatus)}
         position="absolute"
         top={2}
         right={2}
       >
         {getMessage(invokeProcessStatus)}
-      </LogViewerStatusIndicator>
-    </LogViewer>
+      </XTermLogViewerStatusIndicator>
+    </XtermLogViewer>
   );
 });
 LaunchFlowLogViewer.displayName = 'LaunchFlowLogViewer';

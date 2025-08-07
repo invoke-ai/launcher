@@ -1,12 +1,12 @@
 import { objectEquals } from '@observ33r/object-equals';
+import type { FitAddon } from '@xterm/addon-fit';
+import type { Terminal } from '@xterm/xterm';
 import { atom, computed } from 'nanostores';
 
-import { LineBuffer } from '@/lib/line-buffer';
-import { SlidingBuffer } from '@/lib/sliding-buffer';
-import { INVOKE_PROCESS_LOG_LIMIT, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
+import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import { syncInstallDirDetails } from '@/renderer/services/store';
-import type { InvokeProcessStatus, LogEntry, WithTimestamp } from '@/shared/types';
+import type { InvokeProcessStatus, WithTimestamp } from '@/shared/types';
 
 export const getIsInvokeProcessActive = (status: InvokeProcessStatus) => {
   switch (status.type) {
@@ -32,45 +32,31 @@ $invokeProcessStatus.subscribe((status, oldStatus) => {
   }
 });
 
-// Create reactive log buffer using SlidingBuffer for better performance
-const invokeLogBuffer = new SlidingBuffer<WithTimestamp<LogEntry>>(INVOKE_PROCESS_LOG_LIMIT);
-export const $invokeProcessLogs = atom<WithTimestamp<LogEntry>[]>([]);
-
-const appendToInvokeProcessLogs = (entry: WithTimestamp<LogEntry>) => {
-  invokeLogBuffer.push(entry);
-  // Create new array for React reactivity - reduces from 3 array operations to 1
-  $invokeProcessLogs.set([...invokeLogBuffer.get()]);
-};
-
-const clearInvokeProcessLogs = () => {
-  invokeLogBuffer.clear();
-  $invokeProcessLogs.set([]);
-};
+// Xterm terminal for displaying logs with proper terminal control sequence handling
+export const $invokeProcessTerminal = atom<{ terminal: Terminal; fitAddon: FitAddon } | null>(null);
 
 const listen = () => {
-  const buffer = new LineBuffer({ stripAnsi: true });
-
   ipc.on('invoke-process:log', (_, data) => {
-    const buffered = buffer.append(data.message);
-    for (const message of buffered) {
-      appendToInvokeProcessLogs({ ...data, message });
+    // Write raw data to xterm terminal if available
+    const terminal = $invokeProcessTerminal.get();
+    if (terminal) {
+      // Write the raw message with ANSI codes to xterm
+      terminal.terminal.write(data.message);
     }
   });
 
   ipc.on('invoke-process:clear-logs', () => {
-    clearInvokeProcessLogs();
+    // Write raw data to xterm terminal if available
+    const terminal = $invokeProcessTerminal.get();
+    if (terminal) {
+      // Write the raw message with ANSI codes to xterm
+      terminal.terminal.reset();
+    }
   });
 
   ipc.on('invoke-process:status', (_, status) => {
     $invokeProcessStatus.set(status);
     if (status.type === 'exited' || status.type === 'error') {
-      // Flush the buffer when the process exits in case there were any remaining logs
-      const finalMessage = buffer.flush();
-      const lastLog = $invokeProcessLogs.get().slice(-1)[0];
-      if (lastLog && finalMessage) {
-        appendToInvokeProcessLogs({ ...lastLog, message: finalMessage });
-      }
-
       // If the invoke process errored, we need to force a sync of the install dir details in case something broke
       syncInstallDirDetails();
     }

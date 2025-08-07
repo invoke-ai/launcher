@@ -9,6 +9,7 @@ import path, { join } from 'path';
 import { serializeError } from 'serialize-error';
 import { assert } from 'tsafe';
 
+import { DEFAULT_ENV } from '@/lib/pty';
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
@@ -193,7 +194,7 @@ export class InstallManager {
 
     const runProcessOptions = {
       signal: abortController.signal,
-      env: process.env,
+      env: { ...process.env, ...DEFAULT_ENV },
     };
 
     if (repair || pythonVersionMismatch) {

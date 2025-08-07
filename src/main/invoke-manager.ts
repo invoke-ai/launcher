@@ -9,6 +9,7 @@ import { join } from 'path';
 import { assert } from 'tsafe';
 import { promisify } from 'util';
 
+import { DEFAULT_ENV } from '@/lib/pty';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { StringMatcher } from '@/lib/string-matcher';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
@@ -166,7 +167,7 @@ export class InvokeManager {
       this.log.info('Preparing first run of this install - may take a minute or two...\r\n');
     }
 
-    const env: NodeJS.ProcessEnv = { ...process.env, INVOKEAI_ROOT: location };
+    const env: NodeJS.ProcessEnv = { ...process.env, INVOKEAI_ROOT: location, ...DEFAULT_ENV };
 
     // If server mode is enabled, set the host to 0.0.0.0 to enable LAN access
     if (this.store.get('serverMode')) {

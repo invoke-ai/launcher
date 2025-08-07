@@ -25,7 +25,7 @@ type Props = {
   isLoading: boolean;
 } & BoxProps;
 
-export const LogViewerStatusIndicator = ({ isLoading, children, ...boxProps }: Props) => {
+export const XTermLogViewerStatusIndicator = ({ isLoading, children, ...boxProps }: Props) => {
   return (
     <Box
       bg="base.900"

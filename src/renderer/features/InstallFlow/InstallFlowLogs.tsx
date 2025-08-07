@@ -3,27 +3,27 @@ import { startCase } from 'es-toolkit/compat';
 import { memo } from 'react';
 
 import {
-  $installProcessLogs,
   $installProcessStatus,
+  $installProcessTerminal,
   getIsActiveInstallProcessStatus,
 } from '@/renderer/features/InstallFlow/state';
-import { LogViewer } from '@/renderer/features/LogViewer/LogViewer';
-import { LogViewerStatusIndicator } from '@/renderer/features/LogViewer/LogViewerStatusIndicator';
+import { XtermLogViewer } from '@/renderer/features/XTermLogViewer/XtermLogViewer';
+import { XTermLogViewerStatusIndicator } from '@/renderer/features/XTermLogViewer/XTermLogViewerStatusIndicator';
 
 export const InstallFlowLogs = memo(() => {
-  const installProcessLogs = useStore($installProcessLogs);
   const installProcessStatus = useStore($installProcessStatus);
+
   return (
-    <LogViewer logs={installProcessLogs}>
-      <LogViewerStatusIndicator
+    <XtermLogViewer $terminal={$installProcessTerminal}>
+      <XTermLogViewerStatusIndicator
         isLoading={getIsActiveInstallProcessStatus(installProcessStatus)}
         position="absolute"
         top={2}
         right={2}
       >
         {startCase(installProcessStatus.type)}
-      </LogViewerStatusIndicator>
-    </LogViewer>
+      </XTermLogViewerStatusIndicator>
+    </XtermLogViewer>
   );
 });
 InstallFlowLogs.displayName = 'InstallFlowLogs';

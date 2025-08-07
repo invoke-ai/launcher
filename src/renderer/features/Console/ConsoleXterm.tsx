@@ -26,7 +26,7 @@ export const ConsoleXterm = memo(({ terminal }: { terminal: TerminalState }) => 
       }
       terminal.fitAddon.fit();
     };
-    const debouncedFitIfOpen = debounce(fitIfOpen, 300);
+    const debouncedFitIfOpen = debounce(fitIfOpen, 300, { leading: false, trailing: true });
 
     const resizeObserver = new ResizeObserver(debouncedFitIfOpen);
     resizeObserver.observe(parent);

@@ -1,14 +1,14 @@
 import { objectEquals } from '@observ33r/object-equals';
 import { compare } from '@renovatebot/pep440';
+import type { FitAddon } from '@xterm/addon-fit';
+import type { Terminal } from '@xterm/xterm';
 import { clamp } from 'es-toolkit/compat';
 import type { ReadableAtom } from 'nanostores';
 import { atom, computed, map } from 'nanostores';
 import { assert } from 'tsafe';
 
-import { LineBuffer } from '@/lib/line-buffer';
 import { withResultAsync } from '@/lib/result';
-import { SlidingBuffer } from '@/lib/sliding-buffer';
-import { INSTALL_PROCESS_LOG_LIMIT, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
+import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { $latestGHReleases } from '@/renderer/services/gh';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import {
@@ -17,7 +17,7 @@ import {
   persistedStoreApi,
   syncInstallDirDetails,
 } from '@/renderer/services/store';
-import type { DirDetails, GpuType, InstallProcessStatus, InstallType, LogEntry, WithTimestamp } from '@/shared/types';
+import type { DirDetails, GpuType, InstallProcessStatus, InstallType, WithTimestamp } from '@/shared/types';
 
 const steps = ['Location', 'Version', 'Configure', 'Review', 'Install'] as const;
 
@@ -116,7 +116,6 @@ export const installFlowApi = {
     if (!dirDetails || !dirDetails.canInstall || !release || !gpuType) {
       return;
     }
-    $installProcessLogs.set([]);
     emitter.invoke('install-process:start-install', dirDetails.path, gpuType, release.version, repairMode);
     installFlowApi.nextStep();
   },
@@ -186,15 +185,7 @@ $installProcessStatus.subscribe((status, oldStatus) => {
   }
 });
 
-// Create reactive log buffer using SlidingBuffer for better performance
-const installLogBuffer = new SlidingBuffer<WithTimestamp<LogEntry>>(INSTALL_PROCESS_LOG_LIMIT);
-export const $installProcessLogs = atom<WithTimestamp<LogEntry>[]>([]);
-
-const appendToInstallProcessLogs = (entry: WithTimestamp<LogEntry>) => {
-  installLogBuffer.push(entry);
-  // Create new array for React reactivity - reduces from 3 array operations to 1
-  $installProcessLogs.set([...installLogBuffer.get()]);
-};
+export const $installProcessTerminal = atom<{ terminal: Terminal; fitAddon: FitAddon } | null>(null);
 
 export const getIsActiveInstallProcessStatus = (status: InstallProcessStatus) => {
   switch (status.type) {
@@ -209,25 +200,18 @@ export const getIsActiveInstallProcessStatus = (status: InstallProcessStatus) =>
 };
 
 const listen = () => {
-  const buffer = new LineBuffer({ stripAnsi: true });
-
   ipc.on('install-process:log', (_, data) => {
-    const buffered = buffer.append(data.message);
-    for (const message of buffered) {
-      appendToInstallProcessLogs({ ...data, message });
+    // Write raw data to xterm terminal if available
+    const terminal = $installProcessTerminal.get();
+    if (terminal) {
+      // Write the raw message with ANSI codes to xterm
+      terminal.terminal.write(data.message);
     }
   });
 
   ipc.on('install-process:status', (_, status) => {
     $installProcessStatus.set(status);
     if (status.type === 'canceled' || status.type === 'completed' || status.type === 'error') {
-      // Flush the buffer when the process exits in case there were any remaining logs
-      const finalMessage = buffer.flush();
-      const lastLog = $installProcessLogs.get().slice(-1)[0];
-      if (lastLog && finalMessage) {
-        appendToInstallProcessLogs({ ...lastLog, message: finalMessage });
-      }
-
       // If the install was canceled or errored, we need to force a sync of the install dir details in case something
       // broke
       syncInstallDirDetails();

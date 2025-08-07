@@ -14,6 +14,11 @@ const DEFAULT_PTY_MANAGER_OPTIONS: PtyManagerOptions = {
   maxHistorySize: 1000,
 };
 
+export const DEFAULT_ENV: Record<string, string> = {
+  FORCE_COLOR: '1',
+  PYTHONUNBUFFERED: '1',
+};
+
 type PtyEntry = {
   id: string;
   process: pty.IPty;
@@ -45,7 +50,7 @@ export class PtyManager {
     const ptyProcess = pty.spawn(shell, [], {
       name: process.env['TERM'] ?? 'xterm-color',
       cwd: options?.cwd ?? process.env.HOME,
-      env: process.env,
+      env: { ...process.env, ...DEFAULT_ENV },
     });
 
     const ansiSequenceBuffer = new AnsiSequenceBuffer();

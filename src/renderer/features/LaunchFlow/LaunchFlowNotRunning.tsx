@@ -5,7 +5,6 @@ import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/c
 import { Strong } from '@/renderer/common/Strong';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
 import { LaunchFlowUpdateCheckerNotification } from '@/renderer/features/LaunchFlow/LaunchFlowUpdateCheckerNotification';
-import { $invokeProcessLogs } from '@/renderer/features/LaunchFlow/state';
 import { emitter } from '@/renderer/services/ipc';
 import { selectInstallDir } from '@/renderer/services/store';
 import type { DirDetails } from '@/shared/types';
@@ -19,7 +18,6 @@ export const LaunchFlowNotRunning = memo(({ installDirDetails }: Props) => {
     if (!installDirDetails || !installDirDetails.isInstalled) {
       return;
     }
-    $invokeProcessLogs.set([]);
     emitter.invoke('invoke-process:start-invoke', installDirDetails.path);
   }, [installDirDetails]);
 

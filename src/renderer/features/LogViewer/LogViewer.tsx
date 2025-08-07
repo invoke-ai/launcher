@@ -1,13 +1,13 @@
 import type { SystemStyleObject } from '@invoke-ai/ui-library';
-import { Box, Flex, IconButton, Text } from '@invoke-ai/ui-library';
+import { Box, IconButton, Text } from '@invoke-ai/ui-library';
 import Linkify from 'linkify-react';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
 import type { PropsWithChildren } from 'react';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { PiCaretDownBold } from 'react-icons/pi';
+import type { ItemContent, VirtuosoHandle } from 'react-virtuoso';
+import { Virtuoso } from 'react-virtuoso';
 import { assert } from 'tsafe';
-import type { StickToBottomOptions } from 'use-stick-to-bottom';
-import { useStickToBottom } from 'use-stick-to-bottom';
 
 import type { LogEntry, WithTimestamp } from '@/shared/types';
 
@@ -47,37 +47,47 @@ const sx: SystemStyleObject = {
   },
 };
 
-const stickToBottomOptions: StickToBottomOptions = {
-  damping: 1.3,
+const virtuosoStyle = { height: '100%' };
+
+const itemContent: ItemContent<WithTimestamp<LogEntry>, void> = (i, data) => {
+  const k = getKey(data, i);
+  switch (data.level) {
+    case 'debug':
+      return <LogEntryDebug key={k} entry={data} />;
+    case 'info':
+      return <LogEntryInfo key={k} entry={data} />;
+    case 'warn':
+      return <LogEntryWarn key={k} entry={data} />;
+    case 'error':
+      return <LogEntryError key={k} entry={data} />;
+    default:
+      assert(false, 'Invalid log level');
+  }
 };
 
 export const LogViewer = memo(({ logs, children }: PropsWithChildren<{ logs: WithTimestamp<LogEntry>[] }>) => {
-  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom(stickToBottomOptions);
+  const [isAtBottom, setIsAtBottom] = useState(false);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const onAtBottomStateChange = useCallback((isAtBottom: boolean) => {
+    setIsAtBottom(isAtBottom);
+  }, []);
 
   const onClickScrollToBottom = useCallback(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
+    virtuosoRef.current?.scrollBy({ top: Number.MAX_SAFE_INTEGER, behavior: 'smooth' });
+  }, []);
 
   return (
     <Box position="relative" w="full" h="full" borderWidth={1} borderRadius="base">
-      <Box position="absolute" ref={scrollRef} inset={2} overflow="auto">
-        <Flex ref={contentRef} flexDir="column" sx={sx}>
-          {logs.map((e, i) => {
-            const k = getKey(e, i);
-            switch (e.level) {
-              case 'debug':
-                return <LogEntryDebug key={k} entry={e} />;
-              case 'info':
-                return <LogEntryInfo key={k} entry={e} />;
-              case 'warn':
-                return <LogEntryWarn key={k} entry={e} />;
-              case 'error':
-                return <LogEntryError key={k} entry={e} />;
-              default:
-                assert(false, 'Invalid log level');
-            }
-          })}
-        </Flex>
+      <Box position="absolute" inset={2} overflow="auto" sx={sx}>
+        <Virtuoso
+          ref={virtuosoRef}
+          data={logs}
+          itemContent={itemContent}
+          style={virtuosoStyle}
+          overscan={200}
+          followOutput
+          atBottomStateChange={onAtBottomStateChange}
+        />
       </Box>
       {children}
       {!isAtBottom && (
@@ -102,30 +112,33 @@ const linkifyOptions: LinkifyOpts = {
   validate: (value) => /^https?:\/\//.test(value),
 };
 
+const MIN_H = 6; // equivalent to base line height
+const FONT_FAMILY = '"JetBrainsMonoNerdFont"';
+
 const LogEntryDebug = ({ entry }: { entry: WithTimestamp<LogEntry> }) => {
   return (
-    <Text as="pre" fontFamily='"JetBrainsMonoNerdFont"' color="invokeBlue.200" data-level="debug">
+    <Text as="pre" minH={MIN_H} fontFamily={FONT_FAMILY} color="invokeBlue.200" data-level="debug">
       <Linkify options={linkifyOptions}>{entry.message}</Linkify>
     </Text>
   );
 };
 const LogEntryInfo = ({ entry }: { entry: WithTimestamp<LogEntry> }) => {
   return (
-    <Text as="pre" fontFamily='"JetBrainsMonoNerdFont"' color="base.200" data-level="info">
+    <Text as="pre" minH={MIN_H} fontFamily={FONT_FAMILY} color="base.200" data-level="info">
       <Linkify options={linkifyOptions}>{entry.message}</Linkify>
     </Text>
   );
 };
 const LogEntryWarn = ({ entry }: { entry: WithTimestamp<LogEntry> }) => {
   return (
-    <Text as="pre" fontFamily='"JetBrainsMonoNerdFont"' color="warning.200" data-level="warn">
+    <Text as="pre" minH={MIN_H} fontFamily={FONT_FAMILY} color="warning.200" data-level="warn">
       <Linkify options={linkifyOptions}>{entry.message}</Linkify>
     </Text>
   );
 };
 const LogEntryError = ({ entry }: { entry: WithTimestamp<LogEntry> }) => {
   return (
-    <Text as="pre" fontFamily='"JetBrainsMonoNerdFont"' color="error.200" data-level="error">
+    <Text as="pre" minH={MIN_H} fontFamily={FONT_FAMILY} color="error.200" data-level="error">
       <Linkify options={linkifyOptions}>{entry.message}</Linkify>
     </Text>
   );

@@ -12,7 +12,7 @@
     "dev": "electron-vite dev --watch",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "dotenv -e .env -- electron-builder --config electron-builder.config.mjs",
+    "package": "dotenv -e .env -- electron-builder --config electron-builder.config.ts",
     "dist": "npm run clean && npm run build && npm run package",
     "start": "npm run build && npm run preview",
     "clean": "rimraf out/ dist/",

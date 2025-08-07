@@ -1,7 +1,6 @@
-/**
- * @type {import('electron-builder').Configuration}
- * @see https://www.electron.build/configuration/configuration
- */
+/* eslint-disable no-template-curly-in-string */
+import type { Configuration } from 'electron-builder';
+
 export default {
   appId: 'com.invoke.invoke-community-edition',
   productName: 'Invoke Community Edition',
@@ -58,4 +57,4 @@ export default {
     onlyLoadAppFromAsar: true,
     resetAdHocDarwinSignature: true,
   },
-};
+} satisfies Configuration;

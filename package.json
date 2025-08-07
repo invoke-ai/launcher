@@ -1,17 +1,19 @@
 {
   "name": "invoke-community-edition",
   "productName": "Invoke Community Edition",
+  "homepage": "https://github.com/invoke-ai/launcher",
   "version": "1.6.0",
   "description": "Invoke Community Edition",
-  "main": ".vite/build/main.js",
+  "main": "main/index.js",
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "NODE_ENV=development electron-forge start",
-    "package": "electron-forge package",
-    "app:dir": "npm run package && electron-builder --dir",
-    "app:dist": "npm run package && electron-builder",
+    "dev": "electron-vite dev --watch",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "npm run build && npm run preview",
+    "package:conveyor": "npm run build && conveyor make site",
     "download": "ts-node download_uv.ts",
     "download:clean": "rimraf assets/bin/",
     "lint:knip": "knip --tags=-knipignore",
@@ -31,10 +33,6 @@
   },
   "postinstall": "electron-builder install-app-deps",
   "devDependencies": {
-    "@electron-forge/cli": "^7.8.2",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.8.2",
-    "@electron-forge/plugin-fuses": "^7.8.2",
-    "@electron-forge/plugin-vite": "^7.8.2",
     "@electron/fuses": "^2.0.0",
     "@eslint/js": "^9.32.0",
     "@types/follow-redirects": "^1.14.4",
@@ -52,7 +50,8 @@
     "concurrently": "^9.2.0",
     "dpdm": "^3.14.0",
     "electron": "^37.2.5",
-    "electron-builder": "^26.0.12",
+    "electron-rebuild": "^3.2.9",
+    "electron-vite": "^4.0.0",
     "eslint": "^9.32.0",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-path": "^2.0.3",
@@ -98,7 +97,6 @@
     "@xterm/xterm": "^5.5.0",
     "ansi-regex": "^6.1.0",
     "electron-context-menu": "^4.1.0",
-    "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^10.1.0",
     "es-toolkit": "^1.39.8",
     "filesize": "^11.0.2",
@@ -127,7 +125,7 @@
     },
     "files": [
       "package.json",
-      ".vite/**/*"
+      "out/**/*"
     ],
     "extraResources": [
       {

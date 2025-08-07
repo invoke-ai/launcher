@@ -34,6 +34,7 @@ export default {
     icon: 'assets/icons/icon.ico',
     signtoolOptions: {
       sign: './scripts/customSign.js',
+      signingHashAlgorithms: ['sha256'],
     },
   },
   publish: null,

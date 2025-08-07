@@ -33,7 +33,6 @@
     "react-devtools": "react-devtools",
     "version": "npm version --message 'chore: bump version to v%s'"
   },
-  "postinstall": "electron-builder install-app-deps",
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/typed-ipc": "^1.0.2",

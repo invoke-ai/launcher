@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 
-import type { PtyBufferConfig, PtyCallbacks, PtyEntry, PtyProcessOptions } from '@/lib/pty-utils';
-import { createPtyBuffers, createPtyProcess, setupPtyCallbacks } from '@/lib/pty-utils';
+import type { PtyCallbacks, PtyEntry, PtyProcessOptions } from '@/lib/pty-utils';
+import { createPtyBuffer, createPtyProcess, setupPtyCallbacks } from '@/lib/pty-utils';
 
 /**
  * Options for running a command
@@ -27,11 +27,8 @@ interface CommandCallbacks {
  */
 export class CommandRunner {
   private currentEntry: PtyEntry | null = null;
-  private bufferConfig: PtyBufferConfig;
 
-  constructor(bufferConfig: PtyBufferConfig = {}) {
-    this.bufferConfig = bufferConfig;
-  }
+  constructor() {}
 
   /**
    * Run a command with PTY support
@@ -51,7 +48,7 @@ export class CommandRunner {
     return new Promise((resolve, reject) => {
       try {
         const id = nanoid();
-        const buffers = createPtyBuffers(this.bufferConfig);
+        const ansiBuffer = createPtyBuffer();
 
         const ptyOptions: PtyProcessOptions = {
           command,
@@ -80,13 +77,12 @@ export class CommandRunner {
           },
         };
 
-        setupPtyCallbacks(process, ptyCallbacks, buffers);
+        setupPtyCallbacks(process, ptyCallbacks, ansiBuffer);
 
         this.currentEntry = {
           id,
           process,
-          ansiSequenceBuffer: buffers.ansiBuffer,
-          historyBuffer: buffers.historyBuffer,
+          ansiSequenceBuffer: ansiBuffer,
         };
       } catch (error) {
         this.currentEntry = null;
@@ -102,7 +98,6 @@ export class CommandRunner {
     if (this.currentEntry) {
       this.currentEntry.process.kill(signal);
       this.currentEntry.ansiSequenceBuffer.clear();
-      this.currentEntry.historyBuffer.clear();
       this.currentEntry = null;
     }
   }
@@ -137,16 +132,6 @@ export class CommandRunner {
    */
   getPid(): number | undefined {
     return this.currentEntry?.process.pid;
-  }
-
-  /**
-   * Get replay data from the history buffer
-   */
-  getReplay(): string | null {
-    if (!this.currentEntry) {
-      return null;
-    }
-    return this.currentEntry.historyBuffer.get().join('');
   }
 
   /**

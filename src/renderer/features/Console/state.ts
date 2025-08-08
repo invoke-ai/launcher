@@ -49,15 +49,10 @@ onMount($terminal, () => {
     }
 
     console.debug('Attaching to terminal', id);
-    attachTerminal(id);
+    const terminal = buildTerminalState(id);
+    $terminal.set(terminal);
   });
 });
-
-const attachTerminal = async (id: string) => {
-  const data = await emitter.invoke('terminal:replay', id);
-  const terminal = buildTerminalState(id, data);
-  $terminal.set(terminal);
-};
 
 export const destroyTerminal = async () => {
   const terminal = $terminal.get();
@@ -82,7 +77,7 @@ export const initializeTerminal = async (cwd?: string) => {
   $terminal.set(buildTerminalState(id));
 };
 
-const buildTerminalState = (id: string, data?: string | null): TerminalState => {
+const buildTerminalState = (id: string): TerminalState => {
   const xterm = new Terminal({ ...DEFAULT_XTERM_OPTIONS, cursorBlink: true });
   xterm.onData((data) => {
     emitter.invoke('terminal:write', id, data);
@@ -94,9 +89,6 @@ const buildTerminalState = (id: string, data?: string | null): TerminalState => 
   const fitAddon = new FitAddon();
   xterm.loadAddon(fitAddon);
 
-  if (data) {
-    xterm.write(data);
-  }
   return {
     id,
     isRunning: true,

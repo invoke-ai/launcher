@@ -345,7 +345,6 @@ type UtilIpcEvents = Namespaced<
 type TerminalIpcEvents = Namespaced<
   'terminal',
   {
-    replay: (id: string) => string | null;
     create: (cwd?: string) => string;
     list: () => string[];
     write: (id: string, data: string) => void;

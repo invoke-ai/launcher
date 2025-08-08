@@ -1,7 +1,6 @@
 import * as pty from 'node-pty';
 
 import { AnsiSequenceBuffer } from '@/lib/ansi-sequence-buffer';
-import { SlidingBuffer } from '@/lib/sliding-buffer';
 
 /**
  * Default environment variables for PTY processes
@@ -32,20 +31,12 @@ export interface PtyCallbacks {
 }
 
 /**
- * Buffer configuration for PTY output
- */
-export interface PtyBufferConfig {
-  maxHistorySize?: number;
-}
-
-/**
- * PTY entry containing process and buffers
+ * PTY entry containing process and buffer
  */
 export interface PtyEntry {
   id: string;
   process: pty.IPty;
   ansiSequenceBuffer: AnsiSequenceBuffer;
-  historyBuffer: SlidingBuffer<string>;
 }
 
 /**
@@ -67,37 +58,26 @@ export function createPtyProcess(options: PtyProcessOptions): pty.IPty {
 export function setupPtyCallbacks(
   ptyProcess: pty.IPty,
   callbacks: PtyCallbacks,
-  buffers?: {
-    ansiBuffer: AnsiSequenceBuffer;
-    historyBuffer: SlidingBuffer<string>;
-  }
+  ansiBuffer?: AnsiSequenceBuffer
 ): void {
   ptyProcess.onData((data) => {
-    if (buffers) {
-      const result = buffers.ansiBuffer.append(data);
-      if (!result.hasIncomplete) {
-        buffers.historyBuffer.push(result.complete);
-      }
+    if (ansiBuffer) {
+      ansiBuffer.append(data);
     }
     callbacks.onData(data);
   });
 
   ptyProcess.onExit(({ exitCode, signal }) => {
-    if (buffers) {
-      buffers.ansiBuffer.clear();
-      buffers.historyBuffer.clear();
+    if (ansiBuffer) {
+      ansiBuffer.clear();
     }
     callbacks.onExit(exitCode, signal);
   });
 }
 
 /**
- * Create buffers for PTY output management
+ * Create buffer for PTY output management
  */
-export function createPtyBuffers(config: PtyBufferConfig = {}) {
-  const maxHistorySize = config.maxHistorySize ?? 1000;
-  return {
-    ansiBuffer: new AnsiSequenceBuffer(),
-    historyBuffer: new SlidingBuffer<string>(maxHistorySize),
-  };
+export function createPtyBuffer() {
+  return new AnsiSequenceBuffer();
 }

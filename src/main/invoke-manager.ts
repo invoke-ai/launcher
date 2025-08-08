@@ -56,7 +56,7 @@ export class InvokeManager {
       this.ipcRawOutput(entry.message);
       console[entry.level](entry.message);
     });
-    this.commandRunner = new CommandRunner({ maxHistorySize: 1000 });
+    this.commandRunner = new CommandRunner();
     this.cols = undefined;
     this.rows = undefined;
   }

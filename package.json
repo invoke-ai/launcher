@@ -2,7 +2,7 @@
   "name": "invoke-community-edition",
   "productName": "Invoke Community Edition",
   "homepage": "https://github.com/invoke-ai/launcher",
-  "version": "1.7.0-a2",
+  "version": "1.7.0-a3",
   "description": "Invoke Community Edition",
   "main": "out/main/index.js",
   "engines": {

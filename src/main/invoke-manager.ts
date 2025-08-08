@@ -51,14 +51,14 @@ export class InvokeManager {
     this.sendClearLogs = arg.sendClearLogs;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.lastRunningData = null;
+    this.ipcRawOutput = arg.ipcRawOutput;
     this.log = new SimpleLogger((entry) => {
-      this.ipcLogger(entry);
+      this.ipcRawOutput(entry.message);
       console[entry.level](entry.message);
     });
     this.commandRunner = new CommandRunner({ maxHistorySize: 1000 });
     this.cols = undefined;
     this.rows = undefined;
-    this.ipcRawOutput = arg.ipcRawOutput;
   }
 
   getStatus = (): WithTimestamp<InvokeProcessStatus> => {
@@ -68,39 +68,6 @@ export class InvokeManager {
   updateStatus = (status: InvokeProcessStatus): void => {
     this.status = { ...status, timestamp: Date.now() };
     this.onStatusChange(this.status);
-  };
-
-  /**
-   * Run a command using PTY for proper terminal emulation
-   */
-  private runCommand = async (
-    command: string,
-    args: string[],
-    options?: { cwd?: string; env?: Record<string, string> }
-  ): Promise<'success' | 'canceled'> => {
-    const result = await this.commandRunner.runCommand(
-      command,
-      args,
-      {
-        cwd: options?.cwd,
-        env: options?.env,
-        rows: this.rows,
-        cols: this.cols,
-      },
-      {
-        onData: (data) => {
-          // Send raw PTY output directly for proper progress bar handling
-          this.ipcRawOutput(data);
-          process.stdout.write(data);
-        },
-      }
-    );
-
-    if (result.exitCode === 0) {
-      return 'success';
-    } else {
-      throw new Error(`Process exited with code ${result.exitCode}`);
-    }
   };
 
   /**

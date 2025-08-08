@@ -9,7 +9,7 @@ const config: KnipConfig = {
     // This is included with @electron/forge
     'electron-rebuild',
   ],
-  ignore: ['forge.*.ts'],
+  ignore: ['forge.*.ts', 'src/main/util.ts'],
   paths: {
     'assets/*': ['assets/*'],
   },

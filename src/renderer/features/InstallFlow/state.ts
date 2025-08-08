@@ -109,7 +109,6 @@ export const installFlowApi = {
     });
     $activeStep.set(0);
     $isStarted.set(false);
-    teardownTerminal();
   },
   startInstall: () => {
     const { dirDetails, gpuType, release, repairMode } = $choices.get();
@@ -123,7 +122,6 @@ export const installFlowApi = {
   cancelInstall: async () => {
     await emitter.invoke('install-process:cancel-install');
     $isFinished.set(true);
-    teardownTerminal();
   },
   finalizeInstall: async () => {
     const result = await withResultAsync(async () => {

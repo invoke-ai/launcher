@@ -269,20 +269,6 @@ export type LogEntry = {
 export type WithTimestamp<T> = T & { timestamp: number };
 
 /**
- * Options for creating a new terminal.
- */
-export type PtyOptions = {
-  /**
-   * The initial current working directory for the terminal.
-   */
-  cwd?: string;
-  /**
-   * The initial size of the terminal.
-   */
-  size?: { cols: number; rows: number };
-};
-
-/**
  * Store API. Main process handles these events, renderer process invokes them.
  */
 type StoreIpcEvents = Namespaced<

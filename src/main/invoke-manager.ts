@@ -6,8 +6,8 @@ import fs from 'fs/promises';
 import ip from 'ip';
 import { join } from 'path';
 
-import type { PtyManager } from '@/lib/pty';
-import { DEFAULT_ENV } from '@/lib/pty';
+import { CommandRunner } from '@/lib/command-runner';
+import { DEFAULT_ENV } from '@/lib/pty-utils';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { StringMatcher } from '@/lib/string-matcher';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
@@ -33,8 +33,7 @@ export class InvokeManager {
   private window: BrowserWindow | null;
   private store: Store<StoreData>;
   private lastRunningData: { url: string; loopbackUrl: string; lanUrl?: string } | null;
-  private ptyManager: PtyManager;
-  private currentPtyId: string | null;
+  private commandRunner: CommandRunner;
   private cols: number | undefined;
   private rows: number | undefined;
 
@@ -43,7 +42,6 @@ export class InvokeManager {
     ipcLogger: InvokeManager['ipcLogger'];
     onStatusChange: InvokeManager['onStatusChange'];
     sendClearLogs?: InvokeManager['sendClearLogs'];
-    ptyManager: PtyManager;
     ipcRawOutput: InstallManager['ipcRawOutput'];
   }) {
     this.window = null;
@@ -57,8 +55,7 @@ export class InvokeManager {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
     });
-    this.ptyManager = arg.ptyManager;
-    this.currentPtyId = null;
+    this.commandRunner = new CommandRunner({ maxHistorySize: 1000 });
     this.cols = undefined;
     this.rows = undefined;
     this.ipcRawOutput = arg.ipcRawOutput;
@@ -76,41 +73,34 @@ export class InvokeManager {
   /**
    * Run a command using PTY for proper terminal emulation
    */
-  private runCommand = (
+  private runCommand = async (
     command: string,
     args: string[],
     options?: { cwd?: string; env?: Record<string, string> }
   ): Promise<'success' | 'canceled'> => {
-    return new Promise((resolve, reject) => {
-      // For each command, we'll create a new PTY that runs just that command
-      // This gives us proper exit code handling while still getting terminal emulation
-      const ptyEntry = this.ptyManager.createCommand({
-        command,
-        args,
+    const result = await this.commandRunner.runCommand(
+      command,
+      args,
+      {
         cwd: options?.cwd,
         env: options?.env,
         rows: this.rows,
         cols: this.cols,
-        onData: (_, data) => {
+      },
+      {
+        onData: (data) => {
           // Send raw PTY output directly for proper progress bar handling
           this.ipcRawOutput(data);
           process.stdout.write(data);
         },
-        onExit: (id, exitCode) => {
-          if (id === this.currentPtyId) {
-            this.currentPtyId = null;
-          }
+      }
+    );
 
-          if (exitCode === 0) {
-            resolve('success');
-          } else {
-            reject(new Error(`Process exited with code ${exitCode}`));
-          }
-        },
-      });
-
-      this.currentPtyId = ptyEntry.id;
-    });
+    if (result.exitCode === 0) {
+      return 'success';
+    } else {
+      throw new Error(`Process exited with code ${result.exitCode}`);
+    }
   };
 
   /**
@@ -119,9 +109,7 @@ export class InvokeManager {
   resizePty = (cols: number, rows: number): void => {
     this.cols = cols;
     this.rows = rows;
-    if (this.currentPtyId) {
-      this.ptyManager.resize(this.currentPtyId, cols, rows);
-    }
+    this.commandRunner.resize(cols, rows);
   };
 
   startInvoke = async (location: string) => {
@@ -158,10 +146,9 @@ export class InvokeManager {
       env.PYTORCH_ENABLE_MPS_FALLBACK = '1';
     }
 
-    // Clean up any previous PTY if it exists
-    if (this.currentPtyId) {
-      this.ptyManager.dispose(this.currentPtyId);
-      this.currentPtyId = null;
+    // Clean up any previous command if it exists
+    if (this.commandRunner.isRunning()) {
+      this.commandRunner.kill();
     }
 
     /**
@@ -207,51 +194,58 @@ export class InvokeManager {
       },
     });
 
-    // Create PTY for the invoke process
-    const ptyEntry = this.ptyManager.createCommand({
-      command: dirDetails.invokeExecPath,
-      args: [],
-      cwd: location,
-      env,
-      rows: this.rows,
-      cols: this.cols,
-      onData: (_, data) => {
-        // Send raw PTY output for proper terminal handling
-        this.ipcRawOutput(data);
-        process.stdout.write(data);
+    // Start the invoke process - we don't await this since it's a long-running process
+    this.commandRunner
+      .runCommand(
+        dirDetails.invokeExecPath,
+        [],
+        {
+          cwd: location,
+          env,
+          rows: this.rows,
+          cols: this.cols,
+        },
+        {
+          onData: (data) => {
+            // Send raw PTY output for proper terminal handling
+            this.ipcRawOutput(data);
+            process.stdout.write(data);
 
-        // Also check for URL in the output
-        urlWatcher.checkForMatch(data);
-      },
-      onExit: (id, exitCode, signal) => {
-        if (id === this.currentPtyId) {
-          this.currentPtyId = null;
+            // Also check for URL in the output
+            urlWatcher.checkForMatch(data);
+          },
+          onExit: (exitCode, signal) => {
+            if (exitCode === 0) {
+              // Process exited on its own with no error
+              this.updateStatus({ type: 'exited' });
+              this.log.info(c.green.bold('Invoke process exited normally\r\n'));
+            } else if (signal !== undefined && signal !== null) {
+              // Process was killed via signal
+              this.updateStatus({ type: 'exited' });
+              this.log.info(c.yellow(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
+            } else if (exitCode !== null) {
+              // Process exited on its own, with a non-zero code, indicating an error
+              this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
+              this.log.info(c.red(`Invoke process exited with code ${exitCode}\r\n`));
+            } else {
+              // Process was killed without a specific exit code or signal - think this is impossible?
+              this.updateStatus({ type: 'error', error: { message: 'Process was killed unexpectedly' } });
+              this.log.info(c.red('Invoke process was killed unexpectedly\r\n'));
+            }
+
+            this.closeWindow();
+          },
         }
+      )
+      .catch((error) => {
+        this.updateStatus({ type: 'error', error: { message: error.message } });
+        this.log.error(c.red(`Failed to start Invoke process: ${error.message}\r\n`));
+      });
 
-        if (exitCode === 0) {
-          // Process exited on its own with no error
-          this.updateStatus({ type: 'exited' });
-          this.log.info(c.green.bold('Invoke process exited normally\r\n'));
-        } else if (signal !== undefined && signal !== null) {
-          // Process was killed via signal
-          this.updateStatus({ type: 'exited' });
-          this.log.info(c.yellow(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
-        } else if (exitCode !== null) {
-          // Process exited on its own, with a non-zero code, indicating an error
-          this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
-          this.log.info(c.red(`Invoke process exited with code ${exitCode}\r\n`));
-        } else {
-          // Process was killed without a specific exit code or signal - think this is impossible?
-          this.updateStatus({ type: 'error', error: { message: 'Process was killed unexpectedly' } });
-          this.log.info(c.red('Invoke process was killed unexpectedly\r\n'));
-        }
-
-        this.closeWindow();
-      },
-    });
-
-    this.currentPtyId = ptyEntry.id;
-    this.log.info(c.cyan(`Started Invoke process with PID ${ptyEntry.process.pid}\r\n`));
+    const pid = this.commandRunner.getPid();
+    if (pid) {
+      this.log.info(c.cyan(`Started Invoke process with PID ${pid}\r\n`));
+    }
   };
 
   createWindow = (url: string): void => {
@@ -307,7 +301,7 @@ export class InvokeManager {
       this.log.error(c.red(`UI Window unexpectedly exited with exit code ${details.exitCode}: ${reasonMessage}\r\n`));
 
       // Update status to window-crashed if we still have the running data
-      if (this.lastRunningData && this.currentPtyId) {
+      if (this.lastRunningData && this.commandRunner.isRunning()) {
         this.updateStatus({
           type: 'window-crashed',
           data: {
@@ -375,7 +369,7 @@ export class InvokeManager {
       return;
     }
 
-    if (!this.currentPtyId) {
+    if (!this.commandRunner.isRunning()) {
       this.log.error(c.red('Cannot reopen window - process is not running\r\n'));
       return;
     }
@@ -405,11 +399,10 @@ export class InvokeManager {
   };
 
   killProcess = (): void => {
-    if (!this.currentPtyId) {
+    if (!this.commandRunner.isRunning()) {
       return;
     }
-    this.ptyManager.kill(this.currentPtyId);
-    this.currentPtyId = null;
+    this.commandRunner.kill();
   };
 }
 
@@ -421,9 +414,8 @@ export const createInvokeManager = (arg: {
   store: Store<StoreData>;
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
-  ptyManager: PtyManager;
 }) => {
-  const { store, ipc, sendToWindow, ptyManager } = arg;
+  const { store, ipc, sendToWindow } = arg;
   const invokeManager = new InvokeManager({
     store,
     ipcLogger: (entry) => {
@@ -438,7 +430,6 @@ export const createInvokeManager = (arg: {
     ipcRawOutput: (data) => {
       sendToWindow('invoke-process:raw-output', data);
     },
-    ptyManager,
   });
 
   ipc.handle('invoke-process:start-invoke', (_, installLocation) => {

@@ -33,6 +33,7 @@ export class InstallManager {
   private currentPtyId: string | null;
   private cols: number | undefined;
   private rows: number | undefined;
+  private isCancellationRequested: boolean;
 
   constructor(arg: {
     ipcLogger: InstallManager['ipcLogger'];
@@ -50,6 +51,7 @@ export class InstallManager {
       console[entry.level](entry.message);
     });
     this.currentPtyId = null;
+    this.isCancellationRequested = false;
   }
 
   logRepairModeMessages = (): void => {
@@ -66,6 +68,12 @@ export class InstallManager {
     options?: { cwd?: string; env?: Record<string, string> }
   ): Promise<'success' | 'canceled'> => {
     return new Promise((resolve, reject) => {
+      // Check if cancellation was already requested
+      if (this.isCancellationRequested) {
+        resolve('canceled');
+        return;
+      }
+
       // For each command, we'll create a new PTY that runs just that command
       // This gives us proper exit code handling while still getting terminal emulation
       const ptyEntry = this.ptyManager.createCommand({
@@ -85,7 +93,10 @@ export class InstallManager {
             this.currentPtyId = null;
           }
 
-          if (exitCode === 0) {
+          // Check if this was a cancellation (typically SIGTERM results in exit code 143)
+          if (this.isCancellationRequested) {
+            resolve('canceled');
+          } else if (exitCode === 0) {
             resolve('success');
           } else {
             reject(new Error(`Process exited with code ${exitCode}`));
@@ -128,6 +139,8 @@ export class InstallManager {
      * - Delete any existing virtual environment.
      */
 
+    // Reset cancellation flag at the start of a new installation
+    this.isCancellationRequested = false;
     this.updateStatus({ type: 'starting' });
     // Do some initial checks and setup
 
@@ -286,6 +299,13 @@ export class InstallManager {
       }
     }
 
+    // Check for cancellation before proceeding to venv creation
+    if (this.isCancellationRequested) {
+      this.log.warn(c.yellow('Installation canceled\r\n'));
+      this.updateStatus({ type: 'canceled' });
+      return;
+    }
+
     // Create the virtual environment
     const venvPath = path.resolve(path.join(location, '.venv'));
     let hasVenv = await isDirectory(venvPath);
@@ -357,6 +377,13 @@ export class InstallManager {
       this.log.info(c.cyan('Using existing virtual environment...\r\n'));
     }
 
+    // Check for cancellation before proceeding to package installation
+    if (this.isCancellationRequested) {
+      this.log.warn(c.yellow('Installation canceled\r\n'));
+      this.updateStatus({ type: 'canceled' });
+      return;
+    }
+
     // Install the invokeai package
     const installInvokeArgs = [
       // Use `uv`s pip interface to install the invokeai package
@@ -424,15 +451,25 @@ export class InstallManager {
   };
 
   cancelInstall = (): void => {
-    if (!this.currentPtyId) {
+    // Check if an installation is actually in progress
+    const installInProgress = this.status.type === 'installing' || this.status.type === 'starting';
+
+    if (!installInProgress) {
       this.log.warn(c.yellow('No installation to cancel\r\n'));
       return;
     }
 
+    // Set the cancellation flag
+    this.isCancellationRequested = true;
+
     this.log.warn(c.yellow('Canceling installation...\r\n'));
     this.updateStatus({ type: 'canceling' });
-    this.ptyManager.kill(this.currentPtyId);
-    this.currentPtyId = null;
+
+    // If there's a current PTY process running, kill it
+    if (this.currentPtyId) {
+      this.ptyManager.kill(this.currentPtyId);
+      this.currentPtyId = null;
+    }
   };
 }
 

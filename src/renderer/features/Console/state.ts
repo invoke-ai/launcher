@@ -3,14 +3,16 @@ import type { ITerminalInitOnlyOptions, ITerminalOptions } from '@xterm/xterm';
 import { Terminal } from '@xterm/xterm';
 import { atom, computed, onMount, task } from 'nanostores';
 
+import { TERMINAL_FONT, TERMINAL_FONT_SIZE } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 
 const DEFAULT_XTERM_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions = {
   cursorBlink: true,
-  fontSize: 12,
-  fontFamily: 'JetBrainsMonoNerdFont, monospace',
-  scrollback: 2_000,
+  fontSize: TERMINAL_FONT_SIZE,
+  fontFamily: TERMINAL_FONT,
+  scrollback: 5_000,
   allowTransparency: true,
+  convertEol: true, // Convert \n to \r\n
 };
 
 type BaseXtermState = {

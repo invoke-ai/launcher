@@ -11,18 +11,18 @@ import type { PropsWithChildren } from 'react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { PiCaretDownBold } from 'react-icons/pi';
 
+import { TERMINAL_FONT, TERMINAL_FONT_SIZE } from '@/renderer/constants';
 import { useXTermTheme } from '@/renderer/features/Console/use-xterm-theme';
 
 const DEFAULT_XTERM_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions = {
   cursorBlink: false,
   cursorStyle: 'block',
-  fontSize: 12,
-  fontFamily: 'JetBrainsMonoNerdFont, monospace',
-  scrollback: 5000,
+  fontSize: TERMINAL_FONT_SIZE,
+  fontFamily: TERMINAL_FONT,
+  scrollback: 5_000,
   allowTransparency: true,
   disableStdin: true, // Read-only terminal
   convertEol: true, // Convert \n to \r\n
-  allowProposedApi: true, // Enable proposed APIs for better ANSI support
 };
 
 interface XtermLogViewerProps {

@@ -12,8 +12,11 @@ import { Console } from '@/renderer/features/Console/Console';
 import { ConsoleOpenButton } from '@/renderer/features/Console/ConsoleOpenButton';
 import { SettingsModal } from '@/renderer/features/SettingsModal/SettingsModal';
 
+import { usePreloadTerminalFont } from './use-preload-terminal-font';
+
 export const App = () => {
   useGlobalModifiersInit();
+  usePreloadTerminalFont();
 
   return (
     <ThemeProvider>

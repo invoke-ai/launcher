@@ -45,14 +45,6 @@ const initializeTerminal = (): Terminal => {
   xterm = new Terminal({ ...DEFAULT_XTERM_OPTIONS, disableStdin: true });
 
   terminalSubscriptions.add(
-    ipc.on('invoke-process:log', (_, data) => {
-      // Only handle structured logs that aren't from PTY
-      // PTY output comes through the raw-output channel
-      xterm.write(data.message);
-    })
-  );
-
-  terminalSubscriptions.add(
     ipc.on('invoke-process:raw-output', (_, data) => {
       // Write raw PTY output directly to xterm terminal
       xterm.write(data);

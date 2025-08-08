@@ -45,7 +45,7 @@ export class InstallManager {
     this.commandRunner = new CommandRunner({ maxHistorySize: 1000 });
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.log = new SimpleLogger((entry) => {
-      this.ipcLogger(entry);
+      this.ipcRawOutput(entry.message);
       console[entry.level](entry.message);
     });
     this.isCancellationRequested = false;
@@ -81,8 +81,9 @@ export class InstallManager {
         },
         {
           onData: (data) => {
-            // Send raw PTY output directly for proper progress bar handling
+            // Write command output to XTerm
             this.ipcRawOutput(data);
+            // Write command output to NodeJS console
             process.stdout.write(data);
           },
         }

@@ -46,10 +46,10 @@ export const ConsoleXterm = memo(({ terminal }: { terminal: TerminalState }) => 
     debouncedFitIfOpen();
 
     return () => {
+      // Disposal of the terminal is handled in the close/reset buttons - only need to unsub listeners here
       for (const unsubscribe of subscriptions) {
         unsubscribe();
       }
-      terminal.xterm.dispose();
     };
   }, [terminal.fitAddon, terminal.id, terminal.xterm, theme]);
 

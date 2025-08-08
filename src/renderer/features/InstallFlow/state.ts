@@ -227,11 +227,13 @@ const teardownTerminal = () => {
   for (const unsubscribe of terminalSubscriptions) {
     unsubscribe();
   }
+  terminalSubscriptions.clear();
   const xterm = $installProcessXTerm.get();
   if (!xterm) {
     return;
   }
   xterm.dispose();
+  $installProcessXTerm.set(null);
 };
 
 export const getIsActiveInstallProcessStatus = (status: InstallProcessStatus) => {

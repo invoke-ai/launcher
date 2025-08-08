@@ -1,12 +1,11 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
-import { type ChildProcess, exec, execFile } from 'child_process';
+import { exec } from 'child_process';
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import type Store from 'electron-store';
 import fs from 'fs/promises';
 import ip from 'ip';
 import os from 'os';
 import { join } from 'path';
-import { assert } from 'tsafe';
 import { promisify } from 'util';
 
 import type { PtyManager } from '@/lib/pty';
@@ -14,7 +13,7 @@ import { DEFAULT_ENV } from '@/lib/pty';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { StringMatcher } from '@/lib/string-matcher';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
-import { getInstallationDetails, killProcess, manageWindowSize, pathExists } from '@/main/util';
+import { getInstallationDetails, manageWindowSize, pathExists } from '@/main/util';
 import type {
   InvokeProcessStatus,
   IpcEvents,
@@ -27,7 +26,6 @@ import type {
 import type { InstallManager } from './install-manager';
 
 export class InvokeManager {
-  private process: ChildProcess | null;
   private status: WithTimestamp<InvokeProcessStatus>;
   private ipcLogger: (entry: WithTimestamp<LogEntry>) => void;
   private ipcRawOutput: (data: string) => void;
@@ -60,7 +58,6 @@ export class InvokeManager {
     this.onStatusChange = arg.onStatusChange;
     this.onMetricsUpdate = arg.onMetricsUpdate;
     this.sendClearLogs = arg.sendClearLogs;
-    this.process = null;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.metricsInterval = null;
     this.lastMetrics = null;
@@ -129,6 +126,8 @@ export class InvokeManager {
    * Resize the current PTY if one is active
    */
   resizePty = (cols: number, rows: number): void => {
+    this.cols = cols;
+    this.rows = rows;
     if (this.currentPtyId) {
       this.ptyManager.resize(this.currentPtyId, cols, rows);
     }
@@ -231,7 +230,7 @@ export class InvokeManager {
       this.log.info('Preparing first run of this install - may take a minute or two...\r\n');
     }
 
-    const env: NodeJS.ProcessEnv = { ...process.env, INVOKEAI_ROOT: location, ...DEFAULT_ENV };
+    const env: Record<string, string> = { ...process.env, INVOKEAI_ROOT: location, ...DEFAULT_ENV };
 
     // If server mode is enabled, set the host to 0.0.0.0 to enable LAN access
     if (this.store.get('serverMode')) {
@@ -244,55 +243,11 @@ export class InvokeManager {
       env.PYTORCH_ENABLE_MPS_FALLBACK = '1';
     }
 
-    const invokeProcess = execFile(dirDetails.invokeExecPath, [], { env });
-    this.process = invokeProcess;
-
-    invokeProcess.on('spawn', () => {
-      this.log.info(`Started Invoke process with PID: ${invokeProcess.pid}\r\n`);
-    });
-
-    invokeProcess.on('error', (error) => {
-      if (invokeProcess.pid !== undefined) {
-        // The process started but errored - handle this in the exit event
-        return;
-      }
-      // Failed to start the process
-      const { message } = error;
-      this.updateStatus({ type: 'error', error: { message } });
-      // Shouldn't be open but just in case
-      this.closeWindow();
-      this.log.error(`Process error: ${message}\r\n`);
-    });
-
-    assert(invokeProcess.stdout);
-    invokeProcess.stdout.on('data', (data) => {
-      this.log.info(data.toString());
-    });
-
-    assert(invokeProcess.stderr);
-    invokeProcess.stderr.on('data', (data) => {
-      this.log.info(data.toString());
-    });
-
-    invokeProcess.on('close', (code, signal) => {
-      if (code === 0) {
-        // Process exited on its own with no error
-        this.updateStatus({ type: 'exited' });
-        this.log.info('Process exited normally\r\n');
-      } else if (code !== null) {
-        // Process exited on its own, with a non-zero code, indicating an error
-        this.updateStatus({ type: 'error', error: { message: `Process exited with code ${code}` } });
-        this.log.info(`Process exited with code ${code}\r\n`);
-      } else if (signal !== null) {
-        // Process exited due to a signal (e.g. user pressed clicked Shutdown)
-        this.updateStatus({ type: 'exited' });
-        this.log.info(`Process exited with signal ${signal}\r\n`);
-      }
-
-      this.closeWindow();
-
-      this.process = null;
-    });
+    // Clean up any previous PTY if it exists
+    if (this.currentPtyId) {
+      this.ptyManager.dispose(this.currentPtyId);
+      this.currentPtyId = null;
+    }
 
     /**
      * Watch the process output for the indication that the server is running, then:
@@ -306,9 +261,7 @@ export class InvokeManager {
       // We only care about messages that indicate the server is running
       filter: (data) => data.includes('Uvicorn running') || data.includes('Invoke running'),
       onMatch: (url) => {
-        // Stop watching the process output
-        invokeProcess.stderr?.off('data', urlWatcher.checkForMatch);
-        invokeProcess.stdout?.off('data', urlWatcher.checkForMatch);
+        // URL watcher is called directly from onData callback, no need to unsubscribe
 
         const data: Extract<InvokeProcessStatus, { type: 'running' }>['data'] = {
           url,
@@ -339,9 +292,51 @@ export class InvokeManager {
       },
     });
 
-    // Start watching the process output
-    invokeProcess.stdout.on('data', urlWatcher.checkForMatch);
-    invokeProcess.stderr.on('data', urlWatcher.checkForMatch);
+    // Create PTY for the invoke process
+    const ptyEntry = this.ptyManager.createCommand({
+      command: dirDetails.invokeExecPath,
+      args: [],
+      cwd: location,
+      env,
+      rows: this.rows,
+      cols: this.cols,
+      onData: (_, data) => {
+        // Send raw PTY output for proper terminal handling
+        this.ipcRawOutput(data);
+        process.stdout.write(data);
+
+        // Also check for URL in the output
+        urlWatcher.checkForMatch(data);
+      },
+      onExit: (id, exitCode, signal) => {
+        if (id === this.currentPtyId) {
+          this.currentPtyId = null;
+        }
+
+        if (exitCode === 0) {
+          // Process exited on its own with no error
+          this.updateStatus({ type: 'exited' });
+          this.log.info('Invoke process exited normally\r\n');
+        } else if (signal !== undefined && signal !== null) {
+          // Process was killed via signal
+          this.updateStatus({ type: 'exited' });
+          this.log.info(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`);
+        } else if (exitCode !== null) {
+          // Process exited on its own, with a non-zero code, indicating an error
+          this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
+          this.log.info(`Invoke process exited with code ${exitCode}\r\n`);
+        } else {
+          // Process was killed without a specific exit code or signal - think this is impossible?
+          this.updateStatus({ type: 'error', error: { message: 'Process was killed unexpectedly' } });
+          this.log.info('Invoke process was killed unexpectedly\r\n');
+        }
+
+        this.closeWindow();
+      },
+    });
+
+    this.currentPtyId = ptyEntry.id;
+    this.log.info(`Started Invoke process with PID ${ptyEntry.process.pid}\r\n`);
   };
 
   createWindow = (url: string): void => {
@@ -412,7 +407,7 @@ export class InvokeManager {
       }
 
       // Update status to window-crashed if we still have the running data
-      if (this.lastRunningData && this.process) {
+      if (this.lastRunningData && this.currentPtyId) {
         this.updateStatus({
           type: 'window-crashed',
           data: {
@@ -481,7 +476,7 @@ export class InvokeManager {
       return;
     }
 
-    if (!this.process) {
+    if (!this.currentPtyId) {
       this.log.error('Cannot reopen window - process is not running\r\n');
       return;
     }
@@ -493,11 +488,11 @@ export class InvokeManager {
     this.updateStatus({ type: 'running', data: this.lastRunningData });
   };
 
-  exitInvoke = async () => {
+  exitInvoke = () => {
     this.log.info('Shutting down...\r\n');
     this.updateStatus({ type: 'exiting' });
     this.closeWindow();
-    await this.killProcess();
+    this.killProcess();
   };
 
   closeWindow = (): void => {
@@ -511,11 +506,12 @@ export class InvokeManager {
     this.window = null;
   };
 
-  killProcess = async (): Promise<void> => {
-    if (!this.process) {
+  killProcess = (): void => {
+    if (!this.currentPtyId) {
       return;
     }
-    await killProcess(this.process);
+    this.ptyManager.kill(this.currentPtyId);
+    this.currentPtyId = null;
   };
 }
 
@@ -563,10 +559,10 @@ export const createInvokeManager = (arg: {
     invokeManager.resizePty(cols, rows);
   });
 
-  const cleanupInvokeManager = async () => {
+  const cleanupInvokeManager = () => {
     const status = invokeManager.getStatus();
     if (status.type === 'running' || status.type === 'starting') {
-      await invokeManager.exitInvoke();
+      invokeManager.exitInvoke();
     }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');

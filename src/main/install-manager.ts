@@ -100,6 +100,8 @@ export class InstallManager {
    * Resize the current PTY if one is active
    */
   resizePty = (cols: number, rows: number): void => {
+    this.cols = cols;
+    this.rows = rows;
     if (this.currentPtyId) {
       this.ptyManager.resize(this.currentPtyId, cols, rows);
     }

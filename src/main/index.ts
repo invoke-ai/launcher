@@ -48,6 +48,7 @@ const [invoke, cleanupInvoke] = createInvokeManager({
   store,
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
+  ptyManager,
 });
 
 main.ipc.handle('main-process:get-status', () => main.getStatus());

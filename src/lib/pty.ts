@@ -26,6 +26,29 @@ type PtyEntry = {
   historyBuffer: SlidingBuffer<string>;
 };
 
+type CreateShellArgs = {
+  id?: string;
+  cwd?: string;
+  env?: Record<string, string>;
+  cols?: number;
+  rows?: number;
+  onData: (id: string, data: string) => void;
+  onExit: (id: string, exitCode: number) => void;
+};
+
+type CreateCommandArgs = {
+  id?: string;
+  command: string;
+  args: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  cols?: number;
+  rows?: number;
+  onData: (id: string, data: string) => void;
+  onExit: (id: string, exitCode: number) => void;
+};
+
+// Legacy type for backward compatibility
 type CreatePtyArgs = {
   onData: (id: string, data: string) => void;
   onExit: (id: string, exitCode: number) => void;
@@ -43,16 +66,61 @@ export class PtyManager {
     this.options = { ...DEFAULT_PTY_MANAGER_OPTIONS, ...options };
   }
 
-  create = ({ onData, onExit, options }: CreatePtyArgs): PtyEntry => {
-    const id = nanoid();
+  /**
+   * Create an interactive shell PTY (for Console)
+   */
+  createShell = ({ id, cwd, env, cols, rows, onData, onExit }: CreateShellArgs): PtyEntry => {
+    const ptyId = id ?? nanoid();
     const shell = getShell();
 
     const ptyProcess = pty.spawn(shell, [], {
       name: process.env['TERM'] ?? 'xterm-color',
-      cwd: options?.cwd ?? process.env.HOME,
-      env: { ...process.env, ...DEFAULT_ENV },
+      cwd: cwd ?? process.env.HOME,
+      env: { ...process.env, ...DEFAULT_ENV, ...env },
+      cols,
+      rows,
     });
 
+    return this.setupPtyEntry(ptyId, ptyProcess, onData, onExit);
+  };
+
+  /**
+   * Create a command execution PTY (for Install/Invoke managers)
+   */
+  createCommand = ({ id, command, args, cwd, env, cols, rows, onData, onExit }: CreateCommandArgs): PtyEntry => {
+    const ptyId = id ?? nanoid();
+
+    const ptyProcess = pty.spawn(command, args, {
+      name: process.env['TERM'] ?? 'xterm-color',
+      cwd: cwd ?? process.cwd(),
+      env: { ...process.env, ...DEFAULT_ENV, ...env },
+      cols,
+      rows,
+    });
+
+    return this.setupPtyEntry(ptyId, ptyProcess, onData, onExit);
+  };
+
+  /**
+   * Legacy create method for backward compatibility
+   */
+  create = ({ onData, onExit, options }: CreatePtyArgs): PtyEntry => {
+    return this.createShell({
+      cwd: options?.cwd,
+      onData,
+      onExit,
+    });
+  };
+
+  /**
+   * Common setup for PTY entries
+   */
+  private setupPtyEntry = (
+    id: string,
+    ptyProcess: pty.IPty,
+    onData: (id: string, data: string) => void,
+    onExit: (id: string, exitCode: number) => void
+  ): PtyEntry => {
     const ansiSequenceBuffer = new AnsiSequenceBuffer();
     const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
 
@@ -73,7 +141,6 @@ export class PtyManager {
     });
 
     const entry = { id, process: ptyProcess, ansiSequenceBuffer, historyBuffer };
-
     this.ptys.set(id, entry);
 
     return entry;
@@ -97,6 +164,15 @@ export class PtyManager {
       return null;
     }
     return entry.historyBuffer.get().join('');
+  };
+
+  /**
+   * Kill a PTY process with an optional signal
+   */
+  kill = (id: string, signal?: string): void => {
+    this.do(id, (entry) => {
+      entry.process.kill(signal);
+    });
   };
 
   dispose = (id: string): void => {

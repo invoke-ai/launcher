@@ -317,6 +317,7 @@ type InstallProcessIpcEvents = Namespaced<
     'get-status': () => WithTimestamp<InstallProcessStatus>;
     'start-install': (location: string, gpuType: GpuType, version: string, repair?: boolean) => void;
     'cancel-install': () => void;
+    resize: (cols: number, rows: number) => void;
   }
 >;
 
@@ -330,6 +331,7 @@ type InvokeProcessIpcEvents = Namespaced<
     'start-invoke': (location: string) => void;
     'exit-invoke': () => void;
     'reopen-window': () => void;
+    resize: (cols: number, rows: number) => void;
   }
 >;
 
@@ -416,6 +418,7 @@ type InstallProcessIpcRendererEvents = Namespaced<
   {
     status: [WithTimestamp<InstallProcessStatus>];
     log: [WithTimestamp<LogEntry>];
+    'raw-output': [string];
   }
 >;
 
@@ -429,6 +432,7 @@ type InvokeProcessIpcRendererEvents = Namespaced<
     log: [WithTimestamp<LogEntry>];
     metrics: [{ memoryBytes: number; cpuPercent: number }];
     'clear-logs': [];
+    'raw-output': [string];
   }
 >;
 

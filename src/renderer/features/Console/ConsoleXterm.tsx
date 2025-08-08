@@ -19,6 +19,9 @@ export const ConsoleXterm = memo(({ terminal }: { terminal: TerminalState }) => 
     assert(parent);
 
     terminal.xterm.options.theme = theme;
+    terminal.xterm.onResize(({ rows, cols }) => {
+      emitter.invoke('terminal:resize', terminal.id, cols, rows);
+    });
 
     const fitIfOpen = () => {
       if (!$isConsoleOpen.get()) {
@@ -42,7 +45,6 @@ export const ConsoleXterm = memo(({ terminal }: { terminal: TerminalState }) => 
     terminal.xterm.focus();
 
     // Ensure we start with the correct size
-    emitter.invoke('terminal:resize', terminal.id, terminal.xterm.cols, terminal.xterm.rows);
     debouncedFitIfOpen();
 
     return () => {

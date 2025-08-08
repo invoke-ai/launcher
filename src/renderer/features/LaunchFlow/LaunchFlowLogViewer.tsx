@@ -4,11 +4,11 @@ import { memo } from 'react';
 
 import {
   $invokeProcessStatus,
-  $invokeProcessTerminal,
+  $invokeProcessXTerm,
   getIsInvokeProcessActive,
 } from '@/renderer/features/LaunchFlow/state';
 import { UIMemoryMonitor } from '@/renderer/features/LaunchFlow/UIMemoryMonitor';
-import { XtermLogViewer } from '@/renderer/features/XTermLogViewer/XtermLogViewer';
+import { XTermLogViewer } from '@/renderer/features/XTermLogViewer/XTermLogViewer';
 import { XTermLogViewerStatusIndicator } from '@/renderer/features/XTermLogViewer/XTermLogViewerStatusIndicator';
 import type { InvokeProcessStatus } from '@/shared/types';
 
@@ -23,7 +23,7 @@ export const LaunchFlowLogViewer = memo(() => {
   const invokeProcessStatus = useStore($invokeProcessStatus);
 
   return (
-    <XtermLogViewer $terminal={$invokeProcessTerminal}>
+    <XTermLogViewer $terminal={$invokeProcessXTerm}>
       <UIMemoryMonitor position="absolute" top={2} left={2} />
       <XTermLogViewerStatusIndicator
         isLoading={getIsInvokeProcessActive(invokeProcessStatus)}
@@ -33,7 +33,7 @@ export const LaunchFlowLogViewer = memo(() => {
       >
         {getMessage(invokeProcessStatus)}
       </XTermLogViewerStatusIndicator>
-    </XtermLogViewer>
+    </XTermLogViewer>
   );
 });
 LaunchFlowLogViewer.displayName = 'LaunchFlowLogViewer';

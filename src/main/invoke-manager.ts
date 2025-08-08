@@ -1,12 +1,10 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
-import { exec } from 'child_process';
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import c from 'ansi-colors';
+import { BrowserWindow, ipcMain, shell } from 'electron';
 import type Store from 'electron-store';
 import fs from 'fs/promises';
 import ip from 'ip';
-import os from 'os';
 import { join } from 'path';
-import { promisify } from 'util';
 
 import type { PtyManager } from '@/lib/pty';
 import { DEFAULT_ENV } from '@/lib/pty';
@@ -30,13 +28,10 @@ export class InvokeManager {
   private ipcLogger: (entry: WithTimestamp<LogEntry>) => void;
   private ipcRawOutput: (data: string) => void;
   private onStatusChange: (status: WithTimestamp<InvokeProcessStatus>) => void;
-  private onMetricsUpdate: (metrics: { memoryBytes: number; cpuPercent: number }) => void;
   private sendClearLogs?: () => void;
   private log: SimpleLogger;
   private window: BrowserWindow | null;
   private store: Store<StoreData>;
-  private metricsInterval: NodeJS.Timeout | null;
-  private lastMetrics: { memoryBytes: number; cpuPercent: number } | null;
   private lastRunningData: { url: string; loopbackUrl: string; lanUrl?: string } | null;
   private ptyManager: PtyManager;
   private currentPtyId: string | null;
@@ -47,7 +42,6 @@ export class InvokeManager {
     store: Store<StoreData>;
     ipcLogger: InvokeManager['ipcLogger'];
     onStatusChange: InvokeManager['onStatusChange'];
-    onMetricsUpdate: InvokeManager['onMetricsUpdate'];
     sendClearLogs?: InvokeManager['sendClearLogs'];
     ptyManager: PtyManager;
     ipcRawOutput: InstallManager['ipcRawOutput'];
@@ -56,11 +50,8 @@ export class InvokeManager {
     this.store = arg.store;
     this.ipcLogger = arg.ipcLogger;
     this.onStatusChange = arg.onStatusChange;
-    this.onMetricsUpdate = arg.onMetricsUpdate;
     this.sendClearLogs = arg.sendClearLogs;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
-    this.metricsInterval = null;
-    this.lastMetrics = null;
     this.lastRunningData = null;
     this.log = new SimpleLogger((entry) => {
       this.ipcLogger(entry);
@@ -133,80 +124,6 @@ export class InvokeManager {
     }
   };
 
-  startMetricsMonitoring = (): void => {
-    if (this.metricsInterval) {
-      return;
-    }
-
-    const execAsync = promisify(exec);
-    const platform = os.platform();
-
-    const getProcessMemory = async (pid: number): Promise<number> => {
-      try {
-        if (platform === 'darwin') {
-          // macOS: Use ps to get RSS (resident set size) in KB
-          const { stdout } = await execAsync(`ps -o rss= -p ${pid}`);
-          const kb = parseInt(stdout.trim(), 10);
-          return kb * 1024; // Convert KB to bytes
-        } else if (platform === 'linux') {
-          // Linux: Read from /proc/[pid]/status
-          const status = await fs.readFile(`/proc/${pid}/status`, 'utf-8');
-          const match = status.match(/VmRSS:\s+(\d+)\s+kB/);
-          if (match) {
-            return parseInt(match[1]!, 10) * 1024; // Convert KB to bytes
-          }
-        } else if (platform === 'win32') {
-          // Windows: Use wmic to get WorkingSetSize in bytes
-          const { stdout } = await execAsync(`wmic process where ProcessId=${pid} get WorkingSetSize /format:value`);
-          const match = stdout.match(/WorkingSetSize=(\d+)/);
-          if (match) {
-            return parseInt(match[1]!, 10); // Already in bytes
-          }
-        }
-      } catch {
-        // Silently fall back to 0 if we can't get memory
-      }
-      return 0;
-    };
-
-    const sampleMetrics = async () => {
-      try {
-        if (!this.window || this.window.isDestroyed()) {
-          return;
-        }
-
-        // Get the renderer process PID
-        const rendererPid = this.window.webContents.getOSProcessId();
-
-        // Get native memory usage from OS in bytes
-        const memoryBytes = await getProcessMemory(rendererPid);
-
-        // Get CPU from Electron metrics
-        const metrics = app.getAppMetrics();
-        const rendererMetric = metrics.find((m) => m.pid === rendererPid);
-        const cpuPercent = rendererMetric ? Math.round(rendererMetric.cpu.percentCPUUsage) : 0;
-
-        this.lastMetrics = { memoryBytes, cpuPercent };
-        this.onMetricsUpdate(this.lastMetrics);
-      } catch (error) {
-        console.error('Error sampling metrics:', error);
-      }
-    };
-
-    // Initial sample
-    sampleMetrics();
-
-    // Set up 1-second interval
-    this.metricsInterval = setInterval(sampleMetrics, 1000);
-  };
-
-  stopMetricsMonitoring = (): void => {
-    if (this.metricsInterval) {
-      clearInterval(this.metricsInterval);
-      this.metricsInterval = null;
-    }
-  };
-
   startInvoke = async (location: string) => {
     this.updateStatus({ type: 'starting' });
 
@@ -219,13 +136,13 @@ export class InvokeManager {
 
     if (!dirDetails.isInstalled) {
       this.updateStatus({ type: 'error', error: { message: 'Invalid installation!' } });
-      this.log.error('Invalid installation!\r\n');
+      this.log.error(c.red('Invalid installation!\r\n'));
       return;
     }
 
     if (isFirstRun) {
       // We'll remove the first run marker after the process has started
-      this.log.info('Preparing first run of this install - may take a minute or two...\r\n');
+      this.log.info(c.magenta.bold('Preparing first run of this install - may take a minute or two...\r\n'));
     }
 
     const env: Record<string, string> = { ...process.env, INVOKEAI_ROOT: location, ...DEFAULT_ENV };
@@ -284,7 +201,7 @@ export class InvokeManager {
         if (isFirstRun) {
           // This is the first run after an install or update - remove the first run marker
           fs.rm(firstRunMarkerPath).catch((error) => {
-            this.log.error(`Error removing first run marker: ${error.message}\r\n`);
+            this.log.error(c.red(`Error removing first run marker: ${error.message}\r\n`));
           });
         }
       },
@@ -314,19 +231,19 @@ export class InvokeManager {
         if (exitCode === 0) {
           // Process exited on its own with no error
           this.updateStatus({ type: 'exited' });
-          this.log.info('Invoke process exited normally\r\n');
+          this.log.info(c.green.bold('Invoke process exited normally\r\n'));
         } else if (signal !== undefined && signal !== null) {
           // Process was killed via signal
           this.updateStatus({ type: 'exited' });
-          this.log.info(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`);
+          this.log.info(c.yellow(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
         } else if (exitCode !== null) {
           // Process exited on its own, with a non-zero code, indicating an error
           this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
-          this.log.info(`Invoke process exited with code ${exitCode}\r\n`);
+          this.log.info(c.red(`Invoke process exited with code ${exitCode}\r\n`));
         } else {
           // Process was killed without a specific exit code or signal - think this is impossible?
           this.updateStatus({ type: 'error', error: { message: 'Process was killed unexpectedly' } });
-          this.log.info('Invoke process was killed unexpectedly\r\n');
+          this.log.info(c.red('Invoke process was killed unexpectedly\r\n'));
         }
 
         this.closeWindow();
@@ -334,7 +251,7 @@ export class InvokeManager {
     });
 
     this.currentPtyId = ptyEntry.id;
-    this.log.info(`Started Invoke process with PID ${ptyEntry.process.pid}\r\n`);
+    this.log.info(c.cyan(`Started Invoke process with PID ${ptyEntry.process.pid}\r\n`));
   };
 
   createWindow = (url: string): void => {
@@ -371,8 +288,6 @@ export class InvokeManager {
     window.on('ready-to-show', () => {
       window.webContents.insertCSS(`* { outline: none; }`);
       window.show();
-      // Start metrics monitoring when window is ready
-      this.startMetricsMonitoring();
     });
     window.on('close', this.exitInvoke);
 
@@ -389,20 +304,7 @@ export class InvokeManager {
               ? 'Killed'
               : `Unknown (${details.reason})`;
 
-      this.log.error(`[CRASH] Invoke UI window process unexpectedly gone: ${reasonMessage}\r\n`);
-      this.log.error(`[CRASH] Exit code: ${details.exitCode}\r\n`);
-
-      // Log last known metrics
-      if (this.lastMetrics) {
-        const memoryMB = Math.round(this.lastMetrics.memoryBytes / 1024 / 1024);
-        this.log.error(
-          `[CRASH] Last known metrics - Memory: ${memoryMB} MB (${this.lastMetrics.memoryBytes} bytes), CPU: ${this.lastMetrics.cpuPercent}%\r\n`
-        );
-      }
-
-      if (details.reason === 'oom') {
-        this.log.error(`[OOM] The Invoke UI window crashed due to insufficient memory.\r\n`);
-      }
+      this.log.error(c.red(`UI Window unexpectedly exited with exit code ${details.exitCode}: ${reasonMessage}\r\n`));
 
       // Update status to window-crashed if we still have the running data
       if (this.lastRunningData && this.currentPtyId) {
@@ -413,7 +315,7 @@ export class InvokeManager {
             crashReason: reasonMessage,
           },
         });
-        this.log.info(`[CRASH] Window can be reopened - server is still running\r\n`);
+        this.log.info(c.cyan(`UI Window can be reopened - server is still running\r\n`));
       }
 
       // Close the crashed window (it may still be visible but unresponsive)
@@ -423,18 +325,17 @@ export class InvokeManager {
 
       // Clean up the window reference
       this.window = null;
-      this.stopMetricsMonitoring();
     });
 
     window.webContents.on('unresponsive', () => {
       unresponsiveTimestamp = Date.now();
-      this.log.warn(`[UNRESPONSIVE] Invoke UI has become unresponsive\r\n`);
+      this.log.warn(c.yellow(`UI Window is unresponsive\r\n`));
     });
 
     window.webContents.on('responsive', () => {
       if (unresponsiveTimestamp) {
         const duration = Date.now() - unresponsiveTimestamp;
-        this.log.info(`[RESPONSIVE] Invoke UI is responsive again (was unresponsive for ${duration}ms)\r\n`);
+        this.log.info(c.yellow(`UI Window is responsive again (was unresponsive for ${duration}ms)\r\n`));
         unresponsiveTimestamp = null;
       }
     });
@@ -470,12 +371,12 @@ export class InvokeManager {
     }
 
     if (!this.lastRunningData) {
-      this.log.error('Cannot reopen window - no running data available\r\n');
+      this.log.error(c.red('Cannot reopen window - no running data available\r\n'));
       return;
     }
 
     if (!this.currentPtyId) {
-      this.log.error('Cannot reopen window - process is not running\r\n');
+      this.log.error(c.red('Cannot reopen window - process is not running\r\n'));
       return;
     }
 
@@ -487,14 +388,13 @@ export class InvokeManager {
   };
 
   exitInvoke = () => {
-    this.log.info('Shutting down...\r\n');
+    this.log.info(c.cyan('Shutting down...\r\n'));
     this.updateStatus({ type: 'exiting' });
     this.closeWindow();
     this.killProcess();
   };
 
   closeWindow = (): void => {
-    this.stopMetricsMonitoring();
     if (!this.window) {
       return;
     }
@@ -531,9 +431,6 @@ export const createInvokeManager = (arg: {
     },
     onStatusChange: (status) => {
       sendToWindow('invoke-process:status', status);
-    },
-    onMetricsUpdate: (metrics) => {
-      sendToWindow('invoke-process:metrics', metrics);
     },
     sendClearLogs: () => {
       sendToWindow('invoke-process:clear-logs');

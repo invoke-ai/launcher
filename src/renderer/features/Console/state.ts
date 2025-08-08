@@ -5,15 +5,6 @@ import { atom, computed, onMount, task } from 'nanostores';
 import { DEFAULT_XTERM_OPTIONS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 
-// const DEFAULT_XTERM_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions = {
-//   cursorBlink: true,
-//   fontSize: TERMINAL_FONT_SIZE,
-//   fontFamily: TERMINAL_FONT,
-//   scrollback: 5_000,
-//   allowTransparency: true,
-//   convertEol: true, // Convert \n to \r\n
-// };
-
 type BaseXtermState = {
   id: string;
   xterm: Terminal;

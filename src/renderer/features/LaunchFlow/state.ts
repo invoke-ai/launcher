@@ -35,7 +35,7 @@ $invokeProcessStatus.subscribe((status, oldStatus) => {
 export const $invokeProcessXTerm = atom<Terminal | null>(null);
 const terminalSubscriptions = new Set<() => void>();
 
-export const initializeTerminal = (): Terminal => {
+const initializeTerminal = (): Terminal => {
   let xterm = $invokeProcessXTerm.get();
 
   if (xterm) {

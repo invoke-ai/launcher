@@ -1,5 +1,6 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
 import { major, minor } from '@renovatebot/pep440';
+import c from 'ansi-colors';
 import { ipcMain } from 'electron';
 import fs from 'fs/promises';
 import path, { join } from 'path';
@@ -128,8 +129,6 @@ export class InstallManager {
      */
 
     this.updateStatus({ type: 'starting' });
-    this.log.info('Starting up...\r\n');
-
     // Do some initial checks and setup
 
     // First make sure the install location is valid (e.g. it's a folder that exists)
@@ -185,7 +184,7 @@ export class InstallManager {
     let pythonVersionMismatch = false;
 
     if (installationDetails.isInstalled) {
-      this.log.info(`Detected existing installation at ${location}:\r\n`);
+      this.log.info(c.cyan(`Detected existing installation at ${location}:\r\n`));
       this.log.info(`- Invoke version: ${installationDetails.version}\r\n`);
       this.log.info(`- Python version: ${installationDetails.pythonVersion}\r\n`);
 
@@ -201,7 +200,7 @@ export class InstallManager {
       pythonVersionMismatch = true;
     }
 
-    this.log.info('Installation parameters:\r\n');
+    this.log.info(c.cyan('Installation parameters:\r\n'));
     this.log.info(`- Invoke version: ${version}\r\n`);
     this.log.info(`- Install location: ${location}\r\n`);
     this.log.info(`- Python version: ${pythonVersion}\r\n`);
@@ -210,7 +209,7 @@ export class InstallManager {
     this.log.info(`- Using torch index: ${torchIndexUrl ?? 'default'}\r\n`);
 
     if (repair) {
-      this.log.info('Repair mode enabled:\r\n');
+      this.log.info(c.magenta('Repair mode enabled:\r\n'));
       this.log.info('- Force-reinstalling python\r\n');
       this.log.info('- Deleting and recreating virtual environment\r\n');
     }
@@ -223,7 +222,7 @@ export class InstallManager {
     });
 
     if (uvPathCheckResult.isErr()) {
-      this.log.error(`Failed to access uv executable: ${uvPathCheckResult.error.message}\r\n`);
+      this.log.error(c.red(`Failed to access uv executable: ${uvPathCheckResult.error.message}\r\n`));
       this.updateStatus({
         type: 'error',
         error: {
@@ -260,7 +259,7 @@ export class InstallManager {
         '--reinstall',
       ];
 
-      this.log.info(`Installing Python ${pythonVersion}...\r\n`);
+      this.log.info(c.cyan(`Installing Python ${pythonVersion}...\r\n`));
       this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
 
       const installPythonResult = await withResultAsync(() =>
@@ -268,7 +267,7 @@ export class InstallManager {
       );
 
       if (installPythonResult.isErr()) {
-        this.log.error(`Failed to install Python: ${installPythonResult.error.message}\r\n`);
+        this.log.error(c.red(`Failed to install Python: ${installPythonResult.error.message}\r\n`));
         this.logRepairModeMessages();
         this.updateStatus({
           type: 'error',
@@ -281,7 +280,7 @@ export class InstallManager {
       }
 
       if (installPythonResult.value === 'canceled') {
-        this.log.warn('Installation canceled\r\n');
+        this.log.warn(c.yellow('Installation canceled\r\n'));
         this.updateStatus({ type: 'canceled' });
         return;
       }
@@ -293,9 +292,9 @@ export class InstallManager {
 
     // In repair mode, we will delete the .venv first if it exists
     if ((repair || pythonVersionMismatch) && hasVenv) {
-      this.log.info('Deleting existing virtual environment...\r\n');
+      this.log.info(c.cyan('Deleting existing virtual environment...\r\n'));
       await fs.rm(venvPath, { recursive: true, force: true }).catch(() => {
-        this.log.warn('Failed to delete virtual environment\r\n');
+        this.log.warn(c.yellow('Failed to delete virtual environment\r\n'));
       });
       hasVenv = false;
     }
@@ -331,13 +330,13 @@ export class InstallManager {
         venvPath,
       ];
 
-      this.log.info('Creating virtual environment...\r\n');
+      this.log.info(c.cyan('Creating virtual environment...\r\n'));
       this.log.info(`> ${uvPath} ${createVenvArgs.join(' ')}\r\n`);
 
       const createVenvResult = await withResultAsync(() => this.runCommand(uvPath, createVenvArgs, runProcessOptions));
 
       if (createVenvResult.isErr()) {
-        this.log.error(`Failed to create virtual environment: ${createVenvResult.error.message}\r\n`);
+        this.log.error(c.red(`Failed to create virtual environment: ${createVenvResult.error.message}\r\n`));
         this.logRepairModeMessages();
         this.updateStatus({
           type: 'error',
@@ -350,12 +349,12 @@ export class InstallManager {
       }
 
       if (createVenvResult.value === 'canceled') {
-        this.log.warn('Installation canceled\r\n');
+        this.log.warn(c.yellow('Installation canceled\r\n'));
         this.updateStatus({ type: 'canceled' });
         return;
       }
     } else {
-      this.log.info('Using existing virtual environment...\r\n');
+      this.log.info(c.cyan('Using existing virtual environment...\r\n'));
     }
 
     // Install the invokeai package
@@ -384,7 +383,7 @@ export class InstallManager {
     // Unfortunately there is no way to specify this in the `uv` CLI.
     runProcessOptions.env.VIRTUAL_ENV = venvPath;
 
-    this.log.info('Installing invokeai package...\r\n');
+    this.log.info(c.cyan('Installing invokeai package...\r\n'));
     this.log.info(`> ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
 
     const installAppResult = await withResultAsync(() =>
@@ -392,7 +391,7 @@ export class InstallManager {
     );
 
     if (installAppResult.isErr()) {
-      this.log.error(`Failed to install invokeai python package: ${installAppResult.error.message}\r\n`);
+      this.log.error(c.red(`Failed to install invokeai python package: ${installAppResult.error.message}\r\n`));
       this.logRepairModeMessages();
       this.updateStatus({
         type: 'error',
@@ -405,7 +404,7 @@ export class InstallManager {
     }
 
     if (installAppResult.value === 'canceled') {
-      this.log.warn('Installation canceled\r\n');
+      this.log.warn(c.yellow('Installation canceled\r\n'));
       this.updateStatus({ type: 'canceled' });
       return;
     }
@@ -415,22 +414,22 @@ export class InstallManager {
     // for this marker file and log a message if it exists. Once started up, we delete the marker file.
     const firstRunMarkerPath = join(location, FIRST_RUN_MARKER_FILENAME);
     fs.writeFile(firstRunMarkerPath, '').catch(() => {
-      this.log.warn('Failed to create first run marker file\r\n');
+      this.log.warn(c.yellow('Failed to create first run marker file\r\n'));
     });
 
     // Hey it worked!
     this.updateStatus({ type: 'completed' });
-    this.log.info('Installation completed successfully!\r\n');
+    this.log.info(c.green.bold('Installation completed successfully\r\n'));
     this.currentPtyId = null;
   };
 
   cancelInstall = (): void => {
     if (!this.currentPtyId) {
-      this.log.warn('No installation to cancel\r\n');
+      this.log.warn(c.yellow('No installation to cancel\r\n'));
       return;
     }
 
-    this.log.warn('Canceling installation...\r\n');
+    this.log.warn(c.yellow('Canceling installation...\r\n'));
     this.updateStatus({ type: 'canceling' });
     this.ptyManager.kill(this.currentPtyId);
     this.currentPtyId = null;

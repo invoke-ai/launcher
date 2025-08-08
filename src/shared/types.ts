@@ -51,7 +51,6 @@ export type StoreData = {
   notifyForPrereleaseUpdates: boolean;
   launcherWindowProps?: WindowProps;
   appWindowProps?: WindowProps;
-  showUIWindowMemoryMonitor?: boolean;
 };
 
 // The electron store uses JSON schema to validate its data.
@@ -430,7 +429,6 @@ type InvokeProcessIpcRendererEvents = Namespaced<
   {
     status: [WithTimestamp<InvokeProcessStatus>];
     log: [WithTimestamp<LogEntry>];
-    metrics: [{ memoryBytes: number; cpuPercent: number }];
     'clear-logs': [];
     'raw-output': [string];
   }

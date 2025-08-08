@@ -19,8 +19,6 @@ import { SettingsModalResetButton } from '@/renderer/features/SettingsModal/Sett
 import { SettingsModalServerMode } from '@/renderer/features/SettingsModal/SettingsModalServerMode';
 import { $isSettingsOpen } from '@/renderer/features/SettingsModal/state';
 
-import { SettingsModalShowUIWindowMemoryMonitor } from './SettingsModalShowUIWindowMemoryMonitor';
-
 export const SettingsModal = memo(() => {
   const isOpen = useStore($isSettingsOpen);
   const onClose = useCallback(() => {
@@ -36,8 +34,6 @@ export const SettingsModal = memo(() => {
         <ModalCloseButton />
         <ModalBody as={Flex} flexDir="column" gap={4} w="full" h="full" minH={32}>
           <SettingsModalServerMode />
-          <Divider />
-          <SettingsModalShowUIWindowMemoryMonitor />
           <Divider />
           <SettingsModalNotifyForPrereleaseUpdates />
         </ModalBody>

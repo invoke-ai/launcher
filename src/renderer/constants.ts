@@ -34,7 +34,7 @@ export const $XTERM_THEME = atom<ITheme>({});
 export const syncTheme = () => {
   $XTERM_THEME.set({
     background: 'rgba(0, 0, 0, 0)',
-    foreground: getRawValue('base.200'),
+    foreground: getRawValue('base.100'),
     black: getRawValue('base.100'),
     brightBlack: getRawValue('base.100'),
     white: getRawValue('base.950'),

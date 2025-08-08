@@ -7,8 +7,8 @@ import path, { join } from 'path';
 import { serializeError } from 'serialize-error';
 import { assert } from 'tsafe';
 
-import type { PtyManager } from '@/lib/pty';
-import { DEFAULT_ENV } from '@/lib/pty';
+import { CommandRunner } from '@/lib/command-runner';
+import { DEFAULT_ENV } from '@/lib/pty-utils';
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
@@ -29,8 +29,7 @@ export class InstallManager {
   private ipcRawOutput: (data: string) => void;
   private onStatusChange: (status: WithTimestamp<InstallProcessStatus>) => void;
   private log: SimpleLogger;
-  private ptyManager: PtyManager;
-  private currentPtyId: string | null;
+  private commandRunner: CommandRunner;
   private cols: number | undefined;
   private rows: number | undefined;
   private isCancellationRequested: boolean;
@@ -39,18 +38,16 @@ export class InstallManager {
     ipcLogger: InstallManager['ipcLogger'];
     ipcRawOutput: InstallManager['ipcRawOutput'];
     onStatusChange: InstallManager['onStatusChange'];
-    ptyManager: PtyManager;
   }) {
     this.ipcLogger = arg.ipcLogger;
     this.ipcRawOutput = arg.ipcRawOutput;
     this.onStatusChange = arg.onStatusChange;
-    this.ptyManager = arg.ptyManager;
+    this.commandRunner = new CommandRunner({ maxHistorySize: 1000 });
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.log = new SimpleLogger((entry) => {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
     });
-    this.currentPtyId = null;
     this.isCancellationRequested = false;
   }
 
@@ -62,50 +59,51 @@ export class InstallManager {
   /**
    * Run a command using PTY for proper terminal emulation
    */
-  private runCommand = (
+  private runCommand = async (
     command: string,
     args: string[],
     options?: { cwd?: string; env?: Record<string, string> }
   ): Promise<'success' | 'canceled'> => {
-    return new Promise((resolve, reject) => {
-      // Check if cancellation was already requested
-      if (this.isCancellationRequested) {
-        resolve('canceled');
-        return;
-      }
+    // Check if cancellation was already requested
+    if (this.isCancellationRequested) {
+      return 'canceled';
+    }
 
-      // For each command, we'll create a new PTY that runs just that command
-      // This gives us proper exit code handling while still getting terminal emulation
-      const ptyEntry = this.ptyManager.createCommand({
+    try {
+      const result = await this.commandRunner.runCommand(
         command,
         args,
-        cwd: options?.cwd,
-        env: options?.env,
-        rows: this.rows,
-        cols: this.cols,
-        onData: (_, data) => {
-          // Send raw PTY output directly for proper progress bar handling
-          this.ipcRawOutput(data);
-          process.stdout.write(data);
+        {
+          cwd: options?.cwd,
+          env: options?.env,
+          rows: this.rows,
+          cols: this.cols,
         },
-        onExit: (id, exitCode) => {
-          if (id === this.currentPtyId) {
-            this.currentPtyId = null;
-          }
+        {
+          onData: (data) => {
+            // Send raw PTY output directly for proper progress bar handling
+            this.ipcRawOutput(data);
+            process.stdout.write(data);
+          },
+        }
+      );
 
-          // Check if this was a cancellation (typically SIGTERM results in exit code 143)
-          if (this.isCancellationRequested) {
-            resolve('canceled');
-          } else if (exitCode === 0) {
-            resolve('success');
-          } else {
-            reject(new Error(`Process exited with code ${exitCode}`));
-          }
-        },
-      });
+      // Check if this was a cancellation (typically SIGTERM results in exit code 143)
+      if (this.isCancellationRequested) {
+        return 'canceled';
+      }
 
-      this.currentPtyId = ptyEntry.id;
-    });
+      if (result.exitCode === 0) {
+        return 'success';
+      } else {
+        throw new Error(`Process exited with code ${result.exitCode}`);
+      }
+    } catch (error) {
+      if (this.isCancellationRequested) {
+        return 'canceled';
+      }
+      throw error;
+    }
   };
 
   /**
@@ -114,9 +112,7 @@ export class InstallManager {
   resizePty = (cols: number, rows: number): void => {
     this.cols = cols;
     this.rows = rows;
-    if (this.currentPtyId) {
-      this.ptyManager.resize(this.currentPtyId, cols, rows);
-    }
+    this.commandRunner.resize(cols, rows);
   };
 
   getStatus = (): WithTimestamp<InstallProcessStatus> => {
@@ -249,10 +245,9 @@ export class InstallManager {
     // Ready to start the installation process
     this.updateStatus({ type: 'installing' });
 
-    // Clean up any previous PTY if it exists
-    if (this.currentPtyId) {
-      this.ptyManager.dispose(this.currentPtyId);
-      this.currentPtyId = null;
+    // Clean up any previous command if it exists
+    if (this.commandRunner.isRunning()) {
+      this.commandRunner.kill();
     }
 
     const runProcessOptions = {
@@ -447,7 +442,6 @@ export class InstallManager {
     // Hey it worked!
     this.updateStatus({ type: 'completed' });
     this.log.info(c.green.bold('Installation completed successfully\r\n'));
-    this.currentPtyId = null;
   };
 
   cancelInstall = (): void => {
@@ -465,10 +459,9 @@ export class InstallManager {
     this.log.warn(c.yellow('Canceling installation...\r\n'));
     this.updateStatus({ type: 'canceling' });
 
-    // If there's a current PTY process running, kill it
-    if (this.currentPtyId) {
-      this.ptyManager.kill(this.currentPtyId);
-      this.currentPtyId = null;
+    // If there's a current command running, kill it
+    if (this.commandRunner.isRunning()) {
+      this.commandRunner.kill();
     }
   };
 }
@@ -480,9 +473,8 @@ export class InstallManager {
 export const createInstallManager = (arg: {
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
-  ptyManager: PtyManager;
 }) => {
-  const { ipc, sendToWindow, ptyManager } = arg;
+  const { ipc, sendToWindow } = arg;
 
   const installManager = new InstallManager({
     ipcLogger: (entry) => {
@@ -494,7 +486,6 @@ export const createInstallManager = (arg: {
     onStatusChange: (status) => {
       sendToWindow('install-process:status', status);
     },
-    ptyManager,
   });
 
   ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {

@@ -2,10 +2,10 @@ import { app, BrowserWindow, dialog, shell } from 'electron';
 import { join } from 'path';
 import { assert } from 'tsafe';
 
+import { createConsoleManager } from '@/main/console-manager';
 import { createInstallManager } from '@/main/install-manager';
 import { createInvokeManager } from '@/main/invoke-manager';
 import { MainProcessManager } from '@/main/main-process-manager';
-import { createPtyManager } from '@/main/pty-manager';
 import { store } from '@/main/store';
 import {
   getHomeDirectory,
@@ -33,8 +33,8 @@ app.commandLine.appendSwitch('disable-backing-store-limit');
 
 const main = new MainProcessManager({ store });
 
-// Create PtyManager first as it's needed by other managers
-const [ptyManager, cleanupPty] = createPtyManager({
+// Create ConsoleManager for terminal functionality
+const [, cleanupConsole] = createConsoleManager({
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
 });
@@ -42,13 +42,11 @@ const [ptyManager, cleanupPty] = createPtyManager({
 const [install, cleanupInstall] = createInstallManager({
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
-  ptyManager,
 });
 const [invoke, cleanupInvoke] = createInvokeManager({
   store,
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
-  ptyManager,
 });
 
 main.ipc.handle('main-process:get-status', () => main.getStatus());
@@ -63,7 +61,7 @@ main.ipc.handle('invoke-process:get-status', () => invoke.getStatus());
 async function cleanup() {
   cleanupInstall();
   await cleanupInvoke();
-  cleanupPty();
+  cleanupConsole();
   main.cleanup();
 }
 

@@ -33,16 +33,19 @@ app.commandLine.appendSwitch('disable-backing-store-limit');
 
 const main = new MainProcessManager({ store });
 
+// Create PtyManager first as it's needed by other managers
+const [ptyManager, cleanupPty] = createPtyManager({
+  ipc: main.ipc,
+  sendToWindow: main.sendToWindow,
+});
+
 const [install, cleanupInstall] = createInstallManager({
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
+  ptyManager,
 });
 const [invoke, cleanupInvoke] = createInvokeManager({
   store,
-  ipc: main.ipc,
-  sendToWindow: main.sendToWindow,
-});
-const [_pty, cleanupPty] = createPtyManager({
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
 });

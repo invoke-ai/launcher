@@ -1,9 +1,8 @@
 import { objectEquals } from '@observ33r/object-equals';
-import type { FitAddon } from '@xterm/addon-fit';
-import type { Terminal } from '@xterm/xterm';
+import { Terminal } from '@xterm/xterm';
 import { atom, computed } from 'nanostores';
 
-import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
+import { DEFAULT_XTERM_OPTIONS, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import { syncInstallDirDetails } from '@/renderer/services/store';
 import type { InvokeProcessStatus, WithTimestamp } from '@/shared/types';
@@ -32,28 +31,61 @@ $invokeProcessStatus.subscribe((status, oldStatus) => {
   }
 });
 
-// Xterm terminal for displaying logs with proper terminal control sequence handling
-export const $invokeProcessTerminal = atom<{ terminal: Terminal; fitAddon: FitAddon } | null>(null);
+export const $invokeProcessXTerm = atom<Terminal | null>(null);
+const terminalSubscriptions = new Set<() => void>();
+
+const initializeTerminal = (): Terminal => {
+  let xterm = $invokeProcessXTerm.get();
+
+  if (xterm) {
+    return xterm;
+  }
+
+  xterm = new Terminal({ ...DEFAULT_XTERM_OPTIONS, disableStdin: true });
+
+  terminalSubscriptions.add(
+    ipc.on('invoke-process:log', (_, data) => {
+      // Only handle structured logs that aren't from PTY
+      // PTY output comes through the raw-output channel
+      xterm.write(data.message);
+    })
+  );
+
+  terminalSubscriptions.add(
+    ipc.on('invoke-process:raw-output', (_, data) => {
+      // Write raw PTY output directly to xterm terminal
+      xterm.write(data);
+    })
+  );
+
+  terminalSubscriptions.add(
+    ipc.on('invoke-process:clear-logs', () => {
+      xterm.reset();
+    })
+  );
+
+  terminalSubscriptions.add(
+    xterm.onResize(({ cols, rows }) => {
+      emitter.invoke('invoke-process:resize', cols, rows);
+    }).dispose
+  );
+
+  $invokeProcessXTerm.set(xterm);
+  return xterm;
+};
+
+const teardownTerminal = () => {
+  for (const unsubscribe of terminalSubscriptions) {
+    unsubscribe();
+  }
+  const xterm = $invokeProcessXTerm.get();
+  if (!xterm) {
+    return;
+  }
+  xterm.dispose();
+};
 
 const listen = () => {
-  ipc.on('invoke-process:log', (_, data) => {
-    // Write raw data to xterm terminal if available
-    const terminal = $invokeProcessTerminal.get();
-    if (terminal) {
-      // Write the raw message with ANSI codes to xterm
-      terminal.terminal.write(data.message);
-    }
-  });
-
-  ipc.on('invoke-process:clear-logs', () => {
-    // Write raw data to xterm terminal if available
-    const terminal = $invokeProcessTerminal.get();
-    if (terminal) {
-      // Write the raw message with ANSI codes to xterm
-      terminal.terminal.reset();
-    }
-  });
-
   ipc.on('invoke-process:status', (_, status) => {
     $invokeProcessStatus.set(status);
     if (status.type === 'exited' || status.type === 'error') {

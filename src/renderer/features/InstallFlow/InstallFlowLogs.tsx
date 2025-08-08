@@ -4,17 +4,17 @@ import { memo } from 'react';
 
 import {
   $installProcessStatus,
-  $installProcessTerminal,
+  $installProcessXTerm,
   getIsActiveInstallProcessStatus,
 } from '@/renderer/features/InstallFlow/state';
-import { XtermLogViewer } from '@/renderer/features/XTermLogViewer/XtermLogViewer';
+import { XTermLogViewer } from '@/renderer/features/XTermLogViewer/XTermLogViewer';
 import { XTermLogViewerStatusIndicator } from '@/renderer/features/XTermLogViewer/XTermLogViewerStatusIndicator';
 
 export const InstallFlowLogs = memo(() => {
   const installProcessStatus = useStore($installProcessStatus);
 
   return (
-    <XtermLogViewer $terminal={$installProcessTerminal}>
+    <XTermLogViewer $xterm={$installProcessXTerm}>
       <XTermLogViewerStatusIndicator
         isLoading={getIsActiveInstallProcessStatus(installProcessStatus)}
         position="absolute"
@@ -23,7 +23,7 @@ export const InstallFlowLogs = memo(() => {
       >
         {startCase(installProcessStatus.type)}
       </XTermLogViewerStatusIndicator>
-    </XtermLogViewer>
+    </XTermLogViewer>
   );
 });
 InstallFlowLogs.displayName = 'InstallFlowLogs';

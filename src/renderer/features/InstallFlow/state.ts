@@ -1,14 +1,13 @@
 import { objectEquals } from '@observ33r/object-equals';
 import { compare } from '@renovatebot/pep440';
-import type { FitAddon } from '@xterm/addon-fit';
-import type { Terminal } from '@xterm/xterm';
+import { Terminal } from '@xterm/xterm';
 import { clamp } from 'es-toolkit/compat';
 import type { ReadableAtom } from 'nanostores';
 import { atom, computed, map } from 'nanostores';
 import { assert } from 'tsafe';
 
 import { withResultAsync } from '@/lib/result';
-import { STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
+import { DEFAULT_XTERM_OPTIONS, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { $latestGHReleases } from '@/renderer/services/gh';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import {
@@ -110,18 +109,21 @@ export const installFlowApi = {
     });
     $activeStep.set(0);
     $isStarted.set(false);
+    teardownTerminal();
   },
   startInstall: () => {
     const { dirDetails, gpuType, release, repairMode } = $choices.get();
     if (!dirDetails || !dirDetails.canInstall || !release || !gpuType) {
       return;
     }
+    initializeTerminal();
     emitter.invoke('install-process:start-install', dirDetails.path, gpuType, release.version, repairMode);
     installFlowApi.nextStep();
   },
   cancelInstall: async () => {
     await emitter.invoke('install-process:cancel-install');
     $isFinished.set(true);
+    teardownTerminal();
   },
   finalizeInstall: async () => {
     const result = await withResultAsync(async () => {
@@ -139,6 +141,7 @@ export const installFlowApi = {
 
     $isFinished.set(false);
     installFlowApi.cancelFlow();
+    teardownTerminal();
   },
 };
 
@@ -185,7 +188,53 @@ $installProcessStatus.subscribe((status, oldStatus) => {
   }
 });
 
-export const $installProcessTerminal = atom<{ terminal: Terminal; fitAddon: FitAddon } | null>(null);
+export const $installProcessXTerm = atom<Terminal | null>(null);
+const terminalSubscriptions = new Set<() => void>();
+
+const initializeTerminal = (): Terminal => {
+  let xterm = $installProcessXTerm.get();
+
+  if (xterm) {
+    return xterm;
+  }
+
+  xterm = new Terminal({ ...DEFAULT_XTERM_OPTIONS, disableStdin: true });
+
+  terminalSubscriptions.add(
+    ipc.on('install-process:log', (_, data) => {
+      // Only handle structured logs that aren't from PTY
+      // PTY output comes through the raw-output channel
+      xterm.write(data.message);
+    })
+  );
+
+  terminalSubscriptions.add(
+    ipc.on('install-process:raw-output', (_, data) => {
+      // Write raw PTY output directly to xterm terminal
+      xterm.write(data);
+    })
+  );
+
+  terminalSubscriptions.add(
+    xterm.onResize(({ cols, rows }) => {
+      emitter.invoke('install-process:resize', cols, rows);
+    }).dispose
+  );
+
+  $installProcessXTerm.set(xterm);
+  return xterm;
+};
+
+const teardownTerminal = () => {
+  for (const unsubscribe of terminalSubscriptions) {
+    unsubscribe();
+  }
+  const xterm = $installProcessXTerm.get();
+  if (!xterm) {
+    return;
+  }
+  xterm.dispose();
+};
 
 export const getIsActiveInstallProcessStatus = (status: InstallProcessStatus) => {
   switch (status.type) {
@@ -200,15 +249,6 @@ export const getIsActiveInstallProcessStatus = (status: InstallProcessStatus) =>
 };
 
 const listen = () => {
-  ipc.on('install-process:log', (_, data) => {
-    // Write raw data to xterm terminal if available
-    const terminal = $installProcessTerminal.get();
-    if (terminal) {
-      // Write the raw message with ANSI codes to xterm
-      terminal.terminal.write(data.message);
-    }
-  });
-
   ipc.on('install-process:status', (_, status) => {
     $installProcessStatus.set(status);
     if (status.type === 'canceled' || status.type === 'completed' || status.type === 'error') {

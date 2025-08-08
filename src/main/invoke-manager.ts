@@ -9,6 +9,7 @@ import { join } from 'path';
 import { assert } from 'tsafe';
 import { promisify } from 'util';
 
+import type { PtyManager } from '@/lib/pty';
 import { DEFAULT_ENV } from '@/lib/pty';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { StringMatcher } from '@/lib/string-matcher';
@@ -23,10 +24,13 @@ import type {
   WithTimestamp,
 } from '@/shared/types';
 
+import type { InstallManager } from './install-manager';
+
 export class InvokeManager {
   private process: ChildProcess | null;
   private status: WithTimestamp<InvokeProcessStatus>;
   private ipcLogger: (entry: WithTimestamp<LogEntry>) => void;
+  private ipcRawOutput: (data: string) => void;
   private onStatusChange: (status: WithTimestamp<InvokeProcessStatus>) => void;
   private onMetricsUpdate: (metrics: { memoryBytes: number; cpuPercent: number }) => void;
   private sendClearLogs?: () => void;
@@ -36,6 +40,10 @@ export class InvokeManager {
   private metricsInterval: NodeJS.Timeout | null;
   private lastMetrics: { memoryBytes: number; cpuPercent: number } | null;
   private lastRunningData: { url: string; loopbackUrl: string; lanUrl?: string } | null;
+  private ptyManager: PtyManager;
+  private currentPtyId: string | null;
+  private cols: number | undefined;
+  private rows: number | undefined;
 
   constructor(arg: {
     store: Store<StoreData>;
@@ -43,6 +51,8 @@ export class InvokeManager {
     onStatusChange: InvokeManager['onStatusChange'];
     onMetricsUpdate: InvokeManager['onMetricsUpdate'];
     sendClearLogs?: InvokeManager['sendClearLogs'];
+    ptyManager: PtyManager;
+    ipcRawOutput: InstallManager['ipcRawOutput'];
   }) {
     this.window = null;
     this.store = arg.store;
@@ -59,6 +69,11 @@ export class InvokeManager {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
     });
+    this.ptyManager = arg.ptyManager;
+    this.currentPtyId = null;
+    this.cols = undefined;
+    this.rows = undefined;
+    this.ipcRawOutput = arg.ipcRawOutput;
   }
 
   getStatus = (): WithTimestamp<InvokeProcessStatus> => {
@@ -68,6 +83,55 @@ export class InvokeManager {
   updateStatus = (status: InvokeProcessStatus): void => {
     this.status = { ...status, timestamp: Date.now() };
     this.onStatusChange(this.status);
+  };
+
+  /**
+   * Run a command using PTY for proper terminal emulation
+   */
+  private runCommand = (
+    command: string,
+    args: string[],
+    options?: { cwd?: string; env?: Record<string, string> }
+  ): Promise<'success' | 'canceled'> => {
+    return new Promise((resolve, reject) => {
+      // For each command, we'll create a new PTY that runs just that command
+      // This gives us proper exit code handling while still getting terminal emulation
+      const ptyEntry = this.ptyManager.createCommand({
+        command,
+        args,
+        cwd: options?.cwd,
+        env: options?.env,
+        rows: this.rows,
+        cols: this.cols,
+        onData: (_, data) => {
+          // Send raw PTY output directly for proper progress bar handling
+          this.ipcRawOutput(data);
+          process.stdout.write(data);
+        },
+        onExit: (id, exitCode) => {
+          if (id === this.currentPtyId) {
+            this.currentPtyId = null;
+          }
+
+          if (exitCode === 0) {
+            resolve('success');
+          } else {
+            reject(new Error(`Process exited with code ${exitCode}`));
+          }
+        },
+      });
+
+      this.currentPtyId = ptyEntry.id;
+    });
+  };
+
+  /**
+   * Resize the current PTY if one is active
+   */
+  resizePty = (cols: number, rows: number): void => {
+    if (this.currentPtyId) {
+      this.ptyManager.resize(this.currentPtyId, cols, rows);
+    }
   };
 
   startMetricsMonitoring = (): void => {
@@ -463,8 +527,9 @@ export const createInvokeManager = (arg: {
   store: Store<StoreData>;
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  ptyManager: PtyManager;
 }) => {
-  const { store, ipc, sendToWindow } = arg;
+  const { store, ipc, sendToWindow, ptyManager } = arg;
   const invokeManager = new InvokeManager({
     store,
     ipcLogger: (entry) => {
@@ -479,6 +544,10 @@ export const createInvokeManager = (arg: {
     sendClearLogs: () => {
       sendToWindow('invoke-process:clear-logs');
     },
+    ipcRawOutput: (data) => {
+      sendToWindow('invoke-process:raw-output', data);
+    },
+    ptyManager,
   });
 
   ipc.handle('invoke-process:start-invoke', (_, installLocation) => {
@@ -490,6 +559,9 @@ export const createInvokeManager = (arg: {
   ipc.handle('invoke-process:reopen-window', () => {
     invokeManager.reopenWindow();
   });
+  ipc.handle('invoke-process:resize', (_, cols, rows) => {
+    invokeManager.resizePty(cols, rows);
+  });
 
   const cleanupInvokeManager = async () => {
     const status = invokeManager.getStatus();
@@ -498,6 +570,7 @@ export const createInvokeManager = (arg: {
     }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');
+    ipcMain.removeHandler('invoke-process:resize');
   };
 
   return [invokeManager, cleanupInvokeManager] as const;

@@ -1,14 +1,12 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
 import { major, minor } from '@renovatebot/pep440';
-import type { ExecFileOptions } from 'child_process';
-import { execFile } from 'child_process';
 import { ipcMain } from 'electron';
-import type { ObjectEncodingOptions } from 'fs';
 import fs from 'fs/promises';
 import path, { join } from 'path';
 import { serializeError } from 'serialize-error';
 import { assert } from 'tsafe';
 
+import type { PtyManager } from '@/lib/pty';
 import { DEFAULT_ENV } from '@/lib/pty';
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
@@ -27,24 +25,84 @@ import type {
 export class InstallManager {
   private status: WithTimestamp<InstallProcessStatus>;
   private ipcLogger: (entry: WithTimestamp<LogEntry>) => void;
+  private ipcRawOutput: (data: string) => void;
   private onStatusChange: (status: WithTimestamp<InstallProcessStatus>) => void;
   private log: SimpleLogger;
-  private abortController: AbortController | null;
+  private ptyManager: PtyManager;
+  private currentPtyId: string | null;
+  private cols: number | undefined;
+  private rows: number | undefined;
 
-  constructor(arg: { ipcLogger: InstallManager['ipcLogger']; onStatusChange: InstallManager['onStatusChange'] }) {
+  constructor(arg: {
+    ipcLogger: InstallManager['ipcLogger'];
+    ipcRawOutput: InstallManager['ipcRawOutput'];
+    onStatusChange: InstallManager['onStatusChange'];
+    ptyManager: PtyManager;
+  }) {
     this.ipcLogger = arg.ipcLogger;
+    this.ipcRawOutput = arg.ipcRawOutput;
     this.onStatusChange = arg.onStatusChange;
+    this.ptyManager = arg.ptyManager;
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.log = new SimpleLogger((entry) => {
       this.ipcLogger(entry);
       console[entry.level](entry.message);
     });
-    this.abortController = null;
+    this.currentPtyId = null;
   }
 
   logRepairModeMessages = (): void => {
     this.log.info('Try installing again with Repair mode enabled to fix this.\r\n');
     this.log.info('Ask for help on Discord or GitHub if you continue to have issues.\r\n');
+  };
+
+  /**
+   * Run a command using PTY for proper terminal emulation
+   */
+  private runCommand = (
+    command: string,
+    args: string[],
+    options?: { cwd?: string; env?: Record<string, string> }
+  ): Promise<'success' | 'canceled'> => {
+    return new Promise((resolve, reject) => {
+      // For each command, we'll create a new PTY that runs just that command
+      // This gives us proper exit code handling while still getting terminal emulation
+      const ptyEntry = this.ptyManager.createCommand({
+        command,
+        args,
+        cwd: options?.cwd,
+        env: options?.env,
+        rows: this.rows,
+        cols: this.cols,
+        onData: (_, data) => {
+          // Send raw PTY output directly for proper progress bar handling
+          this.ipcRawOutput(data);
+          process.stdout.write(data);
+        },
+        onExit: (id, exitCode) => {
+          if (id === this.currentPtyId) {
+            this.currentPtyId = null;
+          }
+
+          if (exitCode === 0) {
+            resolve('success');
+          } else {
+            reject(new Error(`Process exited with code ${exitCode}`));
+          }
+        },
+      });
+
+      this.currentPtyId = ptyEntry.id;
+    });
+  };
+
+  /**
+   * Resize the current PTY if one is active
+   */
+  resizePty = (cols: number, rows: number): void => {
+    if (this.currentPtyId) {
+      this.ptyManager.resize(this.currentPtyId, cols, rows);
+    }
   };
 
   getStatus = (): WithTimestamp<InstallProcessStatus> => {
@@ -177,24 +235,14 @@ export class InstallManager {
     // Ready to start the installation process
     this.updateStatus({ type: 'installing' });
 
-    // The install processes will log stdout/stderr with this, but it seems to be a toss of as to which messages
-    // go to stdout and which to stderr. So we'll just log everything as info and handle actual errors separately
-    const onOutput = (data: string) => {
-      this.log.info(data);
-    };
-
-    const runProcessCallbacks = {
-      onStdout: onOutput,
-      onStderr: onOutput,
-    };
-
-    // Use an AbortController to cancel the installation process
-    const abortController = new AbortController();
-    this.abortController = abortController;
+    // Clean up any previous PTY if it exists
+    if (this.currentPtyId) {
+      this.ptyManager.dispose(this.currentPtyId);
+      this.currentPtyId = null;
+    }
 
     const runProcessOptions = {
-      signal: abortController.signal,
-      env: { ...process.env, ...DEFAULT_ENV },
+      env: { ...process.env, ...DEFAULT_ENV } as Record<string, string>,
     };
 
     if (repair || pythonVersionMismatch) {
@@ -214,7 +262,7 @@ export class InstallManager {
       this.log.info(`> ${uvPath} ${installPythonArgs.join(' ')}\r\n`);
 
       const installPythonResult = await withResultAsync(() =>
-        runProcess(uvPath, installPythonArgs, runProcessCallbacks, runProcessOptions)
+        this.runCommand(uvPath, installPythonArgs, runProcessOptions)
       );
 
       if (installPythonResult.isErr()) {
@@ -284,9 +332,7 @@ export class InstallManager {
       this.log.info('Creating virtual environment...\r\n');
       this.log.info(`> ${uvPath} ${createVenvArgs.join(' ')}\r\n`);
 
-      const createVenvResult = await withResultAsync(() =>
-        runProcess(uvPath, createVenvArgs, runProcessCallbacks, runProcessOptions)
-      );
+      const createVenvResult = await withResultAsync(() => this.runCommand(uvPath, createVenvArgs, runProcessOptions));
 
       if (createVenvResult.isErr()) {
         this.log.error(`Failed to create virtual environment: ${createVenvResult.error.message}\r\n`);
@@ -340,7 +386,7 @@ export class InstallManager {
     this.log.info(`> ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
 
     const installAppResult = await withResultAsync(() =>
-      runProcess(uvPath, installInvokeArgs, runProcessCallbacks, { ...runProcessOptions, cwd: location })
+      this.runCommand(uvPath, installInvokeArgs, { ...runProcessOptions, cwd: location })
     );
 
     if (installAppResult.isErr()) {
@@ -373,24 +419,19 @@ export class InstallManager {
     // Hey it worked!
     this.updateStatus({ type: 'completed' });
     this.log.info('Installation completed successfully!\r\n');
-
-    this.abortController = null;
+    this.currentPtyId = null;
   };
 
   cancelInstall = (): void => {
-    if (!this.abortController) {
+    if (!this.currentPtyId) {
       this.log.warn('No installation to cancel\r\n');
-      return;
-    }
-
-    if (this.abortController.signal.aborted) {
-      this.log.warn('Installation already canceling\r\n');
       return;
     }
 
     this.log.warn('Canceling installation...\r\n');
     this.updateStatus({ type: 'canceling' });
-    this.abortController.abort();
+    this.ptyManager.kill(this.currentPtyId);
+    this.currentPtyId = null;
   };
 }
 
@@ -401,80 +442,39 @@ export class InstallManager {
 export const createInstallManager = (arg: {
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  ptyManager: PtyManager;
 }) => {
-  const { ipc, sendToWindow } = arg;
+  const { ipc, sendToWindow, ptyManager } = arg;
 
   const installManager = new InstallManager({
     ipcLogger: (entry) => {
       sendToWindow('install-process:log', entry);
     },
+    ipcRawOutput: (data) => {
+      sendToWindow('install-process:raw-output', data);
+    },
     onStatusChange: (status) => {
       sendToWindow('install-process:status', status);
     },
+    ptyManager,
   });
+
   ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
     installManager.startInstall(installationPath, gpuType, version, repair);
   });
   ipc.handle('install-process:cancel-install', () => {
     installManager.cancelInstall();
   });
+  ipc.handle('install-process:resize', (_, cols, rows) => {
+    installManager.resizePty(cols, rows);
+  });
 
   const cleanupInstallManager = () => {
     installManager.cancelInstall();
     ipcMain.removeHandler('install-process:start-install');
     ipcMain.removeHandler('install-process:cancel-install');
+    ipcMain.removeHandler('install-process:resize');
   };
 
   return [installManager, cleanupInstallManager] as const;
-};
-
-/**
- * Simple wrapper around `child_process.execFile` that returns a promise that resolves when the process exits with code 0.
- * If the process exits with a non-zero code, the promise is rejected with an error.
- *
- * @param file The path to the executable to run.
- * @param args The arguments to pass to the executable.
- * @param callbacks An object with `onStdout` and `onStderr` functions to handle the process's output. The output is passed as a string.
- * @param options Additional options to pass to `child_process.execFile`
- */
-const runProcess = (
-  file: string,
-  args: string[],
-  callbacks: {
-    onStdout: (data: string) => void;
-    onStderr: (data: string) => void;
-  },
-  options?: ObjectEncodingOptions & ExecFileOptions
-): Promise<'success' | 'canceled'> => {
-  return new Promise((resolve, reject) => {
-    const p = execFile(file, args, options);
-
-    p.on('error', (error) => {
-      if (p.pid !== undefined) {
-        // The process started but errored - handle this in the exit event
-        return;
-      }
-      reject(error);
-    });
-
-    p.stdout?.on('data', (data) => {
-      callbacks.onStdout(data.toString());
-    });
-
-    p.stderr?.on('data', (data) => {
-      callbacks.onStderr(data.toString());
-    });
-
-    p.on('close', (code) => {
-      if (code === 0) {
-        resolve('success');
-      } else if (code === null) {
-        // The process was killed via signal
-        resolve('canceled');
-      } else {
-        // The process exited with a non-zero code
-        reject(new Error(`Process exited with code ${code}`));
-      }
-    });
-  });
 };

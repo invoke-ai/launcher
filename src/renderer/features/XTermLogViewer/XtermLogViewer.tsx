@@ -3,31 +3,14 @@ import '@xterm/xterm/css/xterm.css';
 import { Box, IconButton } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { FitAddon } from '@xterm/addon-fit';
-import type { ITerminalInitOnlyOptions, ITerminalOptions } from '@xterm/xterm';
-import { Terminal } from '@xterm/xterm';
+import type { Terminal } from '@xterm/xterm';
 import { debounce } from 'es-toolkit/compat';
-import type { WritableAtom } from 'nanostores';
+import type { Atom } from 'nanostores';
 import type { PropsWithChildren } from 'react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { PiCaretDownBold } from 'react-icons/pi';
 
-import { TERMINAL_FONT, TERMINAL_FONT_SIZE } from '@/renderer/constants';
-import { useXTermTheme } from '@/renderer/features/Console/use-xterm-theme';
-
-const DEFAULT_XTERM_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions = {
-  cursorBlink: false,
-  cursorStyle: 'block',
-  fontSize: TERMINAL_FONT_SIZE,
-  fontFamily: TERMINAL_FONT,
-  scrollback: 5_000,
-  allowTransparency: true,
-  disableStdin: true, // Read-only terminal
-  convertEol: true, // Convert \n to \r\n
-};
-
-interface XtermLogViewerProps {
-  $terminal: WritableAtom<{ terminal: Terminal; fitAddon: FitAddon } | null>;
-}
+import { $XTERM_THEME } from '@/renderer/constants';
 
 const getIsAtBottom: (terminal: Terminal) => boolean = (terminal) => {
   const viewport = terminal.buffer.active.viewportY;
@@ -36,70 +19,59 @@ const getIsAtBottom: (terminal: Terminal) => boolean = (terminal) => {
   return isAtBottom;
 };
 
-export const XtermLogViewer = memo(({ children, $terminal }: PropsWithChildren<XtermLogViewerProps>) => {
-  const theme = useXTermTheme();
+export const XTermLogViewer = memo(({ children, $xterm }: PropsWithChildren<{ $xterm: Atom<Terminal | null> }>) => {
+  const xterm = useStore($xterm);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const terminal = useStore($terminal);
 
-  // Initialize terminal if not provided
   useEffect(() => {
     const el = containerRef.current;
     const parent = el?.parentElement;
 
-    if (!el || !parent) {
+    if (!el || !parent || !xterm) {
+      console.log('no el or parent');
       return;
     }
 
-    if ($terminal.get()) {
-      return;
-    }
-
-    const terminal = new Terminal(DEFAULT_XTERM_OPTIONS);
     const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.options.theme = theme;
+    xterm.loadAddon(fitAddon);
+    xterm.options.theme = $XTERM_THEME.get();
 
-    $terminal.set({ terminal, fitAddon });
-    const debouncedFit = debounce(
-      () => {
-        fitAddon.fit();
-      },
-      300,
-      { leading: false, trailing: true }
-    );
+    // Use longer debounce to avoid interfering with progress bar updates
+    const debouncedFit = debounce(() => {
+      fitAddon.fit();
+    }, 300);
     const resizeObserver = new ResizeObserver(debouncedFit);
     resizeObserver.observe(parent);
 
     const onWheel = () => {
-      setIsAtBottom(getIsAtBottom(terminal));
+      setIsAtBottom(getIsAtBottom(xterm));
     };
 
     el.addEventListener('wheel', onWheel);
 
-    // Open terminal in container
-    terminal.open(el);
-    debouncedFit();
+    xterm.open(el);
+    fitAddon.fit();
 
     return () => {
       resizeObserver.disconnect();
       el.removeEventListener('wheel', onWheel);
-      terminal.dispose();
-      $terminal.set(null);
     };
-  }, [$terminal, theme]);
+  }, [xterm]);
 
   const onClickScrollToBottom = useCallback(() => {
-    if (terminal) {
-      terminal.terminal.scrollToBottom();
+    const xterm = $xterm.get();
+    if (!xterm) {
+      return;
     }
-  }, [terminal]);
+    xterm.scrollToBottom();
+  }, [$xterm]);
 
   return (
     <Box position="relative" w="full" h="full" borderWidth={1} borderRadius="base">
       <Box ref={containerRef} position="absolute" inset={2} />
       {children}
-      {!isAtBottom && terminal && (
+      {!isAtBottom && (
         <IconButton
           variant="ghost"
           aria-label="Scroll to Bottom"
@@ -114,4 +86,4 @@ export const XtermLogViewer = memo(({ children, $terminal }: PropsWithChildren<X
   );
 });
 
-XtermLogViewer.displayName = 'XtermLogViewer';
+XTermLogViewer.displayName = 'XTermLogViewer';

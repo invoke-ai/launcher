@@ -1,19 +1,18 @@
 import { FitAddon } from '@xterm/addon-fit';
-import type { ITerminalInitOnlyOptions, ITerminalOptions } from '@xterm/xterm';
 import { Terminal } from '@xterm/xterm';
 import { atom, computed, onMount, task } from 'nanostores';
 
-import { TERMINAL_FONT, TERMINAL_FONT_SIZE } from '@/renderer/constants';
+import { DEFAULT_XTERM_OPTIONS } from '@/renderer/constants';
 import { emitter, ipc } from '@/renderer/services/ipc';
 
-const DEFAULT_XTERM_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions = {
-  cursorBlink: true,
-  fontSize: TERMINAL_FONT_SIZE,
-  fontFamily: TERMINAL_FONT,
-  scrollback: 5_000,
-  allowTransparency: true,
-  convertEol: true, // Convert \n to \r\n
-};
+// const DEFAULT_XTERM_OPTIONS: ITerminalOptions & ITerminalInitOnlyOptions = {
+//   cursorBlink: true,
+//   fontSize: TERMINAL_FONT_SIZE,
+//   fontFamily: TERMINAL_FONT,
+//   scrollback: 5_000,
+//   allowTransparency: true,
+//   convertEol: true, // Convert \n to \r\n
+// };
 
 type BaseXtermState = {
   id: string;
@@ -93,7 +92,7 @@ export const initializeTerminal = async (cwd?: string) => {
 };
 
 const buildTerminalState = (id: string, data?: string | null): TerminalState => {
-  const xterm = new Terminal(DEFAULT_XTERM_OPTIONS);
+  const xterm = new Terminal({ ...DEFAULT_XTERM_OPTIONS, cursorBlink: true });
   xterm.onData((data) => {
     emitter.invoke('terminal:write', id, data);
   });

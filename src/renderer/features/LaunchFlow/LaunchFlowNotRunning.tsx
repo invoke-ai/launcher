@@ -4,6 +4,7 @@ import { memo, useCallback } from 'react';
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
 import { Strong } from '@/renderer/common/Strong';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
+import { startInvoke } from '@/renderer/features/LaunchFlow/state';
 import { LaunchFlowUpdateCheckerNotification } from '@/renderer/features/LaunchFlow/LaunchFlowUpdateCheckerNotification';
 import { emitter } from '@/renderer/services/ipc';
 import { selectInstallDir } from '@/renderer/services/store';
@@ -18,7 +19,7 @@ export const LaunchFlowNotRunning = memo(({ installDirDetails }: Props) => {
     if (!installDirDetails || !installDirDetails.isInstalled) {
       return;
     }
-    emitter.invoke('invoke-process:start-invoke', installDirDetails.path);
+    startInvoke(installDirDetails.path);
   }, [installDirDetails]);
 
   const install = useCallback(() => {

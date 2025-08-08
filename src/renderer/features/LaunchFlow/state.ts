@@ -12,6 +12,7 @@ export const getIsInvokeProcessActive = (status: InvokeProcessStatus) => {
     case 'running':
     case 'starting':
     case 'exiting':
+    case 'window-crashed':
       return true;
     default:
       return false;
@@ -34,7 +35,7 @@ $invokeProcessStatus.subscribe((status, oldStatus) => {
 export const $invokeProcessXTerm = atom<Terminal | null>(null);
 const terminalSubscriptions = new Set<() => void>();
 
-const initializeTerminal = (): Terminal => {
+export const initializeTerminal = (): Terminal => {
   let xterm = $invokeProcessXTerm.get();
 
   if (xterm) {
@@ -59,12 +60,6 @@ const initializeTerminal = (): Terminal => {
   );
 
   terminalSubscriptions.add(
-    ipc.on('invoke-process:clear-logs', () => {
-      xterm.reset();
-    })
-  );
-
-  terminalSubscriptions.add(
     xterm.onResize(({ cols, rows }) => {
       emitter.invoke('invoke-process:resize', cols, rows);
     }).dispose
@@ -74,21 +69,39 @@ const initializeTerminal = (): Terminal => {
   return xterm;
 };
 
-const teardownTerminal = () => {
+export const teardownTerminal = () => {
   for (const unsubscribe of terminalSubscriptions) {
     unsubscribe();
   }
+  terminalSubscriptions.clear();
   const xterm = $invokeProcessXTerm.get();
   if (!xterm) {
     return;
   }
   xterm.dispose();
+  $invokeProcessXTerm.set(null);
+};
+
+export const startInvoke = (location: string) => {
+  // Initialize terminal BEFORE starting the invoke process
+  // This ensures handlers are ready to receive output
+  initializeTerminal();
+  emitter.invoke('invoke-process:start-invoke', location);
 };
 
 const listen = () => {
   ipc.on('invoke-process:status', (_, status) => {
+    const oldStatus = $invokeProcessStatus.get();
     $invokeProcessStatus.set(status);
-    if (status.type === 'exited' || status.type === 'error') {
+
+    // Initialize terminal when starting
+    if (status.type === 'starting' && oldStatus.type !== 'starting') {
+      initializeTerminal();
+    }
+
+    // Only sync install dir details when process exits with error
+    // Don't teardown terminal - keep it alive so user can see the logs
+    if (status.type === 'error') {
       // If the invoke process errored, we need to force a sync of the install dir details in case something broke
       syncInstallDirDetails();
     }

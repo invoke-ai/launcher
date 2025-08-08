@@ -38,9 +38,13 @@ export const XTermLogViewer = memo(({ children, $xterm }: PropsWithChildren<{ $x
     xterm.options.theme = $XTERM_THEME.get();
 
     // Use longer debounce to avoid interfering with progress bar updates
-    const debouncedFit = debounce(() => {
-      fitAddon.fit();
-    }, 300);
+    const debouncedFit = debounce(
+      () => {
+        fitAddon.fit();
+      },
+      300,
+      { leading: true, trailing: true }
+    );
     const resizeObserver = new ResizeObserver(debouncedFit);
     resizeObserver.observe(parent);
 
@@ -68,7 +72,7 @@ export const XTermLogViewer = memo(({ children, $xterm }: PropsWithChildren<{ $x
   }, [$xterm]);
 
   return (
-    <Box position="relative" w="full" h="full" borderWidth={1} borderRadius="base">
+    <Box position="relative" w="full" h="full" borderWidth={1} borderRadius="base" overflow="hidden">
       <Box ref={containerRef} position="absolute" inset={2} />
       {children}
       {!isAtBottom && (

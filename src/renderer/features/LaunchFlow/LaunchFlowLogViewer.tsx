@@ -23,7 +23,7 @@ export const LaunchFlowLogViewer = memo(() => {
   const invokeProcessStatus = useStore($invokeProcessStatus);
 
   return (
-    <XTermLogViewer $terminal={$invokeProcessXTerm}>
+    <XTermLogViewer $xterm={$invokeProcessXTerm}>
       <UIMemoryMonitor position="absolute" top={2} left={2} />
       <XTermLogViewerStatusIndicator
         isLoading={getIsInvokeProcessActive(invokeProcessStatus)}

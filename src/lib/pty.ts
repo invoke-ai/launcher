@@ -33,7 +33,7 @@ type CreateShellArgs = {
   cols?: number;
   rows?: number;
   onData: (id: string, data: string) => void;
-  onExit: (id: string, exitCode: number) => void;
+  onExit: (id: string, exitCode: number, signal?: number) => void;
 };
 
 type CreateCommandArgs = {
@@ -45,13 +45,13 @@ type CreateCommandArgs = {
   cols?: number;
   rows?: number;
   onData: (id: string, data: string) => void;
-  onExit: (id: string, exitCode: number) => void;
+  onExit: (id: string, exitCode: number, signal?: number) => void;
 };
 
 // Legacy type for backward compatibility
 type CreatePtyArgs = {
   onData: (id: string, data: string) => void;
-  onExit: (id: string, exitCode: number) => void;
+  onExit: (id: string, exitCode: number, signal?: number) => void;
   options?: PtyOptions;
 };
 
@@ -119,7 +119,7 @@ export class PtyManager {
     id: string,
     ptyProcess: pty.IPty,
     onData: (id: string, data: string) => void,
-    onExit: (id: string, exitCode: number) => void
+    onExit: (id: string, exitCode: number, signal?: number) => void
   ): PtyEntry => {
     const ansiSequenceBuffer = new AnsiSequenceBuffer();
     const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
@@ -132,12 +132,11 @@ export class PtyManager {
       onData(id, data);
     });
 
-    ptyProcess.onExit(({ exitCode }) => {
+    ptyProcess.onExit(({ exitCode, signal }) => {
       ansiSequenceBuffer.clear();
       historyBuffer.clear();
       this.ptys.delete(id);
-      onData(id, `\nProcess exited with code ${exitCode}.\r\n`);
-      onExit(id, exitCode);
+      onExit(id, exitCode, signal);
     });
 
     const entry = { id, process: ptyProcess, ansiSequenceBuffer, historyBuffer };

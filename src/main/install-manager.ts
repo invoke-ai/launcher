@@ -42,7 +42,7 @@ export class InstallManager {
     this.ipcLogger = arg.ipcLogger;
     this.ipcRawOutput = arg.ipcRawOutput;
     this.onStatusChange = arg.onStatusChange;
-    this.commandRunner = new CommandRunner({ maxHistorySize: 1000 });
+    this.commandRunner = new CommandRunner();
     this.status = { type: 'uninitialized', timestamp: Date.now() };
     this.log = new SimpleLogger((entry) => {
       this.ipcRawOutput(entry.message);

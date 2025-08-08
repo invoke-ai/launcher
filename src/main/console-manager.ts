@@ -2,8 +2,8 @@ import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
 import { ipcMain } from 'electron';
 import { nanoid } from 'nanoid';
 
-import type { PtyBufferConfig, PtyCallbacks, PtyEntry } from '@/lib/pty-utils';
-import { createPtyBuffers, createPtyProcess, setupPtyCallbacks } from '@/lib/pty-utils';
+import type { PtyCallbacks, PtyEntry } from '@/lib/pty-utils';
+import { createPtyBuffer, createPtyProcess, setupPtyCallbacks } from '@/lib/pty-utils';
 import {
   getActivateVenvCommand,
   getBundledBinPath,
@@ -14,25 +14,13 @@ import {
 import type { IpcEvents, IpcRendererEvents } from '@/shared/types';
 
 /**
- * Configuration options for ConsoleManager
- */
-interface ConsoleManagerOptions {
-  maxHistorySize?: number;
-}
-
-/**
  * ConsoleManager manages a singleton interactive shell PTY for the terminal/console.
  * Unlike command execution, this provides an interactive shell session.
  */
 export class ConsoleManager {
   private consoleEntry: PtyEntry | null = null;
-  private bufferConfig: PtyBufferConfig;
 
-  constructor(options: ConsoleManagerOptions = {}) {
-    this.bufferConfig = {
-      maxHistorySize: options.maxHistorySize ?? 2000,
-    };
-  }
+  constructor() {}
 
   /**
    * Create the singleton console PTY
@@ -52,7 +40,7 @@ export class ConsoleManager {
 
     const id = nanoid();
     const shell = getShell();
-    const buffers = createPtyBuffers(this.bufferConfig);
+    const ansiBuffer = createPtyBuffer();
 
     const process = createPtyProcess({
       command: shell,
@@ -74,13 +62,12 @@ export class ConsoleManager {
       },
     };
 
-    setupPtyCallbacks(process, ptyCallbacks, buffers);
+    setupPtyCallbacks(process, ptyCallbacks, ansiBuffer);
 
     this.consoleEntry = {
       id,
       process,
-      ansiSequenceBuffer: buffers.ansiBuffer,
-      historyBuffer: buffers.historyBuffer,
+      ansiSequenceBuffer: ansiBuffer,
     };
 
     // Initialize the console environment
@@ -139,23 +126,12 @@ export class ConsoleManager {
   }
 
   /**
-   * Get replay data from the console history
-   */
-  replay(): string | null {
-    if (!this.consoleEntry) {
-      return null;
-    }
-    return this.consoleEntry.historyBuffer.get().join('');
-  }
-
-  /**
    * Dispose of the console PTY
    */
   dispose(): void {
     if (this.consoleEntry) {
       this.consoleEntry.process.kill();
       this.consoleEntry.ansiSequenceBuffer.clear();
-      this.consoleEntry.historyBuffer.clear();
       this.consoleEntry = null;
     }
   }
@@ -185,9 +161,7 @@ export const createConsoleManager = (arg: {
 }): [ConsoleManager, () => void] => {
   const { ipc, sendToWindow } = arg;
 
-  const consoleManager = new ConsoleManager({
-    maxHistorySize: 2000,
-  });
+  const consoleManager = new ConsoleManager();
 
   const onData = (id: string, data: string) => {
     sendToWindow('terminal:output', id, data);
@@ -198,11 +172,6 @@ export const createConsoleManager = (arg: {
   };
 
   // IPC handlers - maintaining compatibility with existing terminal interface
-  ipc.handle('terminal:replay', (_) => {
-    const id = consoleManager.getConsoleId();
-    return id ? consoleManager.replay() : null;
-  });
-
   ipc.handle('terminal:create', (_, cwd) => {
     return consoleManager.createConsole({ onData, onExit }, cwd);
   });
@@ -226,7 +195,6 @@ export const createConsoleManager = (arg: {
 
   const cleanup = () => {
     consoleManager.dispose();
-    ipcMain.removeHandler('terminal:replay');
     ipcMain.removeHandler('terminal:create');
     ipcMain.removeHandler('terminal:dispose');
     ipcMain.removeHandler('terminal:resize');

@@ -213,8 +213,6 @@ export class InvokeManager {
     // Clear logs from previous session
     this.sendClearLogs?.();
 
-    this.log.info('Starting up...\r\n');
-
     const dirDetails = await getInstallationDetails(location);
     const firstRunMarkerPath = join(location, FIRST_RUN_MARKER_FILENAME);
     const isFirstRun = await pathExists(firstRunMarkerPath);

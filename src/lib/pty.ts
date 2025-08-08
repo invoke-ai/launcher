@@ -81,7 +81,29 @@ export class PtyManager {
       rows,
     });
 
-    return this.setupPtyEntry(ptyId, ptyProcess, onData, onExit);
+    const ansiSequenceBuffer = new AnsiSequenceBuffer();
+    const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
+
+    ptyProcess.onData((data) => {
+      const result = ansiSequenceBuffer.append(data);
+      if (!result.hasIncomplete) {
+        historyBuffer.push(result.complete);
+      }
+      onData(ptyId, data);
+    });
+
+    ptyProcess.onExit(({ exitCode, signal }) => {
+      ansiSequenceBuffer.clear();
+      historyBuffer.clear();
+      this.ptys.delete(ptyId);
+      onData(ptyId, `Process exited with code ${exitCode}${signal ? `, signal: ${signal}` : ''}`);
+      onExit(ptyId, exitCode, signal);
+    });
+
+    const entry = { id: ptyId, process: ptyProcess, ansiSequenceBuffer, historyBuffer };
+    this.ptys.set(ptyId, entry);
+
+    return entry;
   };
 
   /**
@@ -98,7 +120,28 @@ export class PtyManager {
       rows,
     });
 
-    return this.setupPtyEntry(ptyId, ptyProcess, onData, onExit);
+    const ansiSequenceBuffer = new AnsiSequenceBuffer();
+    const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
+
+    ptyProcess.onData((data) => {
+      const result = ansiSequenceBuffer.append(data);
+      if (!result.hasIncomplete) {
+        historyBuffer.push(result.complete);
+      }
+      onData(ptyId, data);
+    });
+
+    ptyProcess.onExit(({ exitCode, signal }) => {
+      ansiSequenceBuffer.clear();
+      historyBuffer.clear();
+      this.ptys.delete(ptyId);
+      onExit(ptyId, exitCode, signal);
+    });
+
+    const entry = { id: ptyId, process: ptyProcess, ansiSequenceBuffer, historyBuffer };
+    this.ptys.set(ptyId, entry);
+
+    return entry;
   };
 
   /**
@@ -110,39 +153,6 @@ export class PtyManager {
       onData,
       onExit,
     });
-  };
-
-  /**
-   * Common setup for PTY entries
-   */
-  private setupPtyEntry = (
-    id: string,
-    ptyProcess: pty.IPty,
-    onData: (id: string, data: string) => void,
-    onExit: (id: string, exitCode: number, signal?: number) => void
-  ): PtyEntry => {
-    const ansiSequenceBuffer = new AnsiSequenceBuffer();
-    const historyBuffer = new SlidingBuffer<string>(this.options.maxHistorySize);
-
-    ptyProcess.onData((data) => {
-      const result = ansiSequenceBuffer.append(data);
-      if (!result.hasIncomplete) {
-        historyBuffer.push(result.complete);
-      }
-      onData(id, data);
-    });
-
-    ptyProcess.onExit(({ exitCode, signal }) => {
-      ansiSequenceBuffer.clear();
-      historyBuffer.clear();
-      this.ptys.delete(id);
-      onExit(id, exitCode, signal);
-    });
-
-    const entry = { id, process: ptyProcess, ansiSequenceBuffer, historyBuffer };
-    this.ptys.set(id, entry);
-
-    return entry;
   };
 
   write = (id: string, data: string): void => {

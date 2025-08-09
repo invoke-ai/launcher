@@ -45,7 +45,7 @@ export default {
         }
       : {}),
   },
-  publish: null,
+  publish: 'github',
   electronFuses: {
     runAsNode: false,
     enableCookieEncryption: true,

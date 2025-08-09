@@ -1,4 +1,4 @@
-name: Build and Sign
+name: Build Signed Artifacts and Publish
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
         run: npm run download linux
 
       - name: Build application
-        run: npm run dist
+        run: npm run publish
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -67,7 +67,7 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERT_FILE_PASSWORD }}
 
       - name: Build and sign application
-        run: npm run dist
+        run: npm run publish
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -110,7 +110,7 @@ jobs:
         shell: bash
 
       - name: Build and sign application
-        run: npm run dist
+        run: npm run publish
         env:
           ENABLE_SIGNING: true
           SM_HOST: ${{ secrets.SM_HOST }}

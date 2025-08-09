@@ -1,4 +1,4 @@
-name: Build (Unsigned)
+name: Build Unsigned Artifacts
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
         run: npm run download linux
 
       - name: Build
-        run: npm run dist
+        run: npm run package
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
@@ -65,7 +65,7 @@ jobs:
         run: npm run download mac
 
       - name: Build
-        run: npm run dist
+        run: npm run package
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4
@@ -91,7 +91,7 @@ jobs:
         run: npm run download win
 
       - name: Build
-        run: npm run dist
+        run: npm run package
 
       - name: Publish artifact - GUI - UNSIGNED
         uses: actions/upload-artifact@v4

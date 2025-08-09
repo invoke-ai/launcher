@@ -107,6 +107,10 @@ export class InvokeManager {
       env.INVOKEAI_HOST = '0.0.0.0';
     }
 
+    if (this.store.get('enablePartialLoading')) {
+      env.INVOKEAI_ENABLE_PARTIAL_LOADING = '1';
+    }
+
     // Some torch operations are not yet supported on MPS. This tells torch to use CPU for those operations.
     // See: https://pytorch.org/docs/stable/mps_environment_variables.html
     if (process.platform === 'darwin') {

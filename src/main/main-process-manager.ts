@@ -1,11 +1,14 @@
 import { IpcEmitter, IpcListener } from '@electron-toolkit/typed-ipc/main';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
 import type Store from 'electron-store';
+import electronUpdater from 'electron-updater';
 import path from 'path';
 
 import { isDevelopment, manageWindowSize } from '@/main/util';
 import type { IpcEvents, IpcRendererEvents, MainProcessStatus, StoreData, WithTimestamp } from '@/shared/types';
+
+const { autoUpdater } = electronUpdater;
 
 const NOT_INITIALIZED_MESSAGE = 'Main window is not initialized';
 
@@ -98,6 +101,22 @@ export class MainProcessManager {
     window.once('ready-to-show', () => {
       this.updateStatus({ type: 'idle' });
       window.show();
+      autoUpdater.checkForUpdatesAndNotify();
+    });
+
+    autoUpdater.on('update-available', (e) => {
+      console.log('Update available:', e);
+    });
+
+    autoUpdater.on('update-downloaded', (e) => {
+      console.log('Update downloaded:', e);
+    });
+
+    autoUpdater.on('error', (error) => {
+      dialog.showErrorBox(
+        'Error checking for or downloading update: ',
+        error === null ? 'unknown' : (error.stack || error).toString()
+      );
     });
 
     // Disable a few things in production

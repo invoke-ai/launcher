@@ -29,7 +29,7 @@ export default {
     icon: 'assets/icons/icon.icns',
   },
   win: {
-    target: 'portable',
+    target: 'nsis',
     artifactName: '${productName}.${ext}',
     icon: 'assets/icons/icon.ico',
     ...(process.env.ENABLE_SIGNING

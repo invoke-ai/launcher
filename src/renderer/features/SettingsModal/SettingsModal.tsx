@@ -14,10 +14,13 @@ import {
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
 
-import { SettingsModalNotifyForPrereleaseUpdates } from '@/renderer/features/SettingsModal/SettingsModalNotifyForPrereleaseUpdates';
+import { SettingsModalInvokeNotifyForPrereleaseUpdates } from '@/renderer/features/SettingsModal/SettingsModalInvokeNotifyForPrereleaseUpdates';
+import { SettingsModalInvokeServerMode } from '@/renderer/features/SettingsModal/SettingsModalInvokeServerMode';
 import { SettingsModalResetButton } from '@/renderer/features/SettingsModal/SettingsModalResetButton';
-import { SettingsModalServerMode } from '@/renderer/features/SettingsModal/SettingsModalServerMode';
 import { $isSettingsOpen } from '@/renderer/features/SettingsModal/state';
+
+import { SettingsModalLauncherAutoUpdate } from './SettingsModalLauncherAutoUpdate';
+import { SettingsModalLauncherPrerelease } from './SettingsModalLauncherPrereleaseOptIn';
 
 export const SettingsModal = memo(() => {
   const isOpen = useStore($isSettingsOpen);
@@ -33,9 +36,13 @@ export const SettingsModal = memo(() => {
         <ModalHeader>Settings</ModalHeader>
         <ModalCloseButton />
         <ModalBody as={Flex} flexDir="column" gap={4} w="full" h="full" minH={32}>
-          <SettingsModalServerMode />
+          <SettingsModalInvokeServerMode />
           <Divider />
-          <SettingsModalNotifyForPrereleaseUpdates />
+          <SettingsModalInvokeNotifyForPrereleaseUpdates />
+          <Divider />
+          <SettingsModalLauncherAutoUpdate />
+          <Divider />
+          <SettingsModalLauncherPrerelease />
         </ModalBody>
         <ModalFooter pt={16}>
           <SettingsModalResetButton />

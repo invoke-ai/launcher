@@ -59,4 +59,5 @@ export default {
     onlyLoadAppFromAsar: true,
     resetAdHocDarwinSignature: true,
   },
+  electronUpdaterCompatibility: '>= 2.16',
 } satisfies Configuration;

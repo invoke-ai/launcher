@@ -11,7 +11,7 @@ export const SettingsModalResetButton = memo(() => {
   }, []);
   return (
     <Button size="sm" aria-label="Settings" variant="link" onClick={onClick} colorScheme="error">
-      Reset Launcher
+      Reset Launcher Settings
     </Button>
   );
 });

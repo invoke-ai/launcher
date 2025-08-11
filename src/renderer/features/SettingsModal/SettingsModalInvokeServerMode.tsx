@@ -4,7 +4,7 @@ import { memo, useCallback } from 'react';
 
 import { persistedStoreApi } from '@/renderer/services/store';
 
-export const SettingsModalServerMode = memo(() => {
+export const SettingsModalInvokeServerMode = memo(() => {
   const { serverMode } = useStore(persistedStoreApi.$atom);
   const onChange = useCallback(() => {
     persistedStoreApi.setKey('serverMode', !persistedStoreApi.$atom.get().serverMode);
@@ -17,10 +17,10 @@ export const SettingsModalServerMode = memo(() => {
         <Checkbox isChecked={serverMode} onChange={onChange} />
       </Flex>
       <FormHelperText>
-        When enabled, the launcher will run Invoke in &quot;headless&quot; mode with no UI. You can access Invoke on any
-        computer on your local network at the displayed URL.
+        Run Invoke in &quot;headless&quot; mode with no UI. You can access Invoke on any computer on your local network
+        at the displayed URL.
       </FormHelperText>
     </FormControl>
   );
 });
-SettingsModalServerMode.displayName = 'SettingsModalServerMode';
+SettingsModalInvokeServerMode.displayName = 'SettingsModalInvokeServerMode';

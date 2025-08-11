@@ -45,7 +45,11 @@ export default {
         }
       : {}),
   },
-  publish: 'github',
+  publish: {
+    provider: 'github',
+    owner: 'invoke-ai',
+    repo: 'launcher',
+  },
   electronFuses: {
     runAsNode: false,
     enableCookieEncryption: true,

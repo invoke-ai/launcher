@@ -31,7 +31,14 @@ export default {
     },
   ],
   win: {
+    target: ['nsis'],
     ...getWindowsSigningOptions(),
+  },
+  mac: {
+    target: ['zip'],
+  },
+  linux: {
+    target: ['AppImage'],
   },
   publish: {
     provider: 'github',

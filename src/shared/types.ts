@@ -51,8 +51,8 @@ export type StoreData = {
   notifyForPrereleaseUpdates: boolean;
   launcherWindowProps?: WindowProps;
   appWindowProps?: WindowProps;
-  launcherAutoUpdate?: boolean;
-  launcherPrerelease?: boolean;
+  launcherAutoUpdate: boolean;
+  launcherPrerelease: boolean;
 };
 
 // The electron store uses JSON schema to validate its data.

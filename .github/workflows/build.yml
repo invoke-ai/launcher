@@ -40,7 +40,7 @@ jobs:
       - name: Build
         run: npm run package
 
-      - name: Publish artifact - GUI - UNSIGNED
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: 'linux-artifacts-unsigned'
@@ -72,7 +72,7 @@ jobs:
       - name: Build
         run: npm run package
 
-      - name: Publish artifact - GUI - UNSIGNED
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: 'macos-artifacts-unsigned'
@@ -105,7 +105,7 @@ jobs:
       - name: Build
         run: npm run package
 
-      - name: Publish artifact - GUI - UNSIGNED
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: 'windows-artifacts-unsigned'

@@ -21,11 +21,20 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
       return;
     }
     const { updateInfo } = updateCheckResult;
+    const messageLines = [
+      'A Launcher update is available.',
+      '',
+      `Current version: ${autoUpdater.currentVersion}`,
+      `Available version: ${updateInfo.version}.`,
+      '',
+      'The update will be downloaded in the background. You will be notified when the download is complete and the update is ready to install.',
+    ];
+
     const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'question',
       title: 'Update Available',
-      message: `A Launcher update is available: ${updateInfo.version}. Download and install?`,
-      buttons: ['Yes', 'No'],
+      message: messageLines.join('\n'),
+      buttons: ['Download', 'Cancel'],
     });
 
     if (response !== 0) {
@@ -44,8 +53,9 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
 
     await dialog.showMessageBox(mainWindow, {
       type: 'info',
-      title: 'Update Ready to Install',
-      message: 'The Launcher will restart and install the update.',
+      title: 'Update Downloaded',
+      message: 'Update downloaded and ready to install.',
+      buttons: ['Restart and Install'],
     });
 
     autoUpdater.quitAndInstall();

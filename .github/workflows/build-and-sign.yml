@@ -52,7 +52,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 'linux-artifacts-signed'
-          path: 'dist/*'
+          path: |
+            dist/*.AppImage
+            dist/*.appimage
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
           retention-days: 90
 
   build-macos:
@@ -96,7 +101,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 'macos-artifacts-signed'
-          path: 'dist/*'
+          path: |
+            dist/*.dmg
+            dist/*.DMG
+            dist/*.zip
+            dist/*.ZIP
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
           retention-days: 90
 
   build-windows:
@@ -144,5 +156,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 'windows-artifacts-signed'
-          path: 'dist/*'
+          path: |
+            dist/*.exe
+            dist/*.EXE
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
           retention-days: 90

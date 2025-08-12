@@ -44,7 +44,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 'linux-artifacts-unsigned'
-          path: 'dist/*'
+          path: |
+            dist/*.AppImage
+            dist/*.appimage
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
 
   build-macos:
     runs-on: macos-latest
@@ -71,7 +76,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 'macos-artifacts-unsigned'
-          path: 'dist/*'
+          path: |
+            dist/*.dmg
+            dist/*.DMG
+            dist/*.zip
+            dist/*.ZIP
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
 
   build-windows:
     runs-on: windows-latest
@@ -97,4 +109,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 'windows-artifacts-unsigned'
-          path: 'dist/*'
+          path: |
+            dist/*.exe
+            dist/*.EXE
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml

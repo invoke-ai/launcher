@@ -2,11 +2,26 @@ name: Build Signed Artifacts and Publish
 
 on:
   workflow_dispatch:
-  release:
-    types: [released]
+    inputs:
+      build_linux:
+        description: 'Build for Linux'
+        required: false
+        default: true
+        type: boolean
+      build_macos:
+        description: 'Build for macOS'
+        required: false
+        default: true
+        type: boolean
+      build_windows:
+        description: 'Build for Windows'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   build-linux:
+    if: github.event.inputs.build_linux == 'true'
     runs-on: ubuntu-latest
     environment: code-signing
     timeout-minutes: 15
@@ -41,6 +56,7 @@ jobs:
           retention-days: 90
 
   build-macos:
+    if: github.event.inputs.build_macos == 'true'
     runs-on: macos-latest
     environment: code-signing
     timeout-minutes: 15
@@ -84,6 +100,7 @@ jobs:
           retention-days: 90
 
   build-windows:
+    if: github.event.inputs.build_windows == 'true'
     runs-on: windows-latest
     environment: code-signing
     timeout-minutes: 15

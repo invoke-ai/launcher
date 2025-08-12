@@ -4,7 +4,11 @@ import { atom } from 'nanostores';
 import { emitter, ipc } from '@/renderer/services/ipc';
 import type { DirDetails, OperatingSystem, StoreData } from '@/shared/types';
 
-const getDefaults = (): StoreData => ({ serverMode: false, notifyForPrereleaseUpdates: true });
+const getDefaults = (): StoreData => ({
+  serverMode: false,
+  notifyForPrereleaseUpdates: true,
+  optInToLauncherPrereleases: false,
+});
 
 /**
  * Private atom that holds the store data. Use `persistedStoreApi` to interact with the store.

@@ -16,11 +16,9 @@ import { memo, useCallback } from 'react';
 
 import { SettingsModalInvokeNotifyForPrereleaseUpdates } from '@/renderer/features/SettingsModal/SettingsModalInvokeNotifyForPrereleaseUpdates';
 import { SettingsModalInvokeServerMode } from '@/renderer/features/SettingsModal/SettingsModalInvokeServerMode';
+import { SettingsModalOptInToLauncherPrereleases } from '@/renderer/features/SettingsModal/SettingsModalOptInToLauncherPrereleases';
 import { SettingsModalResetButton } from '@/renderer/features/SettingsModal/SettingsModalResetButton';
 import { $isSettingsOpen } from '@/renderer/features/SettingsModal/state';
-
-import { SettingsModalLauncherAutoUpdate } from './SettingsModalLauncherAutoUpdate';
-import { SettingsModalLauncherPrerelease } from './SettingsModalLauncherPrereleaseOptIn';
 
 export const SettingsModal = memo(() => {
   const isOpen = useStore($isSettingsOpen);
@@ -40,9 +38,7 @@ export const SettingsModal = memo(() => {
           <Divider />
           <SettingsModalInvokeNotifyForPrereleaseUpdates />
           <Divider />
-          <SettingsModalLauncherAutoUpdate />
-          <Divider />
-          <SettingsModalLauncherPrerelease />
+          <SettingsModalOptInToLauncherPrereleases />
         </ModalBody>
         <ModalFooter pt={16}>
           <SettingsModalResetButton />

@@ -51,8 +51,7 @@ export type StoreData = {
   notifyForPrereleaseUpdates: boolean;
   launcherWindowProps?: WindowProps;
   appWindowProps?: WindowProps;
-  launcherAutoUpdate: boolean;
-  launcherPrerelease: boolean;
+  optInToLauncherPrereleases: boolean;
 };
 
 // The electron store uses JSON schema to validate its data.
@@ -94,11 +93,7 @@ export const schema: Schema<StoreData> = {
   },
   launcherWindowProps: winSizePropsSchema,
   appWindowProps: winSizePropsSchema,
-  launcherAutoUpdate: {
-    type: 'boolean',
-    default: true,
-  },
-  launcherPrerelease: {
+  optInToLauncherPrereleases: {
     type: 'boolean',
     default: false,
   },

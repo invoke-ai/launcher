@@ -2,16 +2,12 @@ import { IpcEmitter, IpcListener } from '@electron-toolkit/typed-ipc/main';
 import { app, BrowserWindow, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
 import type Store from 'electron-store';
-import electronUpdater from 'electron-updater';
 import path from 'path';
-import semver from 'semver';
 
 import { isDevelopment, manageWindowSize } from '@/main/util';
 import type { IpcEvents, IpcRendererEvents, MainProcessStatus, StoreData, WithTimestamp } from '@/shared/types';
 
-const { autoUpdater } = electronUpdater;
-autoUpdater.logger = console;
-autoUpdater.forceDevUpdateConfig = isDevelopment();
+import { checkForUpdates } from './updater';
 
 const NOT_INITIALIZED_MESSAGE = 'Main window is not initialized';
 
@@ -104,16 +100,7 @@ export class MainProcessManager {
     window.once('ready-to-show', () => {
       this.updateStatus({ type: 'idle' });
       window.show();
-      setInterval(
-        () => {
-          if (this.store.get('launcherAutoUpdate')) {
-            autoUpdater.allowPrerelease = this.store.get('launcherPrerelease') ?? false;
-            autoUpdater.checkForUpdatesAndNotify();
-          }
-        },
-        1000
-        // 1000 * 60 * 60
-      ); // Check for updates every hour
+      checkForUpdates(window);
     });
 
     // Disable a few things in production
@@ -180,5 +167,3 @@ export class MainProcessManager {
     this.closeWindow();
   };
 }
-
-console.log(semver.prerelease(autoUpdater.currentVersion)?.[0]);

@@ -16,7 +16,7 @@ export const SettingsModalInvokeNotifyForPrereleaseUpdates = memo(() => {
       <Flex w="full" alignItems="center" justifyContent="space-between">
         <FormLabel display="flex" alignItems="center" gap={2}>
           <Icon as={PiFlaskFill} color="invokeYellow.300" />
-          Notify for Invoke Prerelease Updates
+          Notify for Invoke Prereleases
         </FormLabel>
         <Checkbox isChecked={notifyForPrereleaseUpdates} onChange={onChange} />
       </Flex>

@@ -6,10 +6,10 @@ import { PiFlaskFill } from 'react-icons/pi';
 
 import { persistedStoreApi } from '@/renderer/services/store';
 
-export const SettingsModalLauncherPrerelease = memo(() => {
-  const { launcherPrerelease } = useStore(persistedStoreApi.$atom);
+export const SettingsModalOptInToLauncherPrereleases = memo(() => {
+  const { optInToLauncherPrereleases } = useStore(persistedStoreApi.$atom);
   const onChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    persistedStoreApi.setKey('launcherPrerelease', e.target.checked);
+    persistedStoreApi.setKey('optInToLauncherPrereleases', e.target.checked);
   }, []);
 
   return (
@@ -17,14 +17,15 @@ export const SettingsModalLauncherPrerelease = memo(() => {
       <Flex w="full" alignItems="center" justifyContent="space-between">
         <FormLabel display="flex" alignItems="center" gap={2}>
           <Icon as={PiFlaskFill} color="invokeYellow.300" />
-          Opt-in to Launcher Prerelease Updates
+          Opt-in to Launcher Prereleases
         </FormLabel>
-        <Checkbox isChecked={launcherPrerelease} onChange={onChange} />
+        <Checkbox isChecked={optInToLauncherPrereleases} onChange={onChange} />
       </Flex>
       <FormHelperText>
-        Install Launcher prerelease versions when available. Enable if you want to help test the Launcher.
+        Check for prerelease versions of the launcher on startup. If disabled, the launcher will only check for stable
+        releases.
       </FormHelperText>
     </FormControl>
   );
 });
-SettingsModalLauncherPrerelease.displayName = 'SettingsModalLauncherPrerelease';
+SettingsModalOptInToLauncherPrereleases.displayName = 'SettingsModalOptInToLauncherPrereleases';

@@ -34,9 +34,6 @@ export default {
     target: ['nsis'],
     ...getWindowsSigningOptions(),
   },
-  mac: {
-    target: ['zip'],
-  },
   linux: {
     target: ['AppImage'],
   },

@@ -12,7 +12,7 @@ autoUpdater.autoDownload = false;
 
 export const checkForUpdates = async (mainWindow: BrowserWindow) => {
   try {
-    autoUpdater.allowPrerelease = store.get('launcherPrerelease');
+    autoUpdater.allowPrerelease = store.get('optInToLauncherPrereleases');
     const updateCheckResult = await autoUpdater.checkForUpdates();
     if (!updateCheckResult) {
       return;

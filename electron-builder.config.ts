@@ -1,4 +1,20 @@
-import type { Configuration } from 'electron-builder';
+import type { Configuration, WindowsConfiguration } from 'electron-builder';
+
+const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
+  if (process.env.ENABLE_SIGNING) {
+    return {
+      signtoolOptions: {
+        // Delegate signing to our own script. This script is called once for each executable. The script contains
+        // logic to skip signing for executables that are not meant to be signed, such as the bundled uv binary.
+        sign: './scripts/customSign.js',
+        // We use a custom signing script to handle the signing process, so the selected algorithms are essentially
+        // placeholders. We only want to sign the executable once, so we select a single algo.
+        signingHashAlgorithms: ['sha256'],
+      },
+    };
+  }
+  return {};
+};
 
 export default {
   appId: 'com.invoke.invoke-community-edition',
@@ -15,18 +31,7 @@ export default {
     },
   ],
   win: {
-    ...(process.env.ENABLE_SIGNING
-      ? {
-          signtoolOptions: {
-            // Delegate signing to our own script. This script is called once for each executable. The script contains
-            // logic to skip signing for executables that are not meant to be signed, such as the bundled uv binary.
-            sign: './scripts/customSign.js',
-            // We use a custom signing script to handle the signing process, so the selected algorithms are essentially
-            // placeholders. We only want to sign the executable once, so we select a single algo.
-            signingHashAlgorithms: ['sha256'],
-          },
-        }
-      : {}),
+    ...getWindowsSigningOptions(),
   },
   publish: {
     provider: 'github',

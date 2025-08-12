@@ -1,4 +1,3 @@
-/* eslint-disable no-template-curly-in-string */
 import type { Configuration } from 'electron-builder';
 
 export default {
@@ -15,23 +14,7 @@ export default {
       filter: 'uv*',
     },
   ],
-  linux: {
-    target: 'AppImage',
-    artifactName: '${productName}.${ext}',
-    icon: 'assets/icons/icon.png',
-  },
-  mac: {
-    target: {
-      target: 'dmg',
-      arch: ['arm64'],
-    },
-    artifactName: '${productName}.${ext}',
-    icon: 'assets/icons/icon.icns',
-  },
   win: {
-    target: 'nsis',
-    artifactName: '${productName}.${ext}',
-    icon: 'assets/icons/icon.ico',
     ...(process.env.ENABLE_SIGNING
       ? {
           signtoolOptions: {

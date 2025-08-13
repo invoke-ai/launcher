@@ -32,6 +32,7 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backing-store-limit');
 
 const main = new MainProcessManager({ store });
+let isShuttingDown = false;
 
 // Create ConsoleManager for terminal functionality
 const [, cleanupConsole] = createConsoleManager({
@@ -59,9 +60,21 @@ main.ipc.handle('invoke-process:get-status', () => invoke.getStatus());
  * Cleans up any running processes (installation or invoke).
  */
 async function cleanup() {
-  cleanupInstall();
-  await cleanupInvoke();
-  cleanupConsole();
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
+  const results = await Promise.allSettled([cleanupInstall(), cleanupInvoke(), cleanupConsole()]);
+  const errors = results
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map((result) => result.reason);
+
+  if (errors.length > 0) {
+    console.error('Error cleaning up processes:', errors);
+  } else {
+    console.debug('Successfully cleaned up all processes');
+  }
   main.cleanup();
 }
 
@@ -75,7 +88,9 @@ app.on('ready', main.createWindow);
  * Quit when all windows are closed.
  */
 app.on('window-all-closed', () => {
-  app.quit();
+  if (!isShuttingDown) {
+    app.quit();
+  }
 });
 
 /**

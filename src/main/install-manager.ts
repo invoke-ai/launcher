@@ -445,12 +445,15 @@ export class InstallManager {
     this.log.info(c.green.bold('Installation completed successfully\r\n'));
   };
 
-  cancelInstall = (): void => {
+  /**
+   * Cancel any running installation and wait for process to exit
+   */
+  cancelInstall = async (): Promise<void> => {
     // Check if an installation is actually in progress
     const installInProgress = this.status.type === 'installing' || this.status.type === 'starting';
 
     if (!installInProgress) {
-      this.log.warn(c.yellow('No installation to cancel\r\n'));
+      this.log.debug('No installation to cancel\r\n');
       return;
     }
 
@@ -460,9 +463,9 @@ export class InstallManager {
     this.log.warn(c.yellow('Canceling installation...\r\n'));
     this.updateStatus({ type: 'canceling' });
 
-    // If there's a current command running, kill it
+    // If there's a current command running, kill it and wait
     if (this.commandRunner.isRunning()) {
-      this.commandRunner.kill();
+      await this.commandRunner.kill();
     }
   };
 }
@@ -492,15 +495,15 @@ export const createInstallManager = (arg: {
   ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
     installManager.startInstall(installationPath, gpuType, version, repair);
   });
-  ipc.handle('install-process:cancel-install', () => {
-    installManager.cancelInstall();
+  ipc.handle('install-process:cancel-install', async () => {
+    await installManager.cancelInstall();
   });
   ipc.handle('install-process:resize', (_, cols, rows) => {
     installManager.resizePty(cols, rows);
   });
 
-  const cleanupInstallManager = () => {
-    installManager.cancelInstall();
+  const cleanupInstallManager = async () => {
+    await installManager.cancelInstall();
     ipcMain.removeHandler('install-process:start-install');
     ipcMain.removeHandler('install-process:cancel-install');
     ipcMain.removeHandler('install-process:resize');

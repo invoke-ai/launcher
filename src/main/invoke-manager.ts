@@ -250,7 +250,10 @@ export class InvokeManager {
       window.webContents.insertCSS(`* { outline: none; }`);
       window.show();
     });
-    window.on('close', this.exitInvoke);
+
+    window.on('close', () => {
+      this.exitInvoke();
+    });
 
     // Add crash/OOM detection
     let unresponsiveTimestamp: number | null = null;
@@ -348,11 +351,14 @@ export class InvokeManager {
     this.updateStatus({ type: 'running', data: this.lastRunningData });
   };
 
-  exitInvoke = () => {
+  /**
+   * Exit Invoke and wait for process to properly terminate
+   */
+  exitInvoke = async (): Promise<void> => {
     this.log.info(c.cyan('Shutting down...\r\n'));
     this.updateStatus({ type: 'exiting' });
+    await this.killProcess();
     this.closeWindow();
-    this.killProcess();
   };
 
   closeWindow = (): void => {
@@ -365,11 +371,14 @@ export class InvokeManager {
     this.window = null;
   };
 
-  killProcess = (): void => {
+  /**
+   * Kill the Invoke process and wait for it to exit
+   */
+  killProcess = async (): Promise<void> => {
     if (!this.commandRunner.isRunning()) {
       return;
     }
-    this.commandRunner.kill();
+    await this.commandRunner.kill(10_000);
   };
 }
 
@@ -402,8 +411,8 @@ export const createInvokeManager = (arg: {
   ipc.handle('invoke-process:start-invoke', (_, installLocation) => {
     invokeManager.startInvoke(installLocation);
   });
-  ipc.handle('invoke-process:exit-invoke', () => {
-    invokeManager.exitInvoke();
+  ipc.handle('invoke-process:exit-invoke', async () => {
+    await invokeManager.exitInvoke();
   });
   ipc.handle('invoke-process:reopen-window', () => {
     invokeManager.reopenWindow();
@@ -412,10 +421,10 @@ export const createInvokeManager = (arg: {
     invokeManager.resizePty(cols, rows);
   });
 
-  const cleanupInvokeManager = () => {
+  const cleanupInvokeManager = async () => {
     const status = invokeManager.getStatus();
     if (status.type === 'running' || status.type === 'starting') {
-      invokeManager.exitInvoke();
+      await invokeManager.exitInvoke();
     }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');

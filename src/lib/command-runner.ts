@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 
 import type { PtyCallbacks, PtyEntry, PtyProcessOptions } from '@/lib/pty-utils';
-import { createPtyBuffer, createPtyProcess, setupPtyCallbacks } from '@/lib/pty-utils';
+import { createPtyBuffer, createPtyProcess, killPtyProcessAsync, setupPtyCallbacks } from '@/lib/pty-utils';
 
 /**
  * Options for running a command
@@ -34,7 +34,7 @@ export class CommandRunner {
    * Run a command with PTY support
    * Returns a promise that resolves when the command completes
    */
-  runCommand(
+  async runCommand(
     command: string,
     args: string[],
     options?: CommandOptions,
@@ -42,7 +42,7 @@ export class CommandRunner {
   ): Promise<{ exitCode: number; signal?: number }> {
     // Kill any existing command first
     if (this.currentEntry) {
-      this.kill();
+      await this.kill();
     }
 
     return new Promise((resolve, reject) => {
@@ -92,13 +92,14 @@ export class CommandRunner {
   }
 
   /**
-   * Kill the current running command
+   * Kill the current running command and wait for it to exit
    */
-  kill(signal?: string): void {
+  async kill(timeout?: number): Promise<void> {
     if (this.currentEntry) {
-      this.currentEntry.process.kill(signal);
-      this.currentEntry.ansiSequenceBuffer.clear();
+      const entry = this.currentEntry;
       this.currentEntry = null;
+      entry.ansiSequenceBuffer.clear();
+      await killPtyProcessAsync(entry.process, timeout);
     }
   }
 
@@ -135,9 +136,9 @@ export class CommandRunner {
   }
 
   /**
-   * Dispose of the command runner and kill any running process
+   * Dispose of the command runner and wait for process to exit
    */
-  dispose(): void {
-    this.kill();
+  async dispose(): Promise<void> {
+    await this.kill();
   }
 }

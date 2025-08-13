@@ -73,6 +73,7 @@ export class MainProcessManager {
     const window = new BrowserWindow({
       minWidth: 800,
       minHeight: 600,
+      useContentSize: true,
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: true,

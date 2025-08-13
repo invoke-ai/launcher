@@ -182,6 +182,12 @@ export class InvokeManager {
             urlWatcher.checkForMatch(data);
           },
           onExit: (exitCode, signal) => {
+            if (this.status.type === 'exiting') {
+              // If we are exiting, don't log the exit code/signal
+              this.updateStatus({ type: 'exited' });
+              this.log.info(c.green.bold('Invoke shut down normally\r\n'));
+              return;
+            }
             if (exitCode === 0) {
               // Process exited on its own with no error
               this.updateStatus({ type: 'exited' });

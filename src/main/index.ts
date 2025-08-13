@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, dialog, shell } from 'electron';
 import { join } from 'path';
 import { assert } from 'tsafe';
 
@@ -72,13 +72,10 @@ async function cleanup() {
 app.on('ready', main.createWindow);
 
 /**
- * Quit when all windows are closed, except on macOS. There, it's common for applications and their menu bar to stay
- * active until the user quits explicitly with Cmd + Q.
+ * Quit when all windows are closed.
  */
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });
 
 /**
@@ -88,16 +85,6 @@ app.on('window-all-closed', () => {
  * result in orphaned or improperly cleaned up processes?
  */
 app.on('before-quit', cleanup);
-
-/**
- * On macOS, it's common to re-create a window in the app when the dock icon is clicked and there are no other windows
- * open.
- */
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    main.createWindow();
-  }
-});
 
 //#endregion
 

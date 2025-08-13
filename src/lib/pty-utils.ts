@@ -1,3 +1,4 @@
+import childProcess from 'child_process';
 import * as pty from 'node-pty';
 
 import { AnsiSequenceBuffer } from '@/lib/ansi-sequence-buffer';
@@ -113,7 +114,11 @@ export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000
     }, timeout);
 
     try {
-      ptyProcess.kill();
+      if (process.platform === 'win32') {
+        childProcess.exec(`taskkill /PID ${ptyProcess.pid} /F /T`);
+      } else {
+        ptyProcess.kill('SIGTERM');
+      }
     } catch (error) {
       console.warn('Error killing PTY process:', error);
       cleanup();

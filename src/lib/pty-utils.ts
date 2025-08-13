@@ -50,6 +50,7 @@ export function createPtyProcess(options: PtyProcessOptions): pty.IPty {
     env: { ...process.env, ...DEFAULT_ENV, ...options.env },
     cols: options.cols,
     rows: options.rows,
+    useConpty: false,
   });
 }
 

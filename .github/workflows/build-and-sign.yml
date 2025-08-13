@@ -19,6 +19,9 @@ on:
         default: true
         type: boolean
 
+env:
+  NODE_VERSION: '22'
+
 jobs:
   build-linux:
     if: github.event.inputs.build_linux == 'true'
@@ -34,13 +37,37 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Cache node modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.electron
+            ~/.electron-gyp
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      - name: Get UV hash
+        id: uv-hash
+        run: |
+          echo "hash=$(node -e "console.log(require('./package.json').uv.linux.sha256)")" >> $GITHUB_OUTPUT
+
+      - name: Cache UV binaries
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: assets/bin
+          key: ${{ runner.os }}-uv-${{ steps.uv-hash.outputs.hash }}
+
       - name: Download uv
+        if: steps.cache-uv.outputs.cache-hit != 'true'
         run: npm run download linux
 
       - name: Build application
@@ -74,13 +101,37 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Cache node modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.electron
+            ~/.electron-gyp
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      - name: Get UV hash
+        id: uv-hash
+        run: |
+          echo "hash=$(node -e "console.log(require('./package.json').uv.mac.sha256)")" >> $GITHUB_OUTPUT
+
+      - name: Cache UV binaries
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: assets/bin
+          key: ${{ runner.os }}-uv-${{ steps.uv-hash.outputs.hash }}
+
       - name: Download uv
+        if: steps.cache-uv.outputs.cache-hit != 'true'
         run: npm run download mac
 
       - name: Import macOS certificates
@@ -125,13 +176,38 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Cache node modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.electron
+            ~/.electron-gyp
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      - name: Get UV hash
+        id: uv-hash
+        shell: bash
+        run: |
+          echo "hash=$(node -e "console.log(require('./package.json').uv.win.sha256)")" >> $GITHUB_OUTPUT
+
+      - name: Cache UV binaries
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: assets/bin
+          key: ${{ runner.os }}-uv-${{ steps.uv-hash.outputs.hash }}
+
       - name: Download uv
+        if: steps.cache-uv.outputs.cache-hit != 'true'
         run: npm run download win
 
       - name: Set tool paths for signing

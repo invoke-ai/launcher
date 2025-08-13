@@ -81,3 +81,42 @@ export function setupPtyCallbacks(
 export function createPtyBuffer() {
   return new AnsiSequenceBuffer();
 }
+
+/**
+ * Kill a PTY process and wait for it to exit with timeout support
+ * @param ptyProcess The PTY process to kill
+ * @param timeout Maximum time to wait in milliseconds (default: 5000)
+ * @returns Promise that resolves when process exits or timeout occurs
+ */
+export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    let resolved = false;
+
+    const cleanup = () => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      resolve();
+    };
+
+    ptyProcess.onExit(() => cleanup());
+
+    timeoutId = setTimeout(() => {
+      console.warn(`PTY process did not exit within ${timeout}ms, continuing anyway`);
+      cleanup();
+    }, timeout);
+
+    try {
+      ptyProcess.kill();
+    } catch (error) {
+      console.warn('Error killing PTY process:', error);
+      cleanup();
+    }
+  });
+}

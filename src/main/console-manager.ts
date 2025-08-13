@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { nanoid } from 'nanoid';
 
 import type { PtyCallbacks, PtyEntry } from '@/lib/pty-utils';
-import { createPtyBuffer, createPtyProcess, setupPtyCallbacks } from '@/lib/pty-utils';
+import { createPtyBuffer, createPtyProcess, killPtyProcessAsync, setupPtyCallbacks } from '@/lib/pty-utils';
 import {
   getActivateVenvCommand,
   getBundledBinPath,
@@ -128,11 +128,12 @@ export class ConsoleManager {
   /**
    * Dispose of the console PTY
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
     if (this.consoleEntry) {
-      this.consoleEntry.process.kill();
-      this.consoleEntry.ansiSequenceBuffer.clear();
+      const entry = this.consoleEntry;
       this.consoleEntry = null;
+      await killPtyProcessAsync(entry.process);
+      entry.ansiSequenceBuffer.clear();
     }
   }
 
@@ -176,8 +177,8 @@ export const createConsoleManager = (arg: {
     return consoleManager.createConsole({ onData, onExit }, cwd);
   });
 
-  ipc.handle('terminal:dispose', (_) => {
-    consoleManager.dispose();
+  ipc.handle('terminal:dispose', async (_) => {
+    await consoleManager.dispose();
   });
 
   ipc.handle('terminal:resize', (_, id, cols, rows) => {
@@ -193,8 +194,8 @@ export const createConsoleManager = (arg: {
     return id ? [id] : [];
   });
 
-  const cleanup = () => {
-    consoleManager.dispose();
+  const cleanup = async () => {
+    await consoleManager.dispose();
     ipcMain.removeHandler('terminal:create');
     ipcMain.removeHandler('terminal:dispose');
     ipcMain.removeHandler('terminal:resize');

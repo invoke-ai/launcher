@@ -27,7 +27,7 @@ env:
 
 jobs:
   build-linux:
-    if: github.event.inputs.build_linux == 'true'
+    if: github.event_name == 'push' || github.event.inputs.build_linux == 'true'
     runs-on: ubuntu-latest
     environment: code-signing
     timeout-minutes: 15
@@ -91,7 +91,7 @@ jobs:
           retention-days: 90
 
   build-macos:
-    if: github.event.inputs.build_macos == 'true'
+    if: github.event_name == 'push' || github.event.inputs.build_macos == 'true'
     runs-on: macos-latest
     environment: code-signing
     timeout-minutes: 15
@@ -166,7 +166,7 @@ jobs:
           retention-days: 90
 
   build-windows:
-    if: github.event.inputs.build_windows == 'true'
+    if: github.event_name == 'push' || github.event.inputs.build_windows == 'true'
     runs-on: windows-latest
     environment: code-signing
     timeout-minutes: 15

@@ -34,6 +34,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Generate lockfile hash without version
+        id: lockfile-hash
+        run: echo "hash=$(node .github/scripts/generate-lockfile-hash.js)" >> $GITHUB_OUTPUT
+
       - name: Cache node modules
         id: cache-node-modules
         uses: actions/cache@v4
@@ -42,7 +46,7 @@ jobs:
             node_modules
             ~/.electron
             ~/.electron-gyp
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ steps.lockfile-hash.outputs.hash }}
 
       - name: Install deps
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
@@ -90,6 +94,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Generate lockfile hash without version
+        id: lockfile-hash
+        run: echo "hash=$(node .github/scripts/generate-lockfile-hash.js)" >> $GITHUB_OUTPUT
+
       - name: Cache node modules
         id: cache-node-modules
         uses: actions/cache@v4
@@ -98,7 +106,7 @@ jobs:
             node_modules
             ~/.electron
             ~/.electron-gyp
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ steps.lockfile-hash.outputs.hash }}
 
       - name: Install deps
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
@@ -147,6 +155,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Generate lockfile hash without version
+        id: lockfile-hash
+        shell: bash
+        run: echo "hash=$(node .github/scripts/generate-lockfile-hash.js)" >> $GITHUB_OUTPUT
+
       - name: Cache node modules
         id: cache-node-modules
         uses: actions/cache@v4
@@ -155,7 +168,7 @@ jobs:
             node_modules
             ~/.electron
             ~/.electron-gyp
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ steps.lockfile-hash.outputs.hash }}
 
       - name: Install deps
         if: steps.cache-node-modules.outputs.cache-hit != 'true'

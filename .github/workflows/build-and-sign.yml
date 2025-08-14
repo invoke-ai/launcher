@@ -1,6 +1,9 @@
 name: Build Signed Artifacts and Publish
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       build_linux:

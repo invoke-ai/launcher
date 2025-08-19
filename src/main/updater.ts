@@ -21,19 +21,19 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
       return;
     }
     const { updateInfo } = updateCheckResult;
-    const messageLines = [
+    const message = [
       'A Launcher update is available.',
       '',
-      `Current version: ${autoUpdater.currentVersion}`,
-      `Available version: ${updateInfo.version}.`,
+      `Installed version: ${autoUpdater.currentVersion}`,
+      `Available version: ${updateInfo.version}`,
       '',
       'The update will be downloaded in the background. You will be notified when the download is complete and the update is ready to install.',
-    ];
+    ].join('\n');
 
     const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'question',
       title: 'Update Available',
-      message: messageLines.join('\n'),
+      message,
       buttons: ['Download', 'Cancel'],
     });
 

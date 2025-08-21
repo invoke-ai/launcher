@@ -52,7 +52,7 @@ export default [
     },
 
     rules: {
-      ...typescriptEslint.configs.recommended.rules,
+      ...typescriptEslint.configs.recommended?.rules,
       ...pluginReact.configs.recommended.rules,
       ...pluginReact.configs['jsx-runtime'].rules,
       ...pluginReactHooks.configs.recommended.rules,

@@ -8,9 +8,9 @@ It can install, update, reinstall and run Invoke Community Edition. It is self-c
 
 Click the link for your system to download the latest version of the launcher.
 
-- [Download for Windows](https://download.invoke.ai/Invoke%20Community%20Edition.exe)
-- [Download for macOS](https://download.invoke.ai/Invoke%20Community%20Edition.dmg)
-- [Download for Linux](https://download.invoke.ai/Invoke%20Community%20Edition.AppImage)
+- [Download for Windows](https://github.com/invoke-ai/launcher/releases/latest/download/Invoke.Community.Edition.Setup.latest.exe)
+- [Download for macOS](https://github.com/invoke-ai/launcher/releases/latest/download/Invoke.Community.Edition-latest-arm64.dmg)
+- [Download for Linux](https://github.com/invoke-ai/launcher/releases/latest/download/Invoke.Community.Edition-latest.AppImage)
 
 You can also download all releases, including prerelease versions, from this repo's [GitHub releases](https://github.com/invoke-ai/launcher/releases).
 
@@ -24,23 +24,7 @@ You can install the latest stable release or latest prerelease versions of Invok
 
 ### Updating the launcher itself
 
-> Note: This section discusses updating launcher itself, _not_ updating the Invoke application.
-
-Currently, the launcher is not able to auto-update itself, but we are working on this now.
-
-To update to the latest version, replace the old launcher executable file with the new version.
-
-### 🚨 macOS: security warning / unable to run
-
-On macOS, the launcher may require you to go to **System Settings** > **Security and Privacy** and manually allow it to run. It may tell you that it is damaged and not run at all.
-
-This is related to Apple's strict code signing restrictions. We are getting set up with Apple to sign the launcher executable, which will fix the issue and allow the launcher to run on all Macs without any fuss.
-
-Until this is resolved, you can manually flag the launcher as safe with `xattr` and it will run.:
-
-```zsh
-xattr -d 'com.apple.quarantine' /Applications/Invoke\ Community\ Edition.app
-```
+The Launcher checks for updates once on startup and prompts you if one is available. It will update itself if you accept the update.
 
 ### Problems while installing Invoke via Launcher
 
@@ -143,12 +127,12 @@ xattr -d 'com.apple.quarantine' assets/bin/uv`
 
 ### Code Signing
 
-This repo does not contain the necessary secrets to do code signing. We handle that separately.
-
-As a result, the builds from this repo may require you to manually allow them to run on Windows and macOS.
+Local builds may require you to manually allow them to run on Windows and macOS.
 
 Windows will prompt you to allow the app to run, but on macOS it may refuse, saying the app is damaged. Remove the quarantine flag from the `.app` package to resolve this:
 
 ```zsh
 xattr -d 'com.apple.quarantine' /Applications/Invoke\ Community\ Edition.app
 ```
+
+Windows and macOS production builds built via the `.github/workflows/build-and-sign.yml` workflow are signed. Linux builds are never signed.

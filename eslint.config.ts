@@ -222,7 +222,7 @@ export default [
   },
 
   {
-    files: ['src/main/**/*', 'src/preload/**/*'],
+    files: ['src/main/**/*', 'src/preload/**/*', 'electron-builder.config.ts'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },

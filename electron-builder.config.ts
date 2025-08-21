@@ -1,6 +1,4 @@
 import type { Configuration, WindowsConfiguration } from 'electron-builder';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
   if (process.env.ENABLE_SIGNING) {
@@ -54,37 +52,41 @@ export default {
     resetAdHocDarwinSignature: true,
   },
   electronUpdaterCompatibility: '>= 2.16',
-  afterAllArtifactBuild: async (buildResult) => {
-    const version = buildResult.configuration.appVersion;
+  afterAllArtifactBuild: (buildResult) => {
+    const fs = require('fs');
+    const path = require('path');
+
+    const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+    const version = packageJson.version;
     const outDir = buildResult.outDir;
     const artifactPaths = buildResult.artifactPaths;
-    
+
     console.log('Creating "latest" versions of artifacts...');
-    
+
     for (const artifactPath of artifactPaths) {
       const fileName = path.basename(artifactPath);
-      
+
       // Skip files that don't contain the version number
       if (!fileName.includes(version)) {
         continue;
       }
-      
+
       // Create the "latest" filename by replacing the version with "latest"
       const latestFileName = fileName.replace(version, 'latest');
       const latestPath = path.join(outDir, latestFileName);
-      
+
       try {
         // Copy the file with the new name
         fs.copyFileSync(artifactPath, latestPath);
         console.log(`Created: ${latestFileName}`);
-        
+
         // Add the new file to the artifacts list so it gets uploaded
         buildResult.artifactPaths.push(latestPath);
       } catch (error) {
         console.error(`Failed to create ${latestFileName}:`, error);
       }
     }
-    
+
     return buildResult.artifactPaths;
   },
 } satisfies Configuration;

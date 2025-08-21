@@ -59,11 +59,11 @@ export default {
     const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
     const version = packageJson.version;
     const outDir = buildResult.outDir;
-    const artifactPaths = buildResult.artifactPaths;
+    const newArtifactPaths = [...buildResult.artifactPaths];
 
     console.log('Creating "latest" versions of artifacts...');
 
-    for (const artifactPath of artifactPaths) {
+    for (const artifactPath of buildResult.artifactPaths) {
       const fileName = path.basename(artifactPath);
 
       // Skip files that don't contain the version number
@@ -81,12 +81,12 @@ export default {
         console.log(`Created: ${latestFileName}`);
 
         // Add the new file to the artifacts list so it gets uploaded
-        buildResult.artifactPaths.push(latestPath);
+        newArtifactPaths.push(latestPath);
       } catch (error) {
         console.error(`Failed to create ${latestFileName}:`, error);
       }
     }
 
-    return buildResult.artifactPaths;
+    return newArtifactPaths;
   },
 } satisfies Configuration;

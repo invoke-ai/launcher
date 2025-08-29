@@ -5,6 +5,7 @@ import { ipcMain } from 'electron';
 import fs from 'fs/promises';
 import path, { join } from 'path';
 import { serializeError } from 'serialize-error';
+import { shellEnvSync } from 'shell-env';
 import { assert } from 'tsafe';
 
 import { CommandRunner } from '@/lib/command-runner';
@@ -252,7 +253,7 @@ export class InstallManager {
     }
 
     const runProcessOptions = {
-      env: { ...process.env, ...DEFAULT_ENV } as Record<string, string>,
+      env: { ...process.env, ...DEFAULT_ENV, ...shellEnvSync() } as Record<string, string>,
     };
 
     if (repair || pythonVersionMismatch) {

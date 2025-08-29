@@ -5,6 +5,7 @@ import type Store from 'electron-store';
 import fs from 'fs/promises';
 import ip from 'ip';
 import { join } from 'path';
+import { shellEnvSync } from 'shell-env';
 
 import { CommandRunner } from '@/lib/command-runner';
 import { DEFAULT_ENV } from '@/lib/pty-utils';
@@ -100,7 +101,7 @@ export class InvokeManager {
       this.log.info(c.magenta.bold('Preparing first run of this install - may take a minute or two...\r\n'));
     }
 
-    const env: Record<string, string> = { ...process.env, INVOKEAI_ROOT: location, ...DEFAULT_ENV };
+    const env: Record<string, string> = { ...process.env, INVOKEAI_ROOT: location, ...DEFAULT_ENV, ...shellEnvSync() };
 
     // If server mode is enabled, set the host to 0.0.0.0 to enable LAN access
     if (this.store.get('serverMode')) {

@@ -97,6 +97,7 @@
     "react-icons": "^5.5.0",
     "rimraf": "^6.0.1",
     "serialize-error": "^12.0.0",
+    "shell-env": "^4.0.1",
     "strip-ansi": "^7.1.0",
     "tar": "^7.4.3",
     "tmp": "^0.2.3",

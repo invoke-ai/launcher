@@ -43,7 +43,7 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (availableUpdates.stable !== null) {
     return (
       <Text as={Link} onClick={beginInstallFlow} color="invokeGreen.300" userSelect="none">
-        Invoke <Strong fontSize="sm">{availableUpdates.stable}</Strong> is available! Click here to update.
+        Invoke <Strong fontSize="sm">{availableUpdates.stable.version}</Strong> is available! Click here to update.
       </Text>
     );
   }
@@ -51,7 +51,7 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (availableUpdates.pre !== null && notifyForPrereleaseUpdates) {
     return (
       <Text as={Link} onClick={beginInstallFlow} color="invokeGreen.300" userSelect="none">
-        Invoke <Strong fontSize="sm">{availableUpdates.pre}</Strong> is available! Click here to update.
+        Invoke <Strong fontSize="sm">{availableUpdates.pre.version}</Strong> is available! Click here to update.
       </Text>
     );
   }

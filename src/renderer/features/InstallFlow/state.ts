@@ -27,6 +27,7 @@ const $choices = map<{
     | {
         type: 'gh';
         version: string;
+        url: string;
         isPrerelease?: boolean;
       }
     | { type: 'manual'; version: string }
@@ -154,7 +155,9 @@ const syncReleaseChoiceWithLatestReleases = () => {
     return;
   }
 
-  $choices.setKey('release', { type: 'gh', version: latestGHReleases.data.stable, isPrerelease: false });
+  const { version, url } = latestGHReleases.data.stable;
+
+  $choices.setKey('release', { type: 'gh', version, url, isPrerelease: false });
 };
 
 $latestGHReleases.listen(syncReleaseChoiceWithLatestReleases);

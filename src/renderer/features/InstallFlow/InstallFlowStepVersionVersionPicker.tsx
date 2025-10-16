@@ -1,4 +1,4 @@
-import { Button, ButtonGroup, Flex, Heading, Input, Text } from '@invoke-ai/ui-library';
+import { Button, ButtonGroup, ExternalLink, Flex, Heading, Input, Text } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { valid } from '@renovatebot/pep440';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -9,6 +9,7 @@ import {
   ManualVersionWarning,
 } from '@/renderer/features/InstallFlow/InstallFlowInstallTypeDescription';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
+import type { GHReleaseData } from '@/renderer/services/gh';
 import { $latestGHReleases, syncGHReleases } from '@/renderer/services/gh';
 
 export const InstallFlowStepVersionVersionPicker = memo(() => {
@@ -45,46 +46,56 @@ const VersionPicker = memo(() => {
   return (
     <>
       <ButtonGroup variant="outline">
-        <StableVersionButton version={latestGHReleases.data.stable} />
-        {latestGHReleases.data.pre && <PrereleaseVersionButton version={latestGHReleases.data.pre} />}
+        <StableVersionButton release={latestGHReleases.data.stable} />
+        {latestGHReleases.data.pre && <PrereleaseVersionButton release={latestGHReleases.data.pre} />}
         <ManualVersionButton />
       </ButtonGroup>
       {release?.type === 'manual' && <ManualVersionEntry version={release.version} />}
       {installType && <InstallFlowInstallTypeDescription installType={installType} />}
+      {release?.type === 'gh' && <GHVersionLink release={release} />}
     </>
   );
 });
 VersionPicker.displayName = 'VersionPicker';
 
-const StableVersionButton = memo(({ version }: { version: string }) => {
+const GHVersionLink = memo(({ release }: { release: GHReleaseData }) => {
+  return <ExternalLink fontSize="md" color="base.300" href={release.url} label="Release Notes" />;
+});
+GHVersionLink.displayName = 'GHVersionLink';
+
+const StableVersionButton = memo(({ release }: { release: GHReleaseData }) => {
   const selectedRelease = useStore(installFlowApi.$choices).release;
   const onClick = useCallback(() => {
-    installFlowApi.$choices.setKey('release', { type: 'gh', version, isPrerelease: false });
-  }, [version]);
+    installFlowApi.$choices.setKey('release', { type: 'gh', ...release, isPrerelease: false });
+  }, [release]);
 
   return (
     <Button
       onClick={onClick}
-      colorScheme={selectedRelease?.type === 'gh' && selectedRelease?.version === version ? 'invokeBlue' : 'base'}
+      colorScheme={
+        selectedRelease?.type === 'gh' && selectedRelease?.version === release.version ? 'invokeBlue' : 'base'
+      }
     >
-      Stable ({version})
+      Stable ({release.version})
     </Button>
   );
 });
 StableVersionButton.displayName = 'StableVersionButton';
 
-const PrereleaseVersionButton = memo(({ version }: { version: string }) => {
+const PrereleaseVersionButton = memo(({ release }: { release: GHReleaseData }) => {
   const selectedRelease = useStore(installFlowApi.$choices).release;
   const onClick = useCallback(() => {
-    installFlowApi.$choices.setKey('release', { type: 'gh', version, isPrerelease: true });
-  }, [version]);
+    installFlowApi.$choices.setKey('release', { type: 'gh', ...release, isPrerelease: true });
+  }, [release]);
 
   return (
     <Button
       onClick={onClick}
-      colorScheme={selectedRelease?.type === 'gh' && selectedRelease?.version === version ? 'invokeBlue' : 'base'}
+      colorScheme={
+        selectedRelease?.type === 'gh' && selectedRelease?.version === release.version ? 'invokeBlue' : 'base'
+      }
     >
-      Prerelease ({version})
+      Prerelease ({release.version})
     </Button>
   );
 });
@@ -97,7 +108,11 @@ const ManualVersionButton = memo(() => {
   }, []);
 
   return (
-    <Button onClick={onClick} colorScheme={selectedRelease?.type === 'manual' ? 'invokeBlue' : 'base'}>
+    <Button
+      variant="outline"
+      onClick={onClick}
+      colorScheme={selectedRelease?.type === 'manual' ? 'invokeBlue' : 'base'}
+    >
       Manual
     </Button>
   );

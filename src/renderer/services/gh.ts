@@ -6,7 +6,12 @@ import { useMemo } from 'react';
 import { withResult, withResultAsync } from '@/lib/result';
 import type { AsyncRequest } from '@/shared/types';
 
-type LatestGHReleases = { stable: string; pre?: string };
+export type GHReleaseData = {
+  version: string;
+  url: string;
+};
+
+type LatestGHReleases = { stable: GHReleaseData; pre?: GHReleaseData };
 
 /**
  * Heads up from frustrating troubleshooting experience:
@@ -73,7 +78,12 @@ export const syncGHReleases = async () => {
 
     if (response.status === 200) {
       // TODO(psyche): use zod?
-      const data = (await response.json()) as Array<{ tag_name: string; prerelease: boolean; draft: boolean }>;
+      const data = (await response.json()) as Array<{
+        tag_name: string;
+        prerelease: boolean;
+        draft: boolean;
+        html_url: string;
+      }>;
 
       // Update the ETag for future requests
       const newETag = response.headers.get('ETag');
@@ -81,9 +91,12 @@ export const syncGHReleases = async () => {
       previousETag = newETag;
 
       // Get the latest stable and pre-release versions - we assume tag_name is a valid PEP 440 version
+      const latestStable = data.find((release) => !release.prerelease && !release.draft);
+      const latestPre = data.find((release) => release.prerelease && !release.draft);
+
       const releases = {
-        stable: data.find((release) => !release.prerelease && !release.draft)?.tag_name,
-        pre: data.find((release) => release.prerelease && !release.draft)?.tag_name,
+        stable: latestStable ? { version: latestStable.tag_name, url: latestStable.html_url } : null,
+        pre: latestPre ? { version: latestPre.tag_name, url: latestPre.html_url } : null,
       };
 
       console.log('Latest releases:', releases);
@@ -136,7 +149,7 @@ export const syncGHReleases = async () => {
    * Only include the latest pre-release if it is newer than the latest stable release. For example, if the latest
    * stable release is 1.0.0 and the latest pre-release is 0.9.0, we should not include the pre-release.
    */
-  if (pre && compare(pre, stable) > 0) {
+  if (pre && compare(pre.version, stable.version) > 0) {
     data.pre = pre;
   }
 
@@ -173,8 +186,8 @@ window.addEventListener('focus', () => {
 });
 
 type UseAvailableUpdatesReturn = {
-  stable: string | null;
-  pre: string | null;
+  stable: GHReleaseData | null;
+  pre: GHReleaseData | null;
 };
 
 /**
@@ -190,14 +203,14 @@ export const useAvailableUpdates = (currentVersion: string): UseAvailableUpdates
     }
     const { stable, pre } = latestGHReleases.data;
 
-    const stableCompareResult = withResult(() => compare(stable, currentVersion) > 0);
+    const stableCompareResult = withResult(() => compare(stable.version, currentVersion) > 0);
     const isStableUpdateAvailable = stableCompareResult.isOk() ? stableCompareResult.value : false;
 
     if (!pre) {
       return { stable: isStableUpdateAvailable ? stable : null, pre: null };
     }
 
-    const prereleaseCompareResult = withResult(() => compare(pre, currentVersion) > 0);
+    const prereleaseCompareResult = withResult(() => compare(pre.version, currentVersion) > 0);
     const isPrereleaseUpdateAvailable = prereleaseCompareResult.isOk() ? prereleaseCompareResult.value : false;
 
     return { stable: isStableUpdateAvailable ? stable : null, pre: isPrereleaseUpdateAvailable ? pre : null };

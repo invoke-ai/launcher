@@ -25,6 +25,9 @@ on:
 env:
   NODE_VERSION: '22'
 
+permissions:
+  contents: write
+
 jobs:
   build-linux:
     if: github.event_name == 'push' || github.event.inputs.build_linux == 'true'
@@ -80,7 +83,7 @@ jobs:
       - name: Build application
         run: npm run publish
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -154,7 +157,7 @@ jobs:
       - name: Build and sign application
         run: npm run publish
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -237,7 +240,7 @@ jobs:
         run: npm run publish
         env:
           ENABLE_SIGNING: true
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SM_HOST: ${{ secrets.SM_HOST }}
           SM_API_KEY: ${{ secrets.SM_API_KEY }}
           SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}

@@ -126,7 +126,11 @@ export class InvokeWindowWinTabBridge {
       return false;
     }
 
-    if (!status.contactActive && now > this.suppressPrimaryMouseUntil && now - this.lastPenActivityAt > SUPPRESS_PRIMARY_MOUSE_GRACE_MS) {
+    if (
+      !status.contactActive &&
+      now > this.suppressPrimaryMouseUntil &&
+      now - this.lastPenActivityAt > SUPPRESS_PRIMARY_MOUSE_GRACE_MS
+    ) {
       this.penContactActive = false;
       return false;
     }

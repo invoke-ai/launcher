@@ -33,14 +33,20 @@ The repo contains helpful instructions to prepare the certificate env vars below
 
 ### Windows
 
-We use DigiCert KeyLocker to sign Windows builds. This is a cloud-based signing service that requires a DigiCert account.
+We use [OSSign](https://github.com/ossign/ossign) to sign Windows builds. OSSign issues
+the certificate and runs a hosted signing backend; signing happens via the `ossign` CLI,
+which the [`@ossign/ossign`](https://www.npmjs.com/package/@ossign/ossign) npm package
+auto-downloads on first use. Our `scripts/customSign.js` is invoked by `electron-builder`
+once per Windows binary and delegates to that package.
 
-DigiCert provides some minimal documentation on setting up KeyLocker to work with `electron-builder`:
+Only one secret is required:
 
-- https://docs.digicert.com/en/digicert-keylocker/code-signing/sign-with-third-party-signing-tools/windows-applications/sign-executables-with-electron-builder-using-ksp-library.html
+- `OSSIGN_CONFIG_BASE64`: Base64-encoded OSSign config (YAML or JSON). Tells the `ossign`
+  CLI which signing backend to use (Azure Trusted Signing, Azure Key Vault, or a local
+  certificate) and how to authenticate to it. OSSign provides this value; store it in the
+  `code-signing` environment secrets.
 
-- `SM_HOST`: The DigiCert Signing Manager host URL. It must start with `https://`.
-- `SM_API_KEY`: The API key for the DigiCert Signing Manager account.
-- `SM_CLIENT_CERT_PASSWORD`: The password for the client certificate used to authenticate with the DigiCert Signing Manager.
-- `SM_CLIENT_CERT_FILE`: The client certificate file used to authenticate with the DigiCert Signing Manager, encoded as b64.
-- `SM_CODE_SIGNING_CERT_SHA1_HASH`: The SHA1 hash of the code signing certificate used to sign the Windows builds.
+To set the secret locally (e.g. for debugging the signer), set `OSSIGN_CONFIG_BASE64` or
+`OSSIGN_CONFIG` (raw, un-encoded) in your environment, and run with `ENABLE_SIGNING=true`.
+Signing is otherwise a no-op since `ENABLE_SIGNING` gates the custom signer in
+`electron-builder.config.ts`.

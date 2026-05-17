@@ -4,7 +4,7 @@ import { BrowserWindow, ipcMain, shell } from 'electron';
 import type Store from 'electron-store';
 import fs from 'fs/promises';
 import ip from 'ip';
-import { join } from 'path';
+import path, { join } from 'path';
 import { shellEnvSync } from 'shell-env';
 
 import { CommandRunner } from '@/lib/command-runner';
@@ -23,6 +23,7 @@ import type {
 } from '@/shared/types';
 
 import type { InstallManager } from './install-manager';
+import { InvokeWindowWinTabBridge } from './invoke-window-wintab-bridge';
 
 export class InvokeManager {
   private status: WithTimestamp<InvokeProcessStatus>;
@@ -37,6 +38,7 @@ export class InvokeManager {
   private commandRunner: CommandRunner;
   private cols: number | undefined;
   private rows: number | undefined;
+  private windowWinTabBridge: InvokeWindowWinTabBridge | null;
 
   constructor(arg: {
     store: Store<StoreData>;
@@ -60,6 +62,7 @@ export class InvokeManager {
     this.commandRunner = new CommandRunner();
     this.cols = undefined;
     this.rows = undefined;
+    this.windowWinTabBridge = null;
   }
 
   getStatus = (): WithTimestamp<InvokeProcessStatus> => {
@@ -228,11 +231,15 @@ export class InvokeManager {
       minHeight: 600,
       webPreferences: {
         devTools: true,
+        preload: path.join(__dirname, '../preload/index.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
         backgroundThrottling: false, // Prevent memory spikes from throttling when window loses focus
         additionalArguments: [
           '--enable-gpu-rasterization', // Offload canvas to GPU
           '--enable-zero-copy', // Reduce memory copies
           '--enable-accelerated-2d-canvas', // GPU acceleration for 2D canvas
+          '--invoke-hosted-window',
         ],
       },
       autoHideMenuBar: true,
@@ -242,6 +249,7 @@ export class InvokeManager {
     });
 
     this.window = window;
+    this.windowWinTabBridge = new InvokeWindowWinTabBridge(window, this.log);
 
     const winProps = this.store.get('appWindowProps');
     manageWindowSize(
@@ -259,6 +267,8 @@ export class InvokeManager {
     });
 
     window.on('close', () => {
+      this.windowWinTabBridge?.detach();
+      this.windowWinTabBridge = null;
       this.exitInvoke();
     });
 
@@ -291,6 +301,8 @@ export class InvokeManager {
 
       // Close the crashed window (it may still be visible but unresponsive)
       if (this.window && !this.window.isDestroyed()) {
+        this.windowWinTabBridge?.detach();
+        this.windowWinTabBridge = null;
         this.window.destroy();
       }
 
@@ -308,6 +320,12 @@ export class InvokeManager {
         const duration = Date.now() - unresponsiveTimestamp;
         this.log.info(c.yellow(`UI Window is responsive again (was unresponsive for ${duration}ms)\r\n`));
         unresponsiveTimestamp = null;
+      }
+    });
+
+    window.webContents.on('before-mouse-event', (event, mouse) => {
+      if (this.windowWinTabBridge?.shouldSuppressPrimaryMouse(mouse)) {
+        event.preventDefault();
       }
     });
 
@@ -331,6 +349,9 @@ export class InvokeManager {
     });
 
     const localUrl = url.replace('0.0.0.0', '127.0.0.1');
+    window.webContents.on('did-finish-load', () => {
+      this.windowWinTabBridge?.attach();
+    });
     window.webContents.loadURL(localUrl);
   };
 
@@ -373,6 +394,8 @@ export class InvokeManager {
       return;
     }
     if (!this.window.isDestroyed()) {
+      this.windowWinTabBridge?.detach();
+      this.windowWinTabBridge = null;
       this.window.destroy();
     }
     this.window = null;

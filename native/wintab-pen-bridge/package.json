@@ -1,0 +1,14 @@
+{
+  "name": "wintab-pen-bridge",
+  "version": "0.0.1",
+  "description": "Windows-only WinTab pen bridge for Invoke Launcher",
+  "main": "index.js",
+  "gypfile": true,
+  "private": true,
+  "os": [
+    "win32"
+  ],
+  "scripts": {
+    "install": "node-gyp rebuild"
+  }
+}

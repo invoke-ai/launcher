@@ -58,7 +58,7 @@ It already builds and signs using the approach above: it checks out `invoke-ai/l
 `npm run package` with `ENABLE_SIGNING=true`, and signs via `scripts/customSign.js` using the
 `OSSIGN_CONFIG` certificate.
 
-**Note the coupling:** that workflow runs *this* repo's build (`npm run download win`,
+**Note the coupling:** that workflow runs _this_ repo's build (`npm run download win`,
 `npm run package`, `scripts/customSign.js`, the `NODE_VERSION`, etc.). If those change here, the
 OSSign-hosted workflow may need a matching update — open a PR against `OSSign/invoke-ai-launcher`
 and notify OSSign for review.
@@ -68,10 +68,10 @@ and notify OSSign for review.
 The `build-windows` job authenticates to the OSSign API with two secrets. Add them to the
 `code-signing` environment (the same environment the other signing jobs use):
 
-| Secret         | Value                                  |
-| -------------- | -------------------------------------- |
+| Secret         | Value                                      |
+| -------------- | ------------------------------------------ |
 | `OSSIGN_USER`  | the OSSign username (`invoke-ai-launcher`) |
-| `OSSIGN_TOKEN` | the OSSign API token                   |
+| `OSSIGN_TOKEN` | the OSSign API token                       |
 
 ```bash
 gh secret set OSSIGN_USER  --env code-signing --repo invoke-ai/launcher

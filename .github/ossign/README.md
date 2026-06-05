@@ -15,7 +15,8 @@ invoke-ai/launcher                         OSSign (api.ossign.org)            OS
 build-and-sign.yml
   build-windows job
     ossign/actions/workflow/dispatch  ───▶  dispatch/<user>            ───▶  "Build and Sign" workflow
-                                                                               (this dir's build-and-sign.yml)
+                                                                               (.github/workflows/build-and-sign.yml
+                                                                                in the OSSign-hosted repo)
                                                                                  - checkout invoke-ai/launcher@<ref>
                                                                                  - npm run package (ENABLE_SIGNING)
                                                                                      -> scripts/customSign.js
@@ -29,10 +30,12 @@ build-and-sign.yml
 1. When a `v*` tag is pushed (or the workflow is dispatched), the `build-windows` job in
    `.github/workflows/build-and-sign.yml` calls `ossign/actions/workflow/dispatch@main` with our
    OSSign credentials. The action uses the **current git ref** as the `source_branch`.
-2. The OSSign API triggers the **Build and Sign** workflow in `OSSign/invoke-ai-launcher`
-   (the file in this directory). That workflow checks out `invoke-ai/launcher` at the requested
-   ref, builds the NSIS installer, and signs it via `scripts/customSign.js` using the
-   `OSSIGN_CONFIG` certificate provisioned in OSSign's `OSSign` environment.
+2. The OSSign API triggers the **Build and Sign** workflow in
+   [`OSSign/invoke-ai-launcher`](https://github.com/OSSign/invoke-ai-launcher/blob/main/.github/workflows/build-and-sign.yml)
+   — that repo holds the canonical, maintained copy of the workflow. It checks out
+   `invoke-ai/launcher` at the requested ref, builds the NSIS installer, and signs it via
+   `scripts/customSign.js` using the `OSSIGN_CONFIG` certificate provisioned in OSSign's `OSSign`
+   environment.
 3. The signed files are published as a GitHub release in the OSSign repo. The dispatch action
    polls until completion, then returns the signed release assets.
 4. Back in `invoke-ai/launcher`, the `build-windows` job downloads those signed artifacts and
@@ -44,12 +47,21 @@ Linux and macOS builds are unaffected and continue to build/sign in
 
 ## Setup
 
-### 1. Submit the OSSign workflow
+### 1. The OSSign-hosted workflow
 
-Copy `.github/ossign/build-and-sign.yml` into `OSSign/invoke-ai-launcher` as
-`.github/workflows/build-and-sign.yml` and open a pull request, then notify OSSign for review and
-production credential approval. (This file is kept here, outside `.github/workflows/`, so GitHub
-does not try to run it in this repository.)
+The actual build + sign workflow lives in the OSSign-hosted repo
+[`OSSign/invoke-ai-launcher`](https://github.com/OSSign/invoke-ai-launcher) at
+`.github/workflows/build-and-sign.yml`. That is the canonical, maintained copy — it is not
+duplicated in this repository (it would never run here, and a stale copy would only mislead).
+
+It already builds and signs using the approach above: it checks out `invoke-ai/launcher`, runs
+`npm run package` with `ENABLE_SIGNING=true`, and signs via `scripts/customSign.js` using the
+`OSSIGN_CONFIG` certificate.
+
+**Note the coupling:** that workflow runs *this* repo's build (`npm run download win`,
+`npm run package`, `scripts/customSign.js`, the `NODE_VERSION`, etc.). If those change here, the
+OSSign-hosted workflow may need a matching update — open a PR against `OSSign/invoke-ai-launcher`
+and notify OSSign for review.
 
 ### 2. Add the dispatch credentials to this repository
 

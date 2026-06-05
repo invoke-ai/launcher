@@ -45,8 +45,9 @@ release ref, runs `npm run package` with `ENABLE_SIGNING=true`, and signs each b
 [`@ossign/ossign`](https://www.npmjs.com/package/@ossign/ossign) CLI using the certificate
 config (`OSSIGN_CONFIG`) that OSSign provisions in that repo.
 
-See [`.github/ossign/README.md`](.github/ossign/README.md) for the full architecture and the
-copy of the OSSign-side workflow we maintain.
+See [`.github/ossign/README.md`](.github/ossign/README.md) for the full architecture. The
+OSSign-side workflow itself lives in the
+[`OSSign/invoke-ai-launcher`](https://github.com/OSSign/invoke-ai-launcher) repo.
 
 Two secrets must be set in this repo's `code-signing` environment (OSSign provides the values):
 

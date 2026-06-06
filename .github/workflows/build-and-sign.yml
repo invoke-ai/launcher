@@ -195,7 +195,9 @@ jobs:
     steps:
       - name: Dispatch build & sign to OSSign and wait for signed artifacts
         id: ossign
-        uses: ossign/actions/workflow/dispatch@main
+        # Pinned to a commit SHA (not a mutable @main) — this action receives OSSIGN_TOKEN,
+        # so a moving ref is a supply-chain risk. Bump deliberately (e.g. via Dependabot).
+        uses: ossign/actions/workflow/dispatch@fbf0b39466d9409f05d1efc0e58cc3e4615ac625 # OSSign/actions main @ 2025-10-09
         with:
           # OSSign maps these credentials to the OSSign/invoke-ai-launcher repo and
           # triggers its "Build and Sign" workflow. The source ref is taken from the

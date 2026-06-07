@@ -176,63 +176,52 @@ jobs:
             dist/*.yaml
           retention-days: 90
 
-  # Windows builds are produced and code-signed by OSSign's hosted infrastructure
-  # (https://ossign.org); the signing certificate never enters this repository. We
-  # dispatch a build+sign request to OSSign, which checks out this repo at the current
-  # ref, builds the NSIS installer and signs it, then publishes the signed files. We
-  # wait for completion, download the signed artifacts, and re-upload them under the
-  # same `windows-artifacts-signed` name the rest of the release flow expects.
+  # Windows builds are code-signed by OSSign's hosted infrastructure (https://ossign.org);
+  # the signing certificate never enters this repository. OSSign's signing requires a manual
+  # reviewer approval on their side that can take HOURS, so we do not hold a runner waiting
+  # (it would just hit the job timeout). Instead this job fire-and-forgets the dispatch
+  # (dispatch_only) and hands the returned workflow id to wait-signature.yml, which polls on
+  # a cheap timer (the "Signatures" environment's Wait timer) and, once OSSign finishes,
+  # downloads the signed artifacts and attaches them to this tag's GitHub Release.
   #
-  # The OSSign-side workflow lives in OSSign/invoke-ai-launcher; the version we maintain
-  # for it, plus setup instructions, are checked in under .github/ossign/.
+  # This job intentionally uses no environment: it holds no signing cert (OSSign does), and
+  # the code-signing environment's required-reviewer gate would needlessly delay the dispatch.
+  # OSSIGN_USER / OSSIGN_TOKEN are therefore repo-level secrets (also read by wait-signature.yml,
+  # which runs in the Signatures environment).
+  #
+  # The OSSign-side workflow lives in OSSign/invoke-ai-launcher; the version we maintain for it,
+  # plus setup instructions, are checked in under .github/ossign/.
   build-windows:
     if: github.event_name == 'push' || github.event.inputs.build_windows == 'true'
     runs-on: ubuntu-latest
-    environment: code-signing
-    # Building + signing on OSSign's infrastructure can take a while; allow for it.
-    timeout-minutes: 90
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write # needed to dispatch the wait-signature.yml polling workflow
 
     steps:
-      - name: Dispatch build & sign to OSSign and wait for signed artifacts
+      - name: Dispatch build & sign to OSSign (fire-and-forget)
         id: ossign
         # Pinned to a commit SHA (not a mutable @main) — this action receives OSSIGN_TOKEN,
         # so a moving ref is a supply-chain risk. Bump deliberately (e.g. via Dependabot).
         uses: ossign/actions/workflow/dispatch@fbf0b39466d9409f05d1efc0e58cc3e4615ac625 # OSSign/actions main @ 2025-10-09
         with:
-          # OSSign maps these credentials to the OSSign/invoke-ai-launcher repo and
-          # triggers its "Build and Sign" workflow. The source ref is taken from the
-          # current ref of this workflow run (the pushed tag or dispatched branch).
+          # OSSign maps these credentials to the OSSign/invoke-ai-launcher repo and triggers its
+          # "Build and Sign" workflow. The source ref is taken from the current ref of this run
+          # (the pushed tag or dispatched branch).
           username: ${{ secrets.OSSIGN_USER }}
           token: ${{ secrets.OSSIGN_TOKEN }}
-          # dispatch_only defaults to false: block until signing completes and expose
-          # the signed release assets via the `signed_artifacts` output.
+          # Return immediately with a workflow id; the wait loop polls for the signed result.
+          dispatch_only: true
 
-      - name: Download signed Windows artifacts
+      - name: Start the signing wait loop
         env:
-          SIGNED_ARTIFACTS: ${{ steps.ossign.outputs.signed_artifacts }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p dist
-          if [ -z "${SIGNED_ARTIFACTS:-}" ] || [ "${SIGNED_ARTIFACTS}" = "[]" ]; then
-            echo "::error::OSSign returned no signed artifacts"
-            exit 1
-          fi
-          echo "${SIGNED_ARTIFACTS}" | jq -r '.[] | [.name, .browser_download_url] | @tsv' \
-            | while IFS=$'\t' read -r name url; do
-                echo "Downloading signed artifact: ${name}"
-                curl -fSL "${url}" -o "dist/${name}"
-              done
-          echo "Downloaded signed artifacts:"
-          ls -l dist
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: 'windows-artifacts-signed'
-          path: |
-            dist/*.exe
-            dist/*.EXE
-            dist/*.blockmap
-            dist/*.yml
-            dist/*.yaml
-          retention-days: 90
+          echo "OSSign signing dispatched (workflow id: ${{ steps.ossign.outputs.workflow_id }})."
+          gh workflow run wait-signature.yml \
+            --ref "${{ github.ref_name }}" \
+            -f workflow_id="${{ steps.ossign.outputs.workflow_id }}" \
+            -f target_ref="${{ github.ref_name }}" \
+            -f attempt=1

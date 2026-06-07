@@ -37,19 +37,24 @@ Windows builds are code-signed by [OSSign](https://ossign.org)'s hosted infrastr
 The signing certificate lives only at OSSign and is **never** exposed to this repository.
 
 The `build-windows` job in `.github/workflows/build-and-sign.yml` does not build or sign
-Windows locally. Instead it uses `ossign/actions/workflow/dispatch` to trigger the "Build
-and Sign" workflow in our OSSign-hosted repo (`OSSign/invoke-ai-launcher`), waits for it to
-finish, and downloads the signed artifacts. That hosted workflow checks out this repo at the
-release ref, runs `npm run package` with `ENABLE_SIGNING=true`, and signs each binary via
-`scripts/customSign.js`, which delegates to the
-[`@ossign/ossign`](https://www.npmjs.com/package/@ossign/ossign) CLI using the certificate
-config (`OSSIGN_CONFIG`) that OSSign provisions in that repo.
+Windows locally. It fires a `dispatch_only` request via `ossign/actions/workflow/dispatch` to
+trigger the "Build and Sign" workflow in our OSSign-hosted repo (`OSSign/invoke-ai-launcher`),
+then hands the returned workflow id to `.github/workflows/wait-signature.yml`. Because OSSign's
+signing waits on a manual reviewer approval that can take hours, that wait loop polls
+asynchronously (using the `Signatures` environment's Wait timer) instead of holding a runner;
+when signing completes it downloads the signed artifacts and attaches them to the tag's GitHub
+Release. The hosted workflow checks out this repo at the release ref, runs `npm run package`
+with `ENABLE_SIGNING=true`, and signs each binary via `scripts/customSign.js`, which delegates
+to the [`@ossign/ossign`](https://www.npmjs.com/package/@ossign/ossign) CLI using the
+certificate config (`OSSIGN_CONFIG`) that OSSign provisions in that repo.
 
-See [`.github/ossign/README.md`](.github/ossign/README.md) for the full architecture. The
-OSSign-side workflow itself lives in the
+See [`.github/ossign/README.md`](.github/ossign/README.md) for the full architecture (including
+the `Signatures` environment setup). The OSSign-side workflow itself lives in the
 [`OSSign/invoke-ai-launcher`](https://github.com/OSSign/invoke-ai-launcher) repo.
 
-Two secrets must be set in this repo's `code-signing` environment (OSSign provides the values):
+Two **repo-level** secrets must be set (OSSign provides the values). They are repo-level rather
+than environment-scoped because both `build-windows` (no environment) and `wait-signature.yml`
+(the `Signatures` environment) need them:
 
 - `OSSIGN_USER`: the OSSign username used to authenticate the dispatch request.
 - `OSSIGN_TOKEN`: the OSSign API token used to authenticate the dispatch request.

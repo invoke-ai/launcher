@@ -1,0 +1,125 @@
+name: OSSign Signing Wait Loop
+
+# Polls OSSign for a previously-dispatched Windows signing request and, once it completes,
+# downloads the signed artifacts and attaches them to the matching GitHub Release.
+#
+# Why a self-re-dispatching loop instead of a single waiting job? OSSign's signing requires a
+# manual reviewer approval on their side that can take *hours*. GitHub Actions cannot pause a
+# job cheaply, so we exploit the "Signatures" environment's Wait timer: each run waits out the
+# timer (consuming no runner minutes while queued), does one status check, and—if not yet
+# done—re-dispatches itself for the next interval. Total max wait = wait_timer * max_attempts.
+#
+# Started by the build-windows job in build-and-sign.yml. See .github/ossign/README.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_id:
+        description: 'The OSSign dispatch workflow id to poll'
+        required: true
+        type: string
+      target_ref:
+        description: 'Ref the signed artifacts belong to. A vX.Y.Z tag is attached to that GitHub Release; anything else is kept only as a workflow artifact.'
+        required: true
+        type: string
+      attempt:
+        description: 'Current attempt number'
+        required: false
+        type: number
+        default: 1
+      max_attempts:
+        description: 'Max attempts. wait_timer (20 min) * max_attempts = max total wait (72 -> ~24h).'
+        required: false
+        type: number
+        default: 72
+
+permissions:
+  contents: write # attach assets to the release
+  actions: write # re-dispatch this workflow for the next poll
+
+jobs:
+  wait-and-check:
+    runs-on: ubuntu-latest
+    # The Wait timer protection rule on this environment provides the polling interval.
+    # It must have NO required reviewers, or every poll iteration would block on approval.
+    environment: Signatures
+    timeout-minutes: 10
+
+    steps:
+      - name: Enforce attempt ceiling
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.attempt }}" -gt "${{ inputs.max_attempts }}" ]; then
+            echo "::error::OSSign signing did not complete within ${{ inputs.max_attempts }} attempts (~$(( ${{ inputs.max_attempts }} * 20 / 60 ))h). Giving up."
+            exit 1
+          fi
+          echo "Attempt ${{ inputs.attempt }} of ${{ inputs.max_attempts }} for OSSign workflow ${{ inputs.workflow_id }}."
+
+      - name: Check OSSign signing status
+        id: check
+        # Pinned to a commit SHA (not a mutable @main) — this action receives OSSIGN_TOKEN,
+        # so a moving ref is a supply-chain risk. Bump deliberately (e.g. via Dependabot).
+        uses: ossign/actions/workflow/dispatch@fbf0b39466d9409f05d1efc0e58cc3e4615ac625 # OSSign/actions main @ 2025-10-09
+        with:
+          username: ${{ secrets.OSSIGN_USER }}
+          token: ${{ secrets.OSSIGN_TOKEN }}
+          single_check: ${{ inputs.workflow_id }}
+
+      - name: Download signed artifacts
+        if: steps.check.outputs.signed_artifacts != ''
+        env:
+          SIGNED_ARTIFACTS: ${{ steps.check.outputs.signed_artifacts }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          echo "${SIGNED_ARTIFACTS}" | jq -r '.[] | [.name, .browser_download_url] | @tsv' \
+            | while IFS=$'\t' read -r name url; do
+                echo "Downloading signed artifact: ${name}"
+                curl -fSL "${url}" -o "dist/${name}"
+              done
+          echo "Downloaded signed artifacts:"
+          ls -l dist
+
+      - name: Upload workflow artifact
+        if: steps.check.outputs.signed_artifacts != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts-signed
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
+          retention-days: 90
+
+      - name: Attach signed artifacts to the release
+        # Only for vX.Y.Z tags — the release is created by the linux/macOS publish jobs. For
+        # non-tag (manual test) runs there is no release, so we stop at the workflow artifact above.
+        if: steps.check.outputs.signed_artifacts != '' && startsWith(inputs.target_ref, 'v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(dist/*.exe dist/*.blockmap dist/*.yml dist/*.yaml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No signed Windows files found to attach to release ${{ inputs.target_ref }}"
+            exit 1
+          fi
+          echo "Attaching to release ${{ inputs.target_ref }}: ${files[*]}"
+          gh release upload "${{ inputs.target_ref }}" "${files[@]}" --clobber
+
+      - name: Not finished — schedule the next poll
+        if: steps.check.outputs.signed_artifacts == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          next=$(( ${{ inputs.attempt }} + 1 ))
+          echo "OSSign signing not finished yet; scheduling attempt ${next}."
+          gh workflow run wait-signature.yml \
+            --ref "${{ github.ref_name }}" \
+            -f workflow_id="${{ inputs.workflow_id }}" \
+            -f target_ref="${{ inputs.target_ref }}" \
+            -f attempt="${next}" \
+            -f max_attempts="${{ inputs.max_attempts }}"

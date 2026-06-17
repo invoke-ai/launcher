@@ -126,16 +126,16 @@
   },
   "uv": {
     "linux": {
-      "url": "https://github.com/astral-sh/uv/releases/download/0.6.12/uv-x86_64-unknown-linux-gnu.tar.gz",
-      "sha256": "eec3ccf53616e00905279a302bc043451bd96ca71a159a2ac3199452ac914c26"
+      "url": "https://github.com/astral-sh/uv/releases/download/0.11.21/uv-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "8c88519b0ef0af9801fcdee419bbb12116bd9e6b18e162ae093c932d8b264050"
     },
     "win": {
-      "url": "https://github.com/astral-sh/uv/releases/download/0.6.12/uv-x86_64-pc-windows-msvc.zip",
-      "sha256": "30fdf26c209f0cb7c97d3b08a26ab4e78ce5ae0e031b88798cbaccc0f24f452b"
+      "url": "https://github.com/astral-sh/uv/releases/download/0.11.21/uv-x86_64-pc-windows-msvc.zip",
+      "sha256": "ace861f360c6de2babedc1607d0f454b6b09a820dbc8182dc15af927e4df9589"
     },
     "mac": {
-      "url": "https://github.com/astral-sh/uv/releases/download/0.6.12/uv-aarch64-apple-darwin.tar.gz",
-      "sha256": "fab8db5b62da1e945524b8d1a9d4946fcc6d9b77ec0cab423d953e82159967ac"
+      "url": "https://github.com/astral-sh/uv/releases/download/0.11.21/uv-aarch64-apple-darwin.tar.gz",
+      "sha256": "1f921d491ba5ffeea774eb04d6681ecee379101341cbb1500394993b541bf3f4"
     }
   },
   "peerDependencies": {

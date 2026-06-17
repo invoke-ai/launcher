@@ -30,7 +30,15 @@ export class MainProcessManager {
       this.sendToWindow('store:changed', data);
     });
     this.ipc.handle('store:get-key', (_, key) => this.store.get(key));
-    this.ipc.handle('store:set-key', (_, key, value) => this.store.set(key, value));
+    this.ipc.handle('store:set-key', (_, key, value) => {
+      // electron-store throws if you `set` a key to `undefined` - you must `delete` it instead. We treat setting a key
+      // to `undefined` as a request to clear it.
+      if (value === undefined) {
+        this.store.delete(key);
+      } else {
+        this.store.set(key, value);
+      }
+    });
     this.ipc.handle('store:get', (_) => this.store.store);
     this.ipc.handle('store:set', (_, data) => {
       this.store.store = data;

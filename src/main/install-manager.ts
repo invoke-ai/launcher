@@ -13,6 +13,7 @@ import { DEFAULT_ENV } from '@/lib/pty-utils';
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
+import { store } from '@/main/store';
 import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import { getPins } from '@/shared/pins';
 import type {
@@ -188,7 +189,13 @@ export class InstallManager {
     }
 
     const pythonVersion = pinsResult.value.python;
-    const torchIndexUrl = pinsResult.value.torchIndexUrl[systemPlatform][torchPlatform];
+    const pinnedTorchIndexUrl = pinsResult.value.torchIndexUrl[systemPlatform][torchPlatform];
+
+    // An optional user-provided index URL overrides the pinned one. This is an advanced escape hatch for cases the pins
+    // can't cover (e.g. older Nvidia GPUs needing a different CUDA build, or AMD on Windows where there is no pinned
+    // index). The user is responsible for providing a working URL - an invalid one will break the install.
+    const customTorchIndexUrl = store.get('customTorchIndexUrl')?.trim() || undefined;
+    const torchIndexUrl = customTorchIndexUrl ?? pinnedTorchIndexUrl;
 
     const installationDetails = await getInstallationDetails(location);
 
@@ -218,6 +225,11 @@ export class InstallManager {
     this.log.info(`- GPU type: ${gpuType}\r\n`);
     this.log.info(`- Torch platform: ${torchPlatform}\r\n`);
     this.log.info(`- Using torch index: ${torchIndexUrl ?? 'default'}\r\n`);
+    if (customTorchIndexUrl) {
+      this.log.info(
+        c.magenta(`- Custom torch index URL override is active (set in Settings): ${customTorchIndexUrl}\r\n`)
+      );
+    }
 
     if (repair) {
       this.log.info(c.magenta('Repair mode enabled:\r\n'));

@@ -52,6 +52,15 @@ export type StoreData = {
   launcherWindowProps?: WindowProps;
   appWindowProps?: WindowProps;
   optInToLauncherPrereleases: boolean;
+  /**
+   * An optional user-provided PyTorch index URL. When set, it overrides the index URL derived from Invoke's pins for
+   * all installs and updates.
+   *
+   * This is an advanced escape hatch for cases the pins can't cover, e.g. older Nvidia GPUs that need a different CUDA
+   * build, or AMD on Windows (where the pins provide no index at all). Note that this only changes the index/build - the
+   * torch *version* is still pinned by the invokeai package.
+   */
+  customTorchIndexUrl?: string;
 };
 
 // The electron store uses JSON schema to validate its data.
@@ -96,6 +105,9 @@ export const schema: Schema<StoreData> = {
   optInToLauncherPrereleases: {
     type: 'boolean',
     default: false,
+  },
+  customTorchIndexUrl: {
+    type: 'string',
   },
 };
 

@@ -14,6 +14,7 @@ import {
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
 
+import { SettingsModalCustomTorchIndexUrl } from '@/renderer/features/SettingsModal/SettingsModalCustomTorchIndexUrl';
 import { SettingsModalInvokeNotifyForPrereleaseUpdates } from '@/renderer/features/SettingsModal/SettingsModalInvokeNotifyForPrereleaseUpdates';
 import { SettingsModalInvokeServerMode } from '@/renderer/features/SettingsModal/SettingsModalInvokeServerMode';
 import { SettingsModalOptInToLauncherPrereleases } from '@/renderer/features/SettingsModal/SettingsModalOptInToLauncherPrereleases';
@@ -39,6 +40,8 @@ export const SettingsModal = memo(() => {
           <SettingsModalInvokeNotifyForPrereleaseUpdates />
           <Divider />
           <SettingsModalOptInToLauncherPrereleases />
+          <Divider />
+          <SettingsModalCustomTorchIndexUrl />
         </ModalBody>
         <ModalFooter pt={16}>
           <SettingsModalResetButton />

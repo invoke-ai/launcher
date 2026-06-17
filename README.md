@@ -122,7 +122,7 @@ This will download the appropriate `uv` binary and place it in the `assets/bin/`
 On macOS, you may need to remove the quarantine flag from the `uv` binary:
 
 ```sh
-xattr -d 'com.apple.quarantine' assets/bin/uv`
+xattr -d 'com.apple.quarantine' assets/bin/uv
 ```
 
 ### Code Signing

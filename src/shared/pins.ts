@@ -13,10 +13,10 @@ const zPins = z.object({
    */
   python: z.string(),
   /**
-   * The index urls for the torch package for the given version of the invokeai package for each platform.
+   * Legacy index urls for the torch package for the given version of the invokeai package for each platform.
    *
-   * The pytorch project changes these urls frequently, so we need to pin them to ensure that the correct version
-   * is installed, else you can end up with CPU torch on a GPU machine or vice versa.
+   * These are retained for compatibility with the current pins.json shape. The installer syncs dependencies from the
+   * selected Invoke release's pyproject.toml and uv.lock; these URLs are not used as dependency resolution authority.
    *
    * Each platform has a set of indices for each torch device.
    *
@@ -30,8 +30,37 @@ const zPins = z.object({
 });
 type Pins = z.infer<typeof zPins>;
 
+export type InvokeReleaseInstallFiles = {
+  tag: string;
+  pins: Pins;
+  pyprojectToml: string;
+  uvLock: string;
+};
+
+export const getInvokeReleaseTag = (targetVersion: string): string => {
+  return targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
+};
+
+const fetchInvokeReleaseFile = async (tag: string, filePath: string): Promise<string> => {
+  for (const url of [
+    `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/${filePath}`,
+    `https://cdn.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/${filePath}`,
+  ]) {
+    console.log(`Fetching ${filePath} from ${url}`);
+    try {
+      const res = await fetch(url);
+      assert(res.ok, 'Network error');
+      return await res.text();
+    } catch (err) {
+      console.warn(`Failed to fetch ${filePath}`, err);
+    }
+  }
+
+  throw new Error(`Failed to fetch ${filePath}`);
+};
+
 /**
- * Fetch the python version and PyTorch version pins required to install the target version.
+ * Fetch the bootstrap pins required to install the target version.
  *
  * The pins are fetched from the GitHub repo.
  *
@@ -40,11 +69,11 @@ type Pins = z.infer<typeof zPins>;
  * update the launcher whenever the app's PyTorch dependency or target python version changed.
  *
  * @param targetVersion - The version of the invokeai package
- * @returns The python version and torch index urls
+ * @returns Launcher bootstrap metadata. Dependency resolution is handled by the fetched pyproject.toml and uv.lock.
  * @throws If no pins are found for the given version
  */
 export const getPins = async (targetVersion: string): Promise<Pins> => {
-  const tag = targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
+  const tag = getInvokeReleaseTag(targetVersion);
 
   for (const url of [
     `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`,
@@ -63,4 +92,20 @@ export const getPins = async (targetVersion: string): Promise<Pins> => {
   }
 
   throw new Error('Failed to fetch pins');
+};
+
+export const getInvokeReleaseInstallFiles = async (targetVersion: string): Promise<InvokeReleaseInstallFiles> => {
+  const tag = getInvokeReleaseTag(targetVersion);
+  const [pinsJson, pyprojectToml, uvLock] = await Promise.all([
+    fetchInvokeReleaseFile(tag, 'pins.json'),
+    fetchInvokeReleaseFile(tag, 'pyproject.toml'),
+    fetchInvokeReleaseFile(tag, 'uv.lock'),
+  ]);
+
+  return {
+    tag,
+    pins: zPins.parse(JSON.parse(pinsJson)),
+    pyprojectToml,
+    uvLock,
+  };
 };

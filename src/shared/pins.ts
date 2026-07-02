@@ -31,13 +31,12 @@ const zPins = z.object({
 type Pins = z.infer<typeof zPins>;
 
 export type InvokeReleaseInstallFiles = {
-  tag: string;
   pins: Pins;
   pyprojectToml: string;
   uvLock: string;
 };
 
-export const getInvokeReleaseTag = (targetVersion: string): string => {
+const getInvokeReleaseTag = (targetVersion: string): string => {
   return targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
 };
 
@@ -74,24 +73,7 @@ const fetchInvokeReleaseFile = async (tag: string, filePath: string): Promise<st
  */
 export const getPins = async (targetVersion: string): Promise<Pins> => {
   const tag = getInvokeReleaseTag(targetVersion);
-
-  for (const url of [
-    `https://raw.githubusercontent.com/invoke-ai/InvokeAI/${tag}/pins.json`,
-    `https://cdn.jsdelivr.net/gh/invoke-ai/InvokeAI@${tag}/pins.json`,
-  ]) {
-    console.log(`Fetching pins from ${url}`);
-    try {
-      const res = await fetch(url);
-      assert(res.ok, 'Network error');
-      const json = await res.json();
-      const pins = zPins.parse(json);
-      return pins;
-    } catch (err) {
-      console.warn('Failed to fetch pins', err);
-    }
-  }
-
-  throw new Error('Failed to fetch pins');
+  return zPins.parse(JSON.parse(await fetchInvokeReleaseFile(tag, 'pins.json')));
 };
 
 export const getInvokeReleaseInstallFiles = async (targetVersion: string): Promise<InvokeReleaseInstallFiles> => {
@@ -103,7 +85,6 @@ export const getInvokeReleaseInstallFiles = async (targetVersion: string): Promi
   ]);
 
   return {
-    tag,
     pins: zPins.parse(JSON.parse(pinsJson)),
     pyprojectToml,
     uvLock,

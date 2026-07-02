@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getInvokeReleaseInstallFiles, getInvokeReleaseTag, getPins } from './pins';
+import { getInvokeReleaseInstallFiles, getPins } from './pins';
 
 const pins = {
   python: '3.12',
@@ -22,11 +22,6 @@ describe('pins', () => {
     vi.unstubAllGlobals();
   });
 
-  it('normalizes invoke release tags', () => {
-    expect(getInvokeReleaseTag('6.14.0')).toBe('v6.14.0');
-    expect(getInvokeReleaseTag('v6.14.0')).toBe('v6.14.0');
-  });
-
   it('fetches install files from the selected invoke release', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.endsWith('/pins.json')) {
@@ -45,7 +40,6 @@ describe('pins', () => {
     const files = await getInvokeReleaseInstallFiles('6.14.0');
 
     expect(files).toEqual({
-      tag: 'v6.14.0',
       pins,
       pyprojectToml: '[project]\nname = "InvokeAI"\n',
       uvLock: 'version = 1\n',

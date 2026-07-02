@@ -15,7 +15,7 @@ import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import type { InvokeReleaseInstallFiles } from '@/shared/pins';
-import { getInvokeReleaseInstallFiles, getInvokeReleaseTag, getPins } from '@/shared/pins';
+import { getInvokeReleaseInstallFiles, getPins } from '@/shared/pins';
 import type {
   GpuType,
   InstallProcessStatus,
@@ -26,16 +26,16 @@ import type {
 } from '@/shared/types';
 
 const BOOTSTRAP_PROJECT_DIR_NAME = '.launcher-bootstrap';
-const MIN_BOOTSTRAP_INSTALL_VERSION = '6.14.0';
+const MIN_BOOTSTRAP_INSTALL_VERSION = '6.14.0rc1';
 
 const shouldUseBootstrapInstall = (version: string): boolean => {
   return compare(version.replace(/^v/, ''), MIN_BOOTSTRAP_INSTALL_VERSION) >= 0;
 };
 
-const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'cpu'): string[] => {
+const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'cpu' | null): string[] => {
   const extras: string[] = [];
 
-  if (process.platform !== 'darwin') {
+  if (torchPlatform && process.platform !== 'darwin') {
     extras.push(torchPlatform);
   }
 
@@ -50,6 +50,20 @@ const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'cpu
 const getInvokePackageSpecifier = (version: string, extras: string[]): string => {
   const extrasSpecifier = extras.length > 0 ? `[${extras.join(',')}]` : '';
   return `invokeai${extrasSpecifier}==${version}`;
+};
+
+const getDeclaredOptionalDependencies = (pyprojectToml: string): Set<string> => {
+  const match = pyprojectToml.match(/\n\[project\.optional-dependencies\]\s*([\s\S]*?)(?=\n\[|\n#===|$)/);
+  const optionalDependencies = match?.[1];
+  if (!optionalDependencies) {
+    return new Set();
+  }
+
+  return new Set(
+    [...optionalDependencies.matchAll(/^"?([\w-]+)"?\s*=/gm)]
+      .map((extra) => extra[1])
+      .filter((extra): extra is string => Boolean(extra))
+  );
 };
 
 const writeBootstrapProject = async (arg: {
@@ -212,18 +226,15 @@ export class InstallManager {
     // The torch platform is determined by the GPU type, which in turn determines which torch extra and index to use
     const torchPlatform = getTorchPlatform(gpuType);
     const useBootstrapInstall = shouldUseBootstrapInstall(version);
-    const invokeExtras = useBootstrapInstall ? getInvokeExtras(gpuType, torchPlatform) : [];
-    if (!useBootstrapInstall && gpuType === 'nvidia<30xx') {
-      invokeExtras.push('xformers');
-    }
-    const invokeaiPackageSpecifier = getInvokePackageSpecifier(version, invokeExtras);
+    let invokeExtras = getInvokeExtras(gpuType, useBootstrapInstall ? torchPlatform : null);
 
     const bootstrapProjectPath = path.resolve(path.join(location, BOOTSTRAP_PROJECT_DIR_NAME));
     await fs.rm(bootstrapProjectPath, { recursive: true, force: true }).catch(() => {
       this.log.warn(c.yellow('Failed to delete previous bootstrap project\r\n'));
     });
 
-    let releaseFiles: InvokeReleaseInstallFiles;
+    let releaseFiles: InvokeReleaseInstallFiles | null = null;
+    let pins: Awaited<ReturnType<typeof getPins>>;
 
     if (useBootstrapInstall) {
       // Get the selected Invoke release's install metadata. For Invoke 6.14.0+, the bootstrap project uses the release
@@ -246,6 +257,14 @@ export class InstallManager {
       }
 
       releaseFiles = releaseFilesResult.value;
+      pins = releaseFiles.pins;
+      const declaredExtras = getDeclaredOptionalDependencies(releaseFiles.pyprojectToml);
+      const omittedExtras = invokeExtras.filter((extra) => !declaredExtras.has(extra));
+      invokeExtras = invokeExtras.filter((extra) => declaredExtras.has(extra));
+
+      if (omittedExtras.length > 0) {
+        this.log.warn(c.yellow(`Skipping undefined Invoke package extras: ${omittedExtras.join(', ')}\r\n`));
+      }
     } else {
       const pinsResult = await withResultAsync(() => getPins(version));
 
@@ -261,15 +280,11 @@ export class InstallManager {
         return;
       }
 
-      releaseFiles = {
-        tag: getInvokeReleaseTag(version),
-        pins: pinsResult.value,
-        pyprojectToml: '',
-        uvLock: '',
-      };
+      pins = pinsResult.value;
     }
 
-    const pythonVersion = releaseFiles.pins.python;
+    const invokeaiPackageSpecifier = getInvokePackageSpecifier(version, invokeExtras);
+    const pythonVersion = pins.python;
 
     const installationDetails = await getInstallationDetails(location);
 
@@ -473,6 +488,8 @@ export class InstallManager {
     let installInvokeArgs: string[];
 
     if (useBootstrapInstall) {
+      assert(releaseFiles, 'Bootstrap install requires release files');
+
       const bootstrapProjectResult = await withResultAsync(() =>
         writeBootstrapProject({
           location,
@@ -562,6 +579,7 @@ export class InstallManager {
         '--python-preference',
         'only-managed',
         '--no-deps',
+        '--force-reinstall',
         '--compile-bytecode',
         `${invokeaiPackageSpecifier}`,
       ];
@@ -584,7 +602,7 @@ export class InstallManager {
         '--compile-bytecode',
       ];
 
-      const torchIndexUrl = releaseFiles.pins.torchIndexUrl[systemPlatform][torchPlatform];
+      const torchIndexUrl = pins.torchIndexUrl[systemPlatform][torchPlatform];
       if (torchIndexUrl) {
         installInvokeArgs.push(`--index=${torchIndexUrl}`);
       }

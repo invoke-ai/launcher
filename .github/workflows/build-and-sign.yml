@@ -176,85 +176,54 @@ jobs:
             dist/*.yaml
           retention-days: 90
 
+  # Windows builds are code-signed by OSSign's hosted infrastructure (https://ossign.org);
+  # the signing certificate never enters this repository. OSSign's signing requires a manual
+  # reviewer approval on their side that can take HOURS, so we do not hold a runner waiting
+  # (it would just hit the job timeout). Instead this job fire-and-forgets the dispatch
+  # (dispatch_only) and hands the returned workflow id to wait-signature.yml, which polls on
+  # a cheap timer (the "Signatures" environment's Wait timer) and, once OSSign finishes,
+  # downloads the signed artifacts and attaches them to this tag's GitHub Release.
+  #
+  # This job intentionally uses no environment: it holds no signing cert (OSSign does), and
+  # the code-signing environment's required-reviewer gate would needlessly delay the dispatch.
+  # OSSIGN_USER / OSSIGN_TOKEN are therefore repo-level secrets (also read by wait-signature.yml,
+  # which runs in the Signatures environment).
+  #
+  # The OSSign-side workflow lives in OSSign/invoke-ai-launcher; the version we maintain for it,
+  # plus setup instructions, are checked in under .github/ossign/.
   build-windows:
     if: github.event_name == 'push' || github.event.inputs.build_windows == 'true'
-    runs-on: windows-latest
-    environment: code-signing
-    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write # needed to dispatch the wait-signature.yml polling workflow
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Dispatch build & sign to OSSign (fire-and-forget)
+        id: ossign
+        # Pinned to a commit SHA (not a mutable @main) — this action receives OSSIGN_TOKEN,
+        # so a moving ref is a supply-chain risk. Bump deliberately (e.g. via Dependabot).
+        uses: ossign/actions/workflow/dispatch@fbf0b39466d9409f05d1efc0e58cc3e4615ac625 # OSSign/actions main @ 2025-10-09
         with:
-          ref: ${{ github.event.inputs.release_tag || github.ref }}
+          # OSSign maps these credentials to the OSSign/invoke-ai-launcher repo and triggers its
+          # "Build and Sign" workflow. The source ref is taken from the current ref of this run
+          # (the pushed tag or dispatched branch).
+          username: ${{ secrets.OSSIGN_USER }}
+          token: ${{ secrets.OSSIGN_TOKEN }}
+          # Return immediately with a workflow id; the wait loop polls for the signed result.
+          dispatch_only: true
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Generate lockfile hash without version
-        id: lockfile-hash
-        shell: bash
-        run: echo "hash=$(node .github/scripts/generate-lockfile-hash.js)" >> $GITHUB_OUTPUT
-
-      - name: Cache node modules
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            ~/.electron
-            ~/.electron-gyp
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-modules-${{ steps.lockfile-hash.outputs.hash }}
-
-      - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci
-
-      - name: Get UV hash
-        id: uv-hash
-        shell: bash
-        run: |
-          echo "hash=$(node -e "console.log(require('./package.json').uv.win.sha256)")" >> $GITHUB_OUTPUT
-
-      - name: Cache UV binaries
-        id: cache-uv
-        uses: actions/cache@v4
-        with:
-          path: assets/bin
-          key: ${{ runner.os }}-uv-${{ steps.uv-hash.outputs.hash }}
-
-      - name: Download uv
-        if: steps.cache-uv.outputs.cache-hit != 'true'
-        run: npm run download win
-
-      - name: Set tool paths for signing
-        run: |
-          echo "C:\Program Files (x86)\Windows Kits\10\App Certification Kit" >> $GITHUB_PATH
-          echo "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools" >> $GITHUB_PATH
-          echo "C:\Program Files\DigiCert\DigiCert One Signing Manager Tools" >> $GITHUB_PATH
-        shell: bash
-
-      - name: Build and sign application
-        run: npm run publish
+      - name: Start the signing wait loop
         env:
-          ENABLE_SIGNING: true
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SM_HOST: ${{ secrets.SM_HOST }}
-          SM_API_KEY: ${{ secrets.SM_API_KEY }}
-          SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
-          SM_CLIENT_CERT_FILE_B64: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
-          SM_CODE_SIGNING_CERT_SHA1_HASH: ${{ secrets.SM_CODE_SIGNING_CERT_SHA1_HASH }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: 'windows-artifacts-signed'
-          path: |
-            dist/*.exe
-            dist/*.EXE
-            dist/*.blockmap
-            dist/*.yml
-            dist/*.yaml
-          retention-days: 90
+        run: |
+          set -euo pipefail
+          echo "OSSign signing dispatched (workflow id: ${{ steps.ossign.outputs.workflow_id }})."
+          # --repo is required: this job does not checkout, so gh has no local git context to infer it from.
+          gh workflow run wait-signature.yml \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.ref_name }}" \
+            -f workflow_id="${{ steps.ossign.outputs.workflow_id }}" \
+            -f target_ref="${{ github.ref_name }}" \
+            -f attempt=1

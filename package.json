@@ -44,6 +44,7 @@
     "@invoke-ai/ui-library": "github:invoke-ai/ui-library#v0.0.48",
     "@nanostores/react": "^1.0.0",
     "@observ33r/object-equals": "^1.1.6",
+    "@ossign/ossign": "^1.0.11",
     "@renovatebot/pep440": "^4.1.0",
     "@types/follow-redirects": "^1.14.4",
     "@types/ip": "^1.1.3",

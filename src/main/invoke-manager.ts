@@ -37,6 +37,7 @@ export class InvokeManager {
   private commandRunner: CommandRunner;
   private cols: number | undefined;
   private rows: number | undefined;
+  private isClosingWindowWithoutExiting: boolean;
 
   constructor(arg: {
     store: Store<StoreData>;
@@ -60,6 +61,7 @@ export class InvokeManager {
     this.commandRunner = new CommandRunner();
     this.cols = undefined;
     this.rows = undefined;
+    this.isClosingWindowWithoutExiting = false;
   }
 
   getStatus = (): WithTimestamp<InvokeProcessStatus> => {
@@ -259,6 +261,9 @@ export class InvokeManager {
     });
 
     window.on('close', () => {
+      if (this.isClosingWindowWithoutExiting) {
+        return;
+      }
       this.exitInvoke();
     });
 
@@ -274,6 +279,10 @@ export class InvokeManager {
             : details.reason === 'killed'
               ? 'Killed'
               : `Unknown (${details.reason})`;
+
+      if (this.isClosingWindowWithoutExiting) {
+        return;
+      }
 
       this.log.error(c.red(`UI Window unexpectedly exited with exit code ${details.exitCode}: ${reasonMessage}\r\n`));
 
@@ -358,6 +367,27 @@ export class InvokeManager {
     this.updateStatus({ type: 'running', data: this.lastRunningData });
   };
 
+  restartWindow = async (): Promise<void> => {
+    if (!this.lastRunningData) {
+      this.log.error(c.red('Cannot restart window - no running data available\r\n'));
+      return;
+    }
+
+    if (!this.commandRunner.isRunning()) {
+      this.log.error(c.red('Cannot restart window - process is not running\r\n'));
+      return;
+    }
+
+    this.log.info('Restarting Invoke UI window...\r\n');
+
+    if (this.window && !this.window.isDestroyed()) {
+      await this.closeWindowWithoutExiting();
+    }
+
+    this.createWindow(this.lastRunningData.loopbackUrl);
+    this.updateStatus({ type: 'running', data: this.lastRunningData });
+  };
+
   /**
    * Exit Invoke and wait for process to properly terminate
    */
@@ -376,6 +406,32 @@ export class InvokeManager {
       this.window.destroy();
     }
     this.window = null;
+  };
+
+  closeWindowWithoutExiting = async (): Promise<void> => {
+    if (!this.window) {
+      return;
+    }
+
+    const window = this.window;
+    this.isClosingWindowWithoutExiting = true;
+
+    try {
+      await new Promise<void>((resolve) => {
+        window.once('closed', resolve);
+        if (window.isDestroyed()) {
+          resolve();
+          return;
+        }
+        window.destroy();
+      });
+
+      if (this.window === window) {
+        this.window = null;
+      }
+    } finally {
+      this.isClosingWindowWithoutExiting = false;
+    }
   };
 
   /**
@@ -424,6 +480,9 @@ export const createInvokeManager = (arg: {
   ipc.handle('invoke-process:reopen-window', () => {
     invokeManager.reopenWindow();
   });
+  ipc.handle('invoke-process:restart-window', async () => {
+    await invokeManager.restartWindow();
+  });
   ipc.handle('invoke-process:resize', (_, cols, rows) => {
     invokeManager.resizePty(cols, rows);
   });
@@ -435,6 +494,8 @@ export const createInvokeManager = (arg: {
     }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');
+    ipcMain.removeHandler('invoke-process:reopen-window');
+    ipcMain.removeHandler('invoke-process:restart-window');
     ipcMain.removeHandler('invoke-process:resize');
   };
 

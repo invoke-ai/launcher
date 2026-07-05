@@ -15,7 +15,7 @@ import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import type { InvokeReleaseInstallFiles } from '@/shared/pins';
-import { getInvokeReleaseInstallFiles, getPins } from '@/shared/pins';
+import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock } from '@/shared/pins';
 import type {
   GpuType,
   InstallProcessStatus,
@@ -184,7 +184,15 @@ export class InstallManager {
     this.onStatusChange(this.status);
   };
 
-  startInstall = async (location: string, gpuType: GpuType, version: string, repair?: boolean) => {
+  startInstall = async (
+    location: string,
+    gpuType: GpuType,
+    version: string,
+    customTorchIndexUrl?: string,
+    repair?: boolean
+  ) => {
+    // Normalize the optional custom torch index override: an empty/whitespace value means "use defaults".
+    const torchIndexOverride = customTorchIndexUrl?.trim() || undefined;
     /**
      * Installation is a 2-step process:
      * - Create a virtual environment.
@@ -319,6 +327,9 @@ export class InstallManager {
         useBootstrapInstall ? 'frozen Invoke pyproject.toml and uv.lock' : 'legacy package metadata install'
       }\r\n`
     );
+    if (torchIndexOverride) {
+      this.log.info(c.magenta(`- Torch index override: ${torchIndexOverride}\r\n`));
+    }
 
     if (repair) {
       this.log.info(c.magenta('Repair mode enabled:\r\n'));
@@ -510,6 +521,13 @@ export class InstallManager {
       }
 
       const bootstrapProjectPath = bootstrapProjectResult.value;
+
+      // When a custom torch index is set, we install the torch-family packages from that index instead of the source
+      // the lockfile records. To avoid downloading torch twice (once from the lock during `uv sync`, once from the
+      // custom index afterwards), we skip those packages during the sync and install them once from the custom index
+      // below. `uv sync --frozen` cannot pull them from a different index in-place, so a separate install is required.
+      const torchPackages = torchIndexOverride ? getTorchPackagesFromLock(releaseFiles.uvLock, torchPlatform) : [];
+
       const syncInvokeArgs = [
         // Use `uv sync` against the selected Invoke release's pyproject.toml and lockfile.
         'sync',
@@ -534,6 +552,11 @@ export class InstallManager {
 
       for (const extra of invokeExtras) {
         syncInvokeArgs.push('--extra', extra);
+      }
+
+      // Skip the torch-family packages during sync - they are reinstalled from the custom index below.
+      for (const pkg of torchPackages) {
+        syncInvokeArgs.push('--no-install-package', pkg.name);
       }
 
       this.log.info(c.cyan('Syncing invokeai environment...\r\n'));
@@ -569,6 +592,65 @@ export class InstallManager {
         return;
       }
 
+      // If a custom torch index is set, install the torch-family packages from it. These were skipped during `uv sync`
+      // (see `--no-install-package` above), so this is a single download from the user's index rather than a second
+      // one. This deliberately departs from the lock's recorded source - which is exactly what the user is asking for
+      // when they set the field (e.g. cu126 on 20xx cards, ROCm on Windows).
+      if (torchIndexOverride) {
+        if (torchPackages.length === 0) {
+          this.log.warn(
+            c.yellow(
+              `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile - skipping the torch install from the custom index.\r\n`
+            )
+          );
+        } else {
+          const reinstallTorchArgs = [
+            'pip',
+            'install',
+            '--python',
+            venvPath,
+            '--python-preference',
+            'only-managed',
+            // Pull the torch packages from the user-provided index instead of the one recorded in the lockfile.
+            `--index=${torchIndexOverride}`,
+            // The torch packages were skipped during sync; on a reinstall/update an older build may still be present,
+            // so force the install to guarantee the packages come from the custom index.
+            '--force-reinstall',
+            // Everything else is already installed by `uv sync`; only install the torch packages themselves.
+            '--no-deps',
+            '--compile-bytecode',
+            ...torchPackages.map(({ name, version }) => `${name}==${version}`),
+          ];
+
+          this.log.info(c.cyan('Installing torch from custom index...\r\n'));
+          this.log.info(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${reinstallTorchArgs.join(' ')}\r\n`);
+
+          const reinstallTorchResult = await withResultAsync(() =>
+            this.runCommand(uvPath, reinstallTorchArgs, { ...runProcessOptions, cwd: location })
+          );
+
+          if (reinstallTorchResult.isErr()) {
+            this.log.error(
+              c.red(`Failed to reinstall torch from custom index: ${reinstallTorchResult.error.message}\r\n`)
+            );
+            this.updateStatus({
+              type: 'error',
+              error: {
+                message: 'Failed to reinstall torch from custom index',
+                context: serializeError(reinstallTorchResult.error),
+              },
+            });
+            return;
+          }
+
+          if (reinstallTorchResult.value === 'canceled') {
+            this.log.warn(c.yellow('Installation canceled\r\n'));
+            this.updateStatus({ type: 'canceled' });
+            return;
+          }
+        }
+      }
+
       installInvokeArgs = [
         // Install the published Invoke package after syncing its locked dependencies. Dependencies are installed by
         // `uv sync` above, so do not resolve them again from wheel metadata.
@@ -602,7 +684,7 @@ export class InstallManager {
         '--compile-bytecode',
       ];
 
-      const torchIndexUrl = pins.torchIndexUrl[systemPlatform][torchPlatform];
+      const torchIndexUrl = torchIndexOverride ?? pins.torchIndexUrl[systemPlatform][torchPlatform];
       if (torchIndexUrl) {
         installInvokeArgs.push(`--index=${torchIndexUrl}`);
       }
@@ -694,8 +776,8 @@ export const createInstallManager = (arg: {
     },
   });
 
-  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
-    installManager.startInstall(installationPath, gpuType, version, repair);
+  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, customTorchIndexUrl, repair) => {
+    installManager.startInstall(installationPath, gpuType, version, customTorchIndexUrl, repair);
   });
   ipc.handle('install-process:cancel-install', async () => {
     await installManager.cancelInstall();

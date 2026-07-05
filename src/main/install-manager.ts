@@ -1,5 +1,5 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
-import { major, minor } from '@renovatebot/pep440';
+import { compare, major, minor } from '@renovatebot/pep440';
 import c from 'ansi-colors';
 import { ipcMain } from 'electron';
 import fs from 'fs/promises';
@@ -14,7 +14,8 @@ import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
-import { getPins } from '@/shared/pins';
+import type { InvokeReleaseInstallFiles } from '@/shared/pins';
+import { getInvokeReleaseInstallFiles, getPins } from '@/shared/pins';
 import type {
   GpuType,
   InstallProcessStatus,
@@ -23,6 +24,63 @@ import type {
   LogEntry,
   WithTimestamp,
 } from '@/shared/types';
+
+const BOOTSTRAP_PROJECT_DIR_NAME = '.launcher-bootstrap';
+const MIN_BOOTSTRAP_INSTALL_VERSION = '6.14.0rc1';
+
+const shouldUseBootstrapInstall = (version: string): boolean => {
+  return compare(version.replace(/^v/, ''), MIN_BOOTSTRAP_INSTALL_VERSION) >= 0;
+};
+
+const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'cpu' | null): string[] => {
+  const extras: string[] = [];
+
+  if (torchPlatform && process.platform !== 'darwin') {
+    extras.push(torchPlatform);
+  }
+
+  // We only install xformers on 20xx and earlier Nvidia GPUs - otherwise, torch's native sdp is faster
+  if (gpuType === 'nvidia<30xx') {
+    extras.push('xformers');
+  }
+
+  return extras;
+};
+
+const getInvokePackageSpecifier = (version: string, extras: string[]): string => {
+  const extrasSpecifier = extras.length > 0 ? `[${extras.join(',')}]` : '';
+  return `invokeai${extrasSpecifier}==${version}`;
+};
+
+const getDeclaredOptionalDependencies = (pyprojectToml: string): Set<string> => {
+  const match = pyprojectToml.match(/\n\[project\.optional-dependencies\]\s*([\s\S]*?)(?=\n\[|\n#===|$)/);
+  const optionalDependencies = match?.[1];
+  if (!optionalDependencies) {
+    return new Set();
+  }
+
+  return new Set(
+    [...optionalDependencies.matchAll(/^"?([\w-]+)"?\s*=/gm)]
+      .map((extra) => extra[1])
+      .filter((extra): extra is string => Boolean(extra))
+  );
+};
+
+const writeBootstrapProject = async (arg: {
+  location: string;
+  releaseFiles: InvokeReleaseInstallFiles;
+}): Promise<string> => {
+  const bootstrapProjectPath = path.resolve(path.join(arg.location, BOOTSTRAP_PROJECT_DIR_NAME));
+  await fs.rm(bootstrapProjectPath, { recursive: true, force: true });
+  await fs.mkdir(bootstrapProjectPath, { recursive: true });
+
+  await Promise.all([
+    fs.writeFile(path.join(bootstrapProjectPath, 'pyproject.toml'), arg.releaseFiles.pyprojectToml),
+    fs.writeFile(path.join(bootstrapProjectPath, 'uv.lock'), arg.releaseFiles.uvLock),
+  ]);
+
+  return bootstrapProjectPath;
+};
 
 export class InstallManager {
   private status: WithTimestamp<InstallProcessStatus>;
@@ -130,7 +188,7 @@ export class InstallManager {
     /**
      * Installation is a 2-step process:
      * - Create a virtual environment.
-     * - Install the invokeai package.
+     * - Generate a bootstrap project from the selected Invoke release and sync it into the virtual environment.
      *
      * If repair mode is enabled, we do these additional steps before the above:
      * - Forcibly reinstall the uv-managed python.
@@ -165,30 +223,68 @@ export class InstallManager {
       `Unsupported platform: ${systemPlatform} ${systemArch}`
     );
 
-    // The torch platform is determined by the GPU type, which in turn determines which pypi index to use
+    // The torch platform is determined by the GPU type, which in turn determines which torch extra and index to use
     const torchPlatform = getTorchPlatform(gpuType);
+    const useBootstrapInstall = shouldUseBootstrapInstall(version);
+    let invokeExtras = getInvokeExtras(gpuType, useBootstrapInstall ? torchPlatform : null);
 
-    // We only install xformers on 20xx and earlier Nvidia GPUs - otherwise, torch's native sdp is faster
-    const withXformers = gpuType === 'nvidia<30xx';
-    const invokeaiPackageSpecifier = withXformers ? 'invokeai[xformers]' : 'invokeai';
+    const bootstrapProjectPath = path.resolve(path.join(location, BOOTSTRAP_PROJECT_DIR_NAME));
+    await fs.rm(bootstrapProjectPath, { recursive: true, force: true }).catch(() => {
+      this.log.warn(c.yellow('Failed to delete previous bootstrap project\r\n'));
+    });
 
-    // Get the Python version and torch index URL for the target version
-    const pinsResult = await withResultAsync(() => getPins(version));
+    let releaseFiles: InvokeReleaseInstallFiles | null = null;
+    let pins: Awaited<ReturnType<typeof getPins>>;
 
-    if (pinsResult.isErr()) {
-      this.log.error(`Failed to get pins for version ${version}: ${pinsResult.error.message}\r\n`);
-      this.updateStatus({
-        type: 'error',
-        error: {
-          message: 'Failed to get pins',
-          context: serializeError(pinsResult.error),
-        },
-      });
-      return;
+    if (useBootstrapInstall) {
+      // Get the selected Invoke release's install metadata. For Invoke 6.14.0+, the bootstrap project uses the release
+      // pyproject.toml and lockfile to sync dependencies, then installs the published invokeai package for the selected
+      // version. Older versions use the legacy pip install path.
+      const releaseFilesResult = await withResultAsync(() => getInvokeReleaseInstallFiles(version));
+
+      if (releaseFilesResult.isErr()) {
+        this.log.error(
+          `Failed to get Invoke release install files for version ${version}: ${releaseFilesResult.error.message}\r\n`
+        );
+        this.updateStatus({
+          type: 'error',
+          error: {
+            message: 'Failed to get Invoke release install files',
+            context: serializeError(releaseFilesResult.error),
+          },
+        });
+        return;
+      }
+
+      releaseFiles = releaseFilesResult.value;
+      pins = releaseFiles.pins;
+      const declaredExtras = getDeclaredOptionalDependencies(releaseFiles.pyprojectToml);
+      const omittedExtras = invokeExtras.filter((extra) => !declaredExtras.has(extra));
+      invokeExtras = invokeExtras.filter((extra) => declaredExtras.has(extra));
+
+      if (omittedExtras.length > 0) {
+        this.log.warn(c.yellow(`Skipping undefined Invoke package extras: ${omittedExtras.join(', ')}\r\n`));
+      }
+    } else {
+      const pinsResult = await withResultAsync(() => getPins(version));
+
+      if (pinsResult.isErr()) {
+        this.log.error(`Failed to get pins for version ${version}: ${pinsResult.error.message}\r\n`);
+        this.updateStatus({
+          type: 'error',
+          error: {
+            message: 'Failed to get pins',
+            context: serializeError(pinsResult.error),
+          },
+        });
+        return;
+      }
+
+      pins = pinsResult.value;
     }
 
-    const pythonVersion = pinsResult.value.python;
-    const torchIndexUrl = pinsResult.value.torchIndexUrl[systemPlatform][torchPlatform];
+    const invokeaiPackageSpecifier = getInvokePackageSpecifier(version, invokeExtras);
+    const pythonVersion = pins.python;
 
     const installationDetails = await getInstallationDetails(location);
 
@@ -217,7 +313,12 @@ export class InstallManager {
     this.log.info(`- Python version: ${pythonVersion}\r\n`);
     this.log.info(`- GPU type: ${gpuType}\r\n`);
     this.log.info(`- Torch platform: ${torchPlatform}\r\n`);
-    this.log.info(`- Using torch index: ${torchIndexUrl ?? 'default'}\r\n`);
+    this.log.info(`- Invoke package: ${invokeaiPackageSpecifier}\r\n`);
+    this.log.info(
+      `- Dependency resolution: ${
+        useBootstrapInstall ? 'frozen Invoke pyproject.toml and uv.lock' : 'legacy package metadata install'
+      }\r\n`
+    );
 
     if (repair) {
       this.log.info(c.magenta('Repair mode enabled:\r\n'));
@@ -381,34 +482,134 @@ export class InstallManager {
       return;
     }
 
-    // Install the invokeai package
-    const installInvokeArgs = [
-      // Use `uv`s pip interface to install the invokeai package
-      'pip',
-      'install',
-      // Ensure we install against the correct python version
-      '--python',
-      pythonVersion,
-      // Always use a managed python version - never the system python
-      '--python-preference',
-      'only-managed',
-      `${invokeaiPackageSpecifier}==${version}`,
-      // This may be unnecessary with `uv`, but we've had issues where `pip` screws up dependencies without --force-reinstall
-      '--force-reinstall',
-      // TODO(psyche): Last time I checked, this didn't seem to work - the bytecode wasn't compiled
-      '--compile-bytecode',
-    ];
-
-    if (torchIndexUrl) {
-      installInvokeArgs.push(`--index=${torchIndexUrl}`);
-    }
-
     // Manually set the VIRTUAL_ENV environment variable to the venv path to ensure `uv` uses it correctly.
-    // Unfortunately there is no way to specify this in the `uv` CLI.
     runProcessOptions.env.VIRTUAL_ENV = venvPath;
 
+    let installInvokeArgs: string[];
+
+    if (useBootstrapInstall) {
+      assert(releaseFiles, 'Bootstrap install requires release files');
+
+      const bootstrapProjectResult = await withResultAsync(() =>
+        writeBootstrapProject({
+          location,
+          releaseFiles,
+        })
+      );
+
+      if (bootstrapProjectResult.isErr()) {
+        this.log.error(c.red(`Failed to create bootstrap project: ${bootstrapProjectResult.error.message}\r\n`));
+        this.updateStatus({
+          type: 'error',
+          error: {
+            message: 'Failed to create bootstrap project',
+            context: serializeError(bootstrapProjectResult.error),
+          },
+        });
+        return;
+      }
+
+      const bootstrapProjectPath = bootstrapProjectResult.value;
+      const syncInvokeArgs = [
+        // Use `uv sync` against the selected Invoke release's pyproject.toml and lockfile.
+        'sync',
+        '--project',
+        bootstrapProjectPath,
+        // The generated project is only a dependency resolver. Do not install it into the app venv.
+        '--no-install-project',
+        // Sync into the venv we created above, rather than creating a venv under the bootstrap project.
+        '--active',
+        // Do not remove user-installed packages from the app venv.
+        '--inexact',
+        // The selected Invoke release's uv.lock should be authoritative.
+        '--frozen',
+        // Ensure we sync against the correct python version.
+        '--python',
+        pythonVersion,
+        // Always use a managed python version - never the system python.
+        '--python-preference',
+        'only-managed',
+        '--compile-bytecode',
+      ];
+
+      for (const extra of invokeExtras) {
+        syncInvokeArgs.push('--extra', extra);
+      }
+
+      this.log.info(c.cyan('Syncing invokeai environment...\r\n'));
+      this.log.info(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${syncInvokeArgs.join(' ')}\r\n`);
+
+      const syncEnvResult = await withResultAsync(() =>
+        this.runCommand(uvPath, syncInvokeArgs, { ...runProcessOptions, cwd: bootstrapProjectPath })
+      );
+
+      if (syncEnvResult.isErr()) {
+        this.log.error(c.red(`Failed to sync invokeai environment: ${syncEnvResult.error.message}\r\n`));
+        this.logRepairModeMessages();
+        this.updateStatus({
+          type: 'error',
+          error: {
+            message: 'Failed to sync invokeai environment',
+            context: serializeError(syncEnvResult.error),
+          },
+        });
+        return;
+      }
+
+      if (syncEnvResult.value === 'canceled') {
+        this.log.warn(c.yellow('Installation canceled\r\n'));
+        this.updateStatus({ type: 'canceled' });
+        return;
+      }
+
+      // Check for cancellation before proceeding to package installation
+      if (this.isCancellationRequested) {
+        this.log.warn(c.yellow('Installation canceled\r\n'));
+        this.updateStatus({ type: 'canceled' });
+        return;
+      }
+
+      installInvokeArgs = [
+        // Install the published Invoke package after syncing its locked dependencies. Dependencies are installed by
+        // `uv sync` above, so do not resolve them again from wheel metadata.
+        'pip',
+        'install',
+        '--python',
+        venvPath,
+        '--python-preference',
+        'only-managed',
+        '--no-deps',
+        '--force-reinstall',
+        '--compile-bytecode',
+        `${invokeaiPackageSpecifier}`,
+      ];
+    } else {
+      installInvokeArgs = [
+        // Use `uv`s pip interface to install the invokeai package
+        'pip',
+        'install',
+        // Ensure we install against the correct python version
+        '--python',
+        pythonVersion,
+        // Always use a managed python version - never the system python
+        '--python-preference',
+        'only-managed',
+        `${invokeaiPackageSpecifier}`,
+        // This may be unnecessary with `uv`, but we've had issues where `pip` screws up dependencies without
+        // --force-reinstall
+        '--force-reinstall',
+        // TODO(psyche): Last time I checked, this didn't seem to work - the bytecode wasn't compiled
+        '--compile-bytecode',
+      ];
+
+      const torchIndexUrl = pins.torchIndexUrl[systemPlatform][torchPlatform];
+      if (torchIndexUrl) {
+        installInvokeArgs.push(`--index=${torchIndexUrl}`);
+      }
+    }
+
     this.log.info(c.cyan('Installing invokeai package...\r\n'));
-    this.log.info(`> ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
+    this.log.info(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
 
     const installAppResult = await withResultAsync(() =>
       this.runCommand(uvPath, installInvokeArgs, { ...runProcessOptions, cwd: location })

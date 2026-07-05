@@ -33,14 +33,35 @@ The repo contains helpful instructions to prepare the certificate env vars below
 
 ### Windows
 
-We use DigiCert KeyLocker to sign Windows builds. This is a cloud-based signing service that requires a DigiCert account.
+Windows builds are code-signed by [OSSign](https://ossign.org)'s hosted infrastructure.
+The signing certificate lives only at OSSign and is **never** exposed to this repository.
 
-DigiCert provides some minimal documentation on setting up KeyLocker to work with `electron-builder`:
+The `build-windows` job in `.github/workflows/build-and-sign.yml` does not build or sign
+Windows locally. It fires a `dispatch_only` request via `ossign/actions/workflow/dispatch` to
+trigger the "Build and Sign" workflow in our OSSign-hosted repo (`OSSign/invoke-ai-launcher`),
+then hands the returned workflow id to `.github/workflows/wait-signature.yml`. Because OSSign's
+signing waits on a manual reviewer approval that can take hours, that wait loop polls
+asynchronously (using the `Signatures` environment's Wait timer) instead of holding a runner;
+when signing completes it downloads the signed artifacts and attaches them to the tag's GitHub
+Release. The hosted workflow checks out this repo at the release ref, runs `npm run package`
+with `ENABLE_SIGNING=true`, and signs each binary via `scripts/customSign.js`, which delegates
+to the [`@ossign/ossign`](https://www.npmjs.com/package/@ossign/ossign) CLI using the
+certificate config (`OSSIGN_CONFIG`) that OSSign provisions in that repo.
 
-- https://docs.digicert.com/en/digicert-keylocker/code-signing/sign-with-third-party-signing-tools/windows-applications/sign-executables-with-electron-builder-using-ksp-library.html
+See [`.github/ossign/README.md`](.github/ossign/README.md) for the full architecture (including
+the `Signatures` environment setup). The OSSign-side workflow itself lives in the
+[`OSSign/invoke-ai-launcher`](https://github.com/OSSign/invoke-ai-launcher) repo.
 
-- `SM_HOST`: The DigiCert Signing Manager host URL. It must start with `https://`.
-- `SM_API_KEY`: The API key for the DigiCert Signing Manager account.
-- `SM_CLIENT_CERT_PASSWORD`: The password for the client certificate used to authenticate with the DigiCert Signing Manager.
-- `SM_CLIENT_CERT_FILE`: The client certificate file used to authenticate with the DigiCert Signing Manager, encoded as b64.
-- `SM_CODE_SIGNING_CERT_SHA1_HASH`: The SHA1 hash of the code signing certificate used to sign the Windows builds.
+Two **repo-level** secrets must be set (OSSign provides the values). They are repo-level rather
+than environment-scoped because both `build-windows` (no environment) and `wait-signature.yml`
+(the `Signatures` environment) need them:
+
+- `OSSIGN_USER`: the OSSign username used to authenticate the dispatch request.
+- `OSSIGN_TOKEN`: the OSSign API token used to authenticate the dispatch request.
+
+> The certificate config (`OSSIGN_CONFIG`) is **not** stored here — it lives in the `OSSign`
+> environment of `OSSign/invoke-ai-launcher`.
+
+To debug the signer locally, set `OSSIGN_CONFIG` (raw JSON/YAML) or `OSSIGN_CONFIG_BASE64`
+(base64-encoded) in your environment and run with `ENABLE_SIGNING=true`. Signing is otherwise
+a no-op, since `ENABLE_SIGNING` gates the custom signer in `electron-builder.config.ts`.

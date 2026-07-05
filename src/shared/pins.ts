@@ -36,9 +36,9 @@ export type InvokeReleaseInstallFiles = {
   uvLock: string;
 };
 
-export type LockedPackage = { name: string; version: string };
+type LockedPackage = { name: string; version: string };
 
-export type TorchPlatform = 'cuda' | 'rocm' | 'cpu';
+type TorchPlatform = 'cuda' | 'rocm' | 'cpu';
 
 /**
  * Matches a package's own top-level `source` against the PyTorch download index for the given torch platform. Invoke's

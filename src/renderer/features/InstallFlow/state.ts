@@ -23,7 +23,7 @@ import type {
 const steps = ['Location', 'Version', 'Configure', 'Review', 'Install'] as const;
 
 /** The sub-views of the GPU confirmation flow in the Configure step. */
-export type GpuConfirmPhase = 'confirm' | 'nvidia-tier' | 'manual' | 'done';
+type GpuConfirmPhase = 'confirm' | 'nvidia-tier' | 'manual' | 'done';
 
 const $choices = map<{
   dirDetails: DirDetails | null;

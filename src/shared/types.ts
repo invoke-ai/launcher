@@ -122,13 +122,22 @@ export const GPU_TYPE_MAP: Record<GpuType, string> = {
 export type GpuBackend = 'cuda' | 'rocm' | 'metal' | 'cpu';
 
 /**
+ * The hardware vendor behind the detected backend. `cpu` means no dedicated GPU vendor was identified. Note that a
+ * vendor can be identified even when the usable backend is `cpu` - e.g. a discrete AMD GPU on Windows, where ROCm is
+ * not supported.
+ */
+export type GpuVendor = 'nvidia' | 'amd' | 'apple' | 'cpu';
+
+export type GpuConfidence = 'high' | 'medium' | 'low' | 'weak-signal' | 'none';
+
+/**
  * Result of the best-effort hardware probe for the compute backend. Note that `cuda` does not distinguish the Nvidia
  * generation (20xx vs 30xx+) - that still requires a user choice because it cannot be reliably auto-detected.
  */
 export type GpuDetectionResult = {
   backend: GpuBackend;
-  vendor: string;
-  confidence: 'high' | 'medium' | 'low' | 'weak-signal' | 'none';
+  vendor: GpuVendor;
+  confidence: GpuConfidence;
   /** Human-readable explanation of why this backend was chosen (for logging/debugging). */
   decision: string;
 };

@@ -4,25 +4,7 @@ import type { ChangeEvent } from 'react';
 import { memo, useCallback } from 'react';
 
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
-
-const isHttpUrl = (value: string): boolean => {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-};
-
-/**
- * A custom torch index URL is optional. When set, it must be a valid http(s) URL. Anything else (typos like
- * `htps://...`, a bare `cu126`, etc.) is rejected at entry so it doesn't surface minutes into an install as a
- * cryptic uv resolver error.
- */
-export const isCustomTorchIndexUrlInvalid = (value: string): boolean => {
-  const trimmed = value.trim();
-  return trimmed.length > 0 && !isHttpUrl(trimmed);
-};
+import { isCustomTorchIndexUrlInvalid } from '@/shared/url';
 
 export const InstallFlowStepConfigureCustomIndexUrl = memo(() => {
   const { customTorchIndexUrl } = useStore(installFlowApi.$choices);
@@ -43,6 +25,10 @@ export const InstallFlowStepConfigureCustomIndexUrl = memo(() => {
             <Text>
               Leave empty to use Invoke&apos;s defaults. When set, torch is installed from this index instead. Useful
               for e.g. cu126 on 20xx-series cards or ROCm on Windows. You are on your own with this override.
+            </Text>
+            <Text>
+              Note: on 20xx-series cards the xformers package is still built against Invoke&apos;s default CUDA build,
+              so a mismatched custom CUDA index can cause import errors or crashes.
             </Text>
           </Flex>
         }

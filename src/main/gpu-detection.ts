@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import type { GpuBackend, GpuDetectionResult } from '@/shared/types';
+import type { GpuBackend, GpuConfidence, GpuDetectionResult, GpuVendor } from '@/shared/types';
 
 /**
  * Best-effort hardware probe for the compute backend (CUDA / ROCm / Metal / CPU). This is advisory only: the install
@@ -14,7 +14,7 @@ import type { GpuBackend, GpuDetectionResult } from '@/shared/types';
 
 const execFileAsync = promisify(execFile);
 
-type Confidence = 'high' | 'medium' | 'low' | 'weak-signal' | 'none';
+type Confidence = GpuConfidence;
 
 type ProbeResult = {
   ok: boolean;
@@ -154,7 +154,14 @@ async function hasNvidiaGpu(): Promise<BackendProbe> {
 }
 
 async function hasRocmGpu(): Promise<BackendProbe> {
-  const amdSmi = await runProbe('amd-smi', ['list']);
+  // Each external probe has a 3s timeout; running them sequentially would cost up to ~9s of spinner time on a machine
+  // without ROCm tools installed. They're independent, so run them concurrently and then evaluate in priority order.
+  const [amdSmi, rocmSmi, rocminfo] = await Promise.all([
+    runProbe('amd-smi', ['list']),
+    runProbe('rocm-smi', ['--showproductname']),
+    runProbe('rocminfo', []),
+  ]);
+
   if (
     amdSmi.ok &&
     /GPU:\s*\d+|ASIC|DEVICE/i.test(amdSmi.stdout) &&
@@ -163,12 +170,10 @@ async function hasRocmGpu(): Promise<BackendProbe> {
     return { detected: true, confidence: 'high', reason: '`amd-smi list` reported at least one AMD GPU' };
   }
 
-  const rocmSmi = await runProbe('rocm-smi', ['--showproductname']);
   if (rocmSmi.ok && rocmSmi.stdout.length > 0 && !/no devices|not found|failed/i.test(rocmSmi.stdout)) {
     return { detected: true, confidence: 'high', reason: '`rocm-smi --showproductname` returned GPU product output' };
   }
 
-  const rocminfo = await runProbe('rocminfo', []);
   const rocminfoHasGpuAgent =
     rocminfo.ok && /Device Type:\s+GPU/i.test(rocminfo.stdout) && /Name:\s+gfx[0-9a-f]+/i.test(rocminfo.stdout);
   if (rocminfoHasGpuAgent) {
@@ -215,13 +220,42 @@ async function hasMacGpuCapabilities(): Promise<BackendProbe> {
 }
 
 /**
+ * Detect a discrete AMD GPU on Windows. There is no supported ROCm-on-Windows install path, so this never yields a
+ * usable GPU backend - it exists purely so we can tell the user "we saw your AMD card, but Windows will use the CPU"
+ * instead of the misleading "no dedicated GPU detected". These are exactly the users the custom-index field targets.
+ */
+async function hasWindowsAmdGpu(): Promise<BackendProbe> {
+  if (process.platform !== 'win32') {
+    return { detected: false, confidence: 'none', reason: 'Not Windows' };
+  }
+
+  const videoControllers = await runProbe('powershell', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    'Get-CimInstance Win32_VideoController | ForEach-Object { $_.Name }',
+  ]);
+
+  if (videoControllers.ok && /\b(AMD|Radeon|ATI)\b/i.test(videoControllers.stdout)) {
+    return { detected: true, confidence: 'medium', reason: 'Windows reported an AMD/Radeon display adapter' };
+  }
+
+  return { detected: false, confidence: 'none', reason: 'No AMD display adapter reported by Windows' };
+}
+
+/**
  * Detect the most likely compute backend for this machine. The result is advisory and always user-overridable.
  */
 export const detectGpu = async (): Promise<GpuDetectionResult> => {
-  const [nvidia, rocm, mac] = await Promise.all([hasNvidiaGpu(), hasRocmGpu(), hasMacGpuCapabilities()]);
+  const [nvidia, rocm, mac, windowsAmd] = await Promise.all([
+    hasNvidiaGpu(),
+    hasRocmGpu(),
+    hasMacGpuCapabilities(),
+    hasWindowsAmdGpu(),
+  ]);
 
   let backend: GpuBackend;
-  let vendor: string;
+  let vendor: GpuVendor;
   let confidence: Confidence;
   let decision: string;
 
@@ -240,10 +274,18 @@ export const detectGpu = async (): Promise<GpuDetectionResult> => {
     vendor = 'apple';
     confidence = mac.confidence;
     decision = mac.reason;
+  } else if (windowsAmd.detected) {
+    // A real AMD GPU, but no ROCm on Windows - the usable backend is still CPU. We surface the vendor so the UI can
+    // explain why, rather than claiming there's no GPU at all.
+    backend = 'cpu';
+    vendor = 'amd';
+    confidence = windowsAmd.confidence;
+    decision = 'AMD GPU detected on Windows, where ROCm is not supported - Invoke will use the CPU';
   } else {
     backend = 'cpu';
     vendor = 'cpu';
-    confidence = 'high';
+    // "No evidence found" is the opposite of high confidence - nothing was detected.
+    confidence = 'none';
     decision = 'No supported GPU backend detected';
   }
 

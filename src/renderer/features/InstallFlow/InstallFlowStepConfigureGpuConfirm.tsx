@@ -34,6 +34,15 @@ export const InstallFlowStepConfigureGpuConfirm = memo(() => {
     }
   }, []);
 
+  // On macOS the only sane answer to "we detected a Mac GPU (Metal / MPS)" is yes, so skip the confirmation prompt and
+  // go straight to the summary. The user can still change it from there.
+  useEffect(() => {
+    if (status === 'done' && detection?.backend === 'metal' && phase === 'confirm') {
+      installFlowApi.$choices.setKey('gpuType', BACKEND_TO_GPU_TYPE.metal);
+      installFlowApi.$gpuConfirmPhase.set('done');
+    }
+  }, [status, detection, phase]);
+
   const onConfirmYes = useCallback(() => {
     const result = installFlowApi.$gpuDetection.get();
     if (!result) {
@@ -107,10 +116,19 @@ export const InstallFlowStepConfigureGpuConfirm = memo(() => {
     return <DetectedSummary onChange={onConfirmNo} />;
   }
 
+  // A discrete AMD GPU on Windows is reported as the CPU backend (no ROCm on Windows), so give it an honest message
+  // rather than the misleading "no dedicated GPU".
+  const isWindowsAmd = detection.backend === 'cpu' && detection.vendor === 'amd';
+  const detectionHeading = isWindowsAmd
+    ? 'We detected an AMD GPU, but ROCm is not supported on Windows, so Invoke will use your CPU.'
+    : `We detected ${BACKEND_LABEL[detection.backend]}.`;
+
   // phase === 'confirm'
   return (
     <Flex flexDir="column" gap={4} alignItems="center" maxW={112}>
-      <Heading size="sm">We detected {BACKEND_LABEL[detection.backend]}.</Heading>
+      <Heading size="sm" textAlign="center">
+        {detectionHeading}
+      </Heading>
       <Text fontSize="md" textAlign="center">
         Is this correct?
       </Text>

@@ -3,13 +3,11 @@ import { useStore } from '@nanostores/react';
 import { memo } from 'react';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
-import {
-  InstallFlowStepConfigureCustomIndexUrl,
-  isCustomTorchIndexUrlInvalid,
-} from '@/renderer/features/InstallFlow/InstallFlowStepConfigureCustomIndexUrl';
+import { InstallFlowStepConfigureCustomIndexUrl } from '@/renderer/features/InstallFlow/InstallFlowStepConfigureCustomIndexUrl';
 import { InstallFlowStepConfigureGpuConfirm } from '@/renderer/features/InstallFlow/InstallFlowStepConfigureGpuConfirm';
 import { InstallFlowStepper } from '@/renderer/features/InstallFlow/InstallFlowStepper';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
+import { isCustomTorchIndexUrlInvalid } from '@/shared/url';
 
 export const InstallFlowStepConfigure = memo(() => {
   const { gpuType, customTorchIndexUrl } = useStore(installFlowApi.$choices);

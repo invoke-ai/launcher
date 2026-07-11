@@ -24,6 +24,7 @@ import type {
   LogEntry,
   WithTimestamp,
 } from '@/shared/types';
+import { isCustomTorchIndexUrlInvalid, redactUrlCredentials } from '@/shared/url';
 
 const BOOTSTRAP_PROJECT_DIR_NAME = '.launcher-bootstrap';
 const MIN_BOOTSTRAP_INSTALL_VERSION = '6.14.0rc1';
@@ -193,6 +194,22 @@ export class InstallManager {
   ) => {
     // Normalize the optional custom torch index override: an empty/whitespace value means "use defaults".
     const torchIndexOverride = customTorchIndexUrl?.trim() || undefined;
+
+    // Defense-in-depth: the renderer already rejects non-http(s) URLs at entry, but the main process should not trust
+    // that. A bad value here would otherwise surface as a cryptic uv error minutes into the install.
+    if (torchIndexOverride && isCustomTorchIndexUrlInvalid(torchIndexOverride)) {
+      const message = `Invalid custom torch index URL: ${redactUrlCredentials(torchIndexOverride)}`;
+      this.log.error(c.red(`${message}\r\n`));
+      this.updateStatus({ type: 'error', error: { message } });
+      return;
+    }
+
+    // Any credentials embedded in the override must never be echoed into the install log or the surfaced command lines.
+    const redactedTorchIndexOverride = torchIndexOverride ? redactUrlCredentials(torchIndexOverride) : undefined;
+    const redactForLog = (text: string): string =>
+      torchIndexOverride && redactedTorchIndexOverride
+        ? text.split(torchIndexOverride).join(redactedTorchIndexOverride)
+        : text;
     /**
      * Installation is a 2-step process:
      * - Create a virtual environment.
@@ -328,7 +345,20 @@ export class InstallManager {
       }\r\n`
     );
     if (torchIndexOverride) {
-      this.log.info(c.magenta(`- Torch index override: ${torchIndexOverride}\r\n`));
+      this.log.info(c.magenta(`- Torch index override: ${redactedTorchIndexOverride}\r\n`));
+
+      // xformers (installed only on nvidia<30xx) is pulled from Invoke's default index and built against the lock's
+      // default CUDA torch. If the user swaps torch to a different CUDA build via the override, the two can have
+      // mismatched ABIs, which is a known source of import errors or crashes. Warn, but don't block - the user opted in.
+      if (invokeExtras.includes('xformers')) {
+        this.log.warn(
+          c.yellow(
+            '- Warning: a custom torch index is combined with the xformers extra (20xx-series cards). xformers is built ' +
+              "against Invoke's default CUDA torch, so a mismatched custom CUDA build may cause import errors or " +
+              'crashes.\r\n'
+          )
+        );
+      }
     }
 
     if (repair) {
@@ -611,8 +641,12 @@ export class InstallManager {
             venvPath,
             '--python-preference',
             'only-managed',
-            // Pull the torch packages from the user-provided index instead of the one recorded in the lockfile.
-            `--index=${torchIndexOverride}`,
+            // Pull the torch packages from the user-provided index *instead of* PyPI, not in addition to it. `--index`
+            // only *prepends* an index, so uv silently falls back to the default PyPI wheel when the custom index lacks
+            // the pinned (tag-stripped) version - installing the wrong backend with no error, the exact failure this
+            // feature prevents. `--index-url` makes the custom index the sole index, so a mismatch fails loudly. This is
+            // safe here because the step is `--no-deps` and requests only the torch-family packages.
+            `--index-url=${torchIndexOverride}`,
             // The torch packages were skipped during sync; on a reinstall/update an older build may still be present,
             // so force the install to guarantee the packages come from the custom index.
             '--force-reinstall',
@@ -623,7 +657,7 @@ export class InstallManager {
           ];
 
           this.log.info(c.cyan('Installing torch from custom index...\r\n'));
-          this.log.info(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${reinstallTorchArgs.join(' ')}\r\n`);
+          this.log.info(redactForLog(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${reinstallTorchArgs.join(' ')}\r\n`));
 
           const reinstallTorchResult = await withResultAsync(() =>
             this.runCommand(uvPath, reinstallTorchArgs, { ...runProcessOptions, cwd: location })
@@ -691,7 +725,7 @@ export class InstallManager {
     }
 
     this.log.info(c.cyan('Installing invokeai package...\r\n'));
-    this.log.info(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
+    this.log.info(redactForLog(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${installInvokeArgs.join(' ')}\r\n`));
 
     const installAppResult = await withResultAsync(() =>
       this.runCommand(uvPath, installInvokeArgs, { ...runProcessOptions, cwd: location })

@@ -6,7 +6,7 @@
 /**
  * Whether a string parses as an http(s) URL.
  */
-export const isHttpUrl = (value: string): boolean => {
+const isHttpUrl = (value: string): boolean => {
   try {
     const url = new URL(value);
     return url.protocol === 'http:' || url.protocol === 'https:';

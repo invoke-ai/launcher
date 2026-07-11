@@ -99,7 +99,7 @@ This project uses node 22 and npm as its package manager.
 Building the launcher is very simple:
 
 - `npm i`: install dependencies
-- `npm run app:dist`: build for your system's platform
+- `npm run package`: build for your system's platform
 
 As described in the next section, you do need to manually download the `uv` binary to get a functioning build.
 

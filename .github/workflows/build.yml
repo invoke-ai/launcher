@@ -81,6 +81,7 @@ jobs:
             dist/*.blockmap
             dist/*.yml
             dist/*.yaml
+          retention-days: 7
 
   build-macos:
     runs-on: macos-latest
@@ -143,6 +144,7 @@ jobs:
             dist/*.blockmap
             dist/*.yml
             dist/*.yaml
+          retention-days: 7
 
   build-windows:
     runs-on: windows-2022
@@ -204,3 +206,4 @@ jobs:
             dist/*.blockmap
             dist/*.yml
             dist/*.yaml
+          retention-days: 7

@@ -52,6 +52,11 @@ export type StoreData = {
   launcherWindowProps?: WindowProps;
   appWindowProps?: WindowProps;
   optInToLauncherPrereleases: boolean;
+  /**
+   * When enabled, the launcher window is hidden to the system tray once Invoke has started successfully. It is restored
+   * again if Invoke errors or its window crashes, and the launcher quits entirely when Invoke shuts down normally.
+   */
+  hideLauncherAfterStartup: boolean;
 };
 
 // The electron store uses JSON schema to validate its data.
@@ -94,6 +99,10 @@ export const schema: Schema<StoreData> = {
   launcherWindowProps: winSizePropsSchema,
   appWindowProps: winSizePropsSchema,
   optInToLauncherPrereleases: {
+    type: 'boolean',
+    default: false,
+  },
+  hideLauncherAfterStartup: {
     type: 'boolean',
     default: false,
   },
@@ -295,6 +304,10 @@ type MainProcessIpcEvents = Namespaced<
   {
     'get-status': () => WithTimestamp<MainProcessStatus>;
     exit: () => void;
+    /**
+     * Hide the launcher window to the system tray. A tray icon is shown, from which the launcher can be restored.
+     */
+    'hide-to-tray': () => void;
   }
 >;
 

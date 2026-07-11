@@ -397,6 +397,7 @@ export const createInvokeManager = (arg: {
   store: Store<StoreData>;
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  onStatusChange?: (status: WithTimestamp<InvokeProcessStatus>) => void;
 }) => {
   const { store, ipc, sendToWindow } = arg;
   const invokeManager = new InvokeManager({
@@ -406,6 +407,7 @@ export const createInvokeManager = (arg: {
     },
     onStatusChange: (status) => {
       sendToWindow('invoke-process:status', status);
+      arg.onStatusChange?.(status);
     },
     sendClearLogs: () => {
       sendToWindow('invoke-process:clear-logs');

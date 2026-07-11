@@ -48,6 +48,8 @@ const [invoke, cleanupInvoke] = createInvokeManager({
   store,
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
+  // Let the main process manager drive tray behavior (auto-hide/restore/quit) based on the Invoke status.
+  onStatusChange: main.handleInvokeStatusChange,
 });
 
 main.ipc.handle('main-process:get-status', () => main.getStatus());

@@ -36,6 +36,62 @@ export type InvokeReleaseInstallFiles = {
   uvLock: string;
 };
 
+type LockedPackage = { name: string; version: string };
+
+type TorchPlatform = 'cuda' | 'rocm' | 'cpu';
+
+/**
+ * Matches a package's own top-level `source` against the PyTorch download index for the given torch platform. Invoke's
+ * lockfile contains a torch build for every platform (e.g. `.../whl/cu128`, `.../whl/rocm7.1`, `.../whl/cpu`); we only
+ * want the packages for the platform the user is actually installing. The exact suffix (cu128 vs cu126) is what the
+ * custom index overrides, so we match the platform category, not the exact URL.
+ *
+ * The pattern is anchored to the start of a line (`^` with the `m` flag) so it matches the package's own `source = {…}`
+ * line and NOT the `source = {…}` nested inside other packages' `dependencies = [ { name = "torch", …, source = {…} } ]`
+ * inline tables (which are indented) - otherwise every package that depends on torch would match.
+ */
+const TORCH_INDEX_SOURCE_PATTERN: Record<TorchPlatform, RegExp> = {
+  cuda: /^source\s*=\s*\{[^}]*download\.pytorch\.org\/whl\/cu\d+[^}]*\}/m,
+  rocm: /^source\s*=\s*\{[^}]*download\.pytorch\.org\/whl\/rocm[^}]*\}/m,
+  cpu: /^source\s*=\s*\{[^}]*download\.pytorch\.org\/whl\/cpu[^}]*\}/m,
+};
+
+/**
+ * Parse the torch-family packages for a given torch platform out of an Invoke release's `uv.lock`.
+ *
+ * We select every `[[package]]` block whose `source` points at the PyTorch download index for `torchPlatform` (e.g.
+ * for `cuda`, `https://download.pytorch.org/whl/cu128`). These are exactly the packages a custom torch index would
+ * replace - and we deliberately ignore the other platforms' torch builds, which carry different versions and would
+ * otherwise conflict.
+ *
+ * The local version tag (e.g. `+cu128`) is stripped so the returned `==<version>` pin matches the equivalent build on
+ * a different index (e.g. `2.7.1` matches `2.7.1+cu126`). Regex-based on purpose to avoid pulling in a TOML parser
+ * dependency, mirroring `getDeclaredOptionalDependencies` in the install manager.
+ */
+export const getTorchPackagesFromLock = (uvLock: string, torchPlatform: TorchPlatform): LockedPackage[] => {
+  const sourcePattern = TORCH_INDEX_SOURCE_PATTERN[torchPlatform];
+  const packages: LockedPackage[] = [];
+
+  // Split into individual `[[package]]` blocks. The first chunk (before the first `[[package]]`) is dropped.
+  for (const block of uvLock.split(/\n\[\[package\]\]/).slice(1)) {
+    // Only consider packages resolved from the PyTorch download index for the selected platform.
+    if (!sourcePattern.test(block)) {
+      continue;
+    }
+
+    const name = block.match(/^name\s*=\s*"([^"]+)"/m)?.[1];
+    const version = block.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+    if (!name || !version) {
+      continue;
+    }
+
+    // Strip the local version tag (e.g. `2.7.1+cu128` -> `2.7.1`) so the pin resolves against a different index.
+    packages.push({ name, version: version.split('+')[0]! });
+  }
+
+  return packages;
+};
+
 const getInvokeReleaseTag = (targetVersion: string): string => {
   return targetVersion.startsWith('v') ? targetVersion : `v${targetVersion}`;
 };

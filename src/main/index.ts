@@ -3,6 +3,7 @@ import { join } from 'path';
 import { assert } from 'tsafe';
 
 import { createConsoleManager } from '@/main/console-manager';
+import { detectGpu } from '@/main/gpu-detection';
 import { createInstallManager } from '@/main/install-manager';
 import { createInvokeManager } from '@/main/invoke-manager';
 import { MainProcessManager } from '@/main/main-process-manager';
@@ -127,4 +128,5 @@ main.ipc.handle('util:get-path-exists', (_, path) => pathExists(path));
 main.ipc.handle('util:get-os', () => getOperatingSystem());
 main.ipc.handle('util:open-directory', (_, path) => shell.openPath(path));
 main.ipc.handle('util:get-launcher-version', () => app.getVersion());
+main.ipc.handle('util:detect-gpu', () => detectGpu());
 //#endregion

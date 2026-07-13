@@ -35,7 +35,8 @@ const GPU_LABEL_MAP: Record<GpuType, string> = {
 };
 
 export const InstallFlowStepReview = memo(() => {
-  const { dirDetails, gpuType, release, repairMode } = useStore(installFlowApi.$choices);
+  const { dirDetails, gpuType, release, repairMode, customTorchIndexUrl } = useStore(installFlowApi.$choices);
+  const trimmedCustomTorchIndexUrl = customTorchIndexUrl.trim();
   const installType = useStore(installFlowApi.$installType);
 
   const onChangeRepairMode = useCallback((e: ChangeEvent<HTMLInputElement>) => {
@@ -82,6 +83,13 @@ export const InstallFlowStepReview = memo(() => {
               You have <Strong>{GPU_LABEL_MAP[gpuType]}.</Strong>
             </Text>
           </ListItem>
+          {trimmedCustomTorchIndexUrl && (
+            <ListItem>
+              <Text fontSize="md">
+                Torch will be installed from a <Strong>custom index</Strong>: {trimmedCustomTorchIndexUrl}
+              </Text>
+            </ListItem>
+          )}
         </UnorderedList>
         <Spacer />
       </BodyContent>

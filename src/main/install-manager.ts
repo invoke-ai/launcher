@@ -15,7 +15,7 @@ import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import type { InvokeReleaseInstallFiles } from '@/shared/pins';
-import { getInvokeReleaseInstallFiles, getPins } from '@/shared/pins';
+import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock } from '@/shared/pins';
 import type {
   GpuType,
   InstallProcessStatus,
@@ -24,6 +24,7 @@ import type {
   LogEntry,
   WithTimestamp,
 } from '@/shared/types';
+import { isCustomTorchIndexUrlInvalid, redactUrlCredentials } from '@/shared/url';
 
 const BOOTSTRAP_PROJECT_DIR_NAME = '.launcher-bootstrap';
 const MIN_BOOTSTRAP_INSTALL_VERSION = '6.14.0rc1';
@@ -184,7 +185,31 @@ export class InstallManager {
     this.onStatusChange(this.status);
   };
 
-  startInstall = async (location: string, gpuType: GpuType, version: string, repair?: boolean) => {
+  startInstall = async (
+    location: string,
+    gpuType: GpuType,
+    version: string,
+    customTorchIndexUrl?: string,
+    repair?: boolean
+  ) => {
+    // Normalize the optional custom torch index override: an empty/whitespace value means "use defaults".
+    const torchIndexOverride = customTorchIndexUrl?.trim() || undefined;
+
+    // Defense-in-depth: the renderer already rejects non-http(s) URLs at entry, but the main process should not trust
+    // that. A bad value here would otherwise surface as a cryptic uv error minutes into the install.
+    if (torchIndexOverride && isCustomTorchIndexUrlInvalid(torchIndexOverride)) {
+      const message = `Invalid custom torch index URL: ${redactUrlCredentials(torchIndexOverride)}`;
+      this.log.error(c.red(`${message}\r\n`));
+      this.updateStatus({ type: 'error', error: { message } });
+      return;
+    }
+
+    // Any credentials embedded in the override must never be echoed into the install log or the surfaced command lines.
+    const redactedTorchIndexOverride = torchIndexOverride ? redactUrlCredentials(torchIndexOverride) : undefined;
+    const redactForLog = (text: string): string =>
+      torchIndexOverride && redactedTorchIndexOverride
+        ? text.split(torchIndexOverride).join(redactedTorchIndexOverride)
+        : text;
     /**
      * Installation is a 2-step process:
      * - Create a virtual environment.
@@ -319,6 +344,22 @@ export class InstallManager {
         useBootstrapInstall ? 'frozen Invoke pyproject.toml and uv.lock' : 'legacy package metadata install'
       }\r\n`
     );
+    if (torchIndexOverride) {
+      this.log.info(c.magenta(`- Torch index override: ${redactedTorchIndexOverride}\r\n`));
+
+      // xformers (installed only on nvidia<30xx) is pulled from Invoke's default index and built against the lock's
+      // default CUDA torch. If the user swaps torch to a different CUDA build via the override, the two can have
+      // mismatched ABIs, which is a known source of import errors or crashes. Warn, but don't block - the user opted in.
+      if (invokeExtras.includes('xformers')) {
+        this.log.warn(
+          c.yellow(
+            '- Warning: a custom torch index is combined with the xformers extra (20xx-series cards). xformers is built ' +
+              "against Invoke's default CUDA torch, so a mismatched custom CUDA build may cause import errors or " +
+              'crashes.\r\n'
+          )
+        );
+      }
+    }
 
     if (repair) {
       this.log.info(c.magenta('Repair mode enabled:\r\n'));
@@ -510,6 +551,13 @@ export class InstallManager {
       }
 
       const bootstrapProjectPath = bootstrapProjectResult.value;
+
+      // When a custom torch index is set, we install the torch-family packages from that index instead of the source
+      // the lockfile records. To avoid downloading torch twice (once from the lock during `uv sync`, once from the
+      // custom index afterwards), we skip those packages during the sync and install them once from the custom index
+      // below. `uv sync --frozen` cannot pull them from a different index in-place, so a separate install is required.
+      const torchPackages = torchIndexOverride ? getTorchPackagesFromLock(releaseFiles.uvLock, torchPlatform) : [];
+
       const syncInvokeArgs = [
         // Use `uv sync` against the selected Invoke release's pyproject.toml and lockfile.
         'sync',
@@ -534,6 +582,11 @@ export class InstallManager {
 
       for (const extra of invokeExtras) {
         syncInvokeArgs.push('--extra', extra);
+      }
+
+      // Skip the torch-family packages during sync - they are reinstalled from the custom index below.
+      for (const pkg of torchPackages) {
+        syncInvokeArgs.push('--no-install-package', pkg.name);
       }
 
       this.log.info(c.cyan('Syncing invokeai environment...\r\n'));
@@ -569,6 +622,69 @@ export class InstallManager {
         return;
       }
 
+      // If a custom torch index is set, install the torch-family packages from it. These were skipped during `uv sync`
+      // (see `--no-install-package` above), so this is a single download from the user's index rather than a second
+      // one. This deliberately departs from the lock's recorded source - which is exactly what the user is asking for
+      // when they set the field (e.g. cu126 on 20xx cards, ROCm on Windows).
+      if (torchIndexOverride) {
+        if (torchPackages.length === 0) {
+          this.log.warn(
+            c.yellow(
+              `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile - skipping the torch install from the custom index.\r\n`
+            )
+          );
+        } else {
+          const reinstallTorchArgs = [
+            'pip',
+            'install',
+            '--python',
+            venvPath,
+            '--python-preference',
+            'only-managed',
+            // Pull the torch packages from the user-provided index *instead of* PyPI, not in addition to it. `--index`
+            // only *prepends* an index, so uv silently falls back to the default PyPI wheel when the custom index lacks
+            // the pinned (tag-stripped) version - installing the wrong backend with no error, the exact failure this
+            // feature prevents. `--index-url` makes the custom index the sole index, so a mismatch fails loudly. This is
+            // safe here because the step is `--no-deps` and requests only the torch-family packages.
+            `--index-url=${torchIndexOverride}`,
+            // The torch packages were skipped during sync; on a reinstall/update an older build may still be present,
+            // so force the install to guarantee the packages come from the custom index.
+            '--force-reinstall',
+            // Everything else is already installed by `uv sync`; only install the torch packages themselves.
+            '--no-deps',
+            '--compile-bytecode',
+            ...torchPackages.map(({ name, version }) => `${name}==${version}`),
+          ];
+
+          this.log.info(c.cyan('Installing torch from custom index...\r\n'));
+          this.log.info(redactForLog(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${reinstallTorchArgs.join(' ')}\r\n`));
+
+          const reinstallTorchResult = await withResultAsync(() =>
+            this.runCommand(uvPath, reinstallTorchArgs, { ...runProcessOptions, cwd: location })
+          );
+
+          if (reinstallTorchResult.isErr()) {
+            this.log.error(
+              c.red(`Failed to reinstall torch from custom index: ${reinstallTorchResult.error.message}\r\n`)
+            );
+            this.updateStatus({
+              type: 'error',
+              error: {
+                message: 'Failed to reinstall torch from custom index',
+                context: serializeError(reinstallTorchResult.error),
+              },
+            });
+            return;
+          }
+
+          if (reinstallTorchResult.value === 'canceled') {
+            this.log.warn(c.yellow('Installation canceled\r\n'));
+            this.updateStatus({ type: 'canceled' });
+            return;
+          }
+        }
+      }
+
       installInvokeArgs = [
         // Install the published Invoke package after syncing its locked dependencies. Dependencies are installed by
         // `uv sync` above, so do not resolve them again from wheel metadata.
@@ -602,14 +718,14 @@ export class InstallManager {
         '--compile-bytecode',
       ];
 
-      const torchIndexUrl = pins.torchIndexUrl[systemPlatform][torchPlatform];
+      const torchIndexUrl = torchIndexOverride ?? pins.torchIndexUrl[systemPlatform][torchPlatform];
       if (torchIndexUrl) {
         installInvokeArgs.push(`--index=${torchIndexUrl}`);
       }
     }
 
     this.log.info(c.cyan('Installing invokeai package...\r\n'));
-    this.log.info(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
+    this.log.info(redactForLog(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${installInvokeArgs.join(' ')}\r\n`));
 
     const installAppResult = await withResultAsync(() =>
       this.runCommand(uvPath, installInvokeArgs, { ...runProcessOptions, cwd: location })
@@ -694,8 +810,8 @@ export const createInstallManager = (arg: {
     },
   });
 
-  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
-    installManager.startInstall(installationPath, gpuType, version, repair);
+  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, customTorchIndexUrl, repair) => {
+    installManager.startInstall(installationPath, gpuType, version, customTorchIndexUrl, repair);
   });
   ipc.handle('install-process:cancel-install', async () => {
     await installManager.cancelInstall();

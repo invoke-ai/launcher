@@ -92,6 +92,28 @@ jobs:
             dist/*.yaml
           retention-days: 90
 
+      - name: Verify artifacts match the target ref
+        # The OSSign action has no success/failure output: when the polled signing run has
+        # FAILED, single_check has been observed to return the project's *previous* successful
+        # artifacts instead of nothing (2026-07-12: a failed v1.8.2-rc.1 run yielded June's
+        # 1.8.1 build, which was silently attached to the draft release). Guard by checking
+        # that the electron-updater metadata version matches the tag before attaching.
+        if: steps.check.outputs.signed_artifacts != '' && startsWith(inputs.target_ref, 'v')
+        run: |
+          set -euo pipefail
+          expected="${{ inputs.target_ref }}"
+          expected="${expected#v}"
+          if [ ! -f dist/latest.yml ]; then
+            echo "::error::No latest.yml among signed artifacts; cannot verify they belong to ${{ inputs.target_ref }}. Refusing to attach."
+            exit 1
+          fi
+          actual=$(awk '/^version:/ {print $2; exit}' dist/latest.yml)
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::OSSign returned artifacts for version '${actual}' but the target ref is '${{ inputs.target_ref }}'. The OSSign build likely failed and stale artifacts were returned. Refusing to attach."
+            exit 1
+          fi
+          echo "Artifact version ${actual} matches ${{ inputs.target_ref }}."
+
       - name: Attach signed artifacts to the release
         # Only for vX.Y.Z tags — the release is created by the linux/macOS publish jobs. For
         # non-tag (manual test) runs there is no release, so we stop at the workflow artifact above.

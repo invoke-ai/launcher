@@ -1,7 +1,7 @@
 {
   "name": "invoke-community-edition",
   "productName": "Invoke Community Edition",
-  "version": "1.8.1",
+  "version": "1.8.2-rc.1",
   "description": "Invoke Community Edition",
   "main": "out/main/index.js",
   "engines": {
@@ -129,16 +129,16 @@
   },
   "uv": {
     "linux": {
-      "url": "https://github.com/astral-sh/uv/releases/download/0.6.12/uv-x86_64-unknown-linux-gnu.tar.gz",
-      "sha256": "eec3ccf53616e00905279a302bc043451bd96ca71a159a2ac3199452ac914c26"
+      "url": "https://github.com/astral-sh/uv/releases/download/0.11.28/uv-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "e490a6464492183c5d4534a5527fb4440f7f2bb2f228162ad7e4afe076dc0224"
     },
     "win": {
-      "url": "https://github.com/astral-sh/uv/releases/download/0.6.12/uv-x86_64-pc-windows-msvc.zip",
-      "sha256": "30fdf26c209f0cb7c97d3b08a26ab4e78ce5ae0e031b88798cbaccc0f24f452b"
+      "url": "https://github.com/astral-sh/uv/releases/download/0.11.28/uv-x86_64-pc-windows-msvc.zip",
+      "sha256": "0a23463216d09c6a72ff80ef5dc5a795f07dc1575cb84d24596c2f124a441b7b"
     },
     "mac": {
-      "url": "https://github.com/astral-sh/uv/releases/download/0.6.12/uv-aarch64-apple-darwin.tar.gz",
-      "sha256": "fab8db5b62da1e945524b8d1a9d4946fcc6d9b77ec0cab423d953e82159967ac"
+      "url": "https://github.com/astral-sh/uv/releases/download/0.11.28/uv-aarch64-apple-darwin.tar.gz",
+      "sha256": "33540eb7c883ab857eff79bd5ac2aa31fe27b595abecb4a9c003a2c998447232"
     }
   },
   "peerDependencies": {

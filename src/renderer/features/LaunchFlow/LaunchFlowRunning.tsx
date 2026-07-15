@@ -25,6 +25,10 @@ const reopenWindow = async () => {
   await emitter.invoke('invoke-process:reopen-window');
 };
 
+const restartWindow = async () => {
+  await emitter.invoke('invoke-process:restart-window');
+};
+
 export const LaunchFlowRunning = memo(() => {
   const invokeProcessStatus = useStore($invokeProcessStatus);
   const isInvokeProcessPendingDismissal = useStore($isInvokeProcessPendingDismissal);
@@ -48,14 +52,19 @@ export const LaunchFlowRunning = memo(() => {
           </Button>
         )}
         {!isInvokeProcessPendingDismissal && invokeProcessStatus.type !== 'window-crashed' && (
-          <Button
-            onClick={quit}
-            isLoading={invokeProcessStatus.type === 'exiting'}
-            loadingText="Shutting down"
-            colorScheme="error"
-          >
-            Shutdown
-          </Button>
+          <>
+            <Button onClick={restartWindow} colorScheme="invokeGreen">
+              Restart Window
+            </Button>
+            <Button
+              onClick={quit}
+              isLoading={invokeProcessStatus.type === 'exiting'}
+              loadingText="Shutting down"
+              colorScheme="error"
+            >
+              Shutdown
+            </Button>
+          </>
         )}
         {!isInvokeProcessPendingDismissal && invokeProcessStatus.type === 'window-crashed' && (
           <Button onClick={reopenWindow} colorScheme="invokeGreen">

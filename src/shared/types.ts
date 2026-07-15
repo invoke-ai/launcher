@@ -321,6 +321,7 @@ type InvokeProcessIpcEvents = Namespaced<
     'start-invoke': (location: string) => void;
     'exit-invoke': () => void;
     'reopen-window': () => void;
+    'restart-window': () => void;
     resize: (cols: number, rows: number) => void;
   }
 >;

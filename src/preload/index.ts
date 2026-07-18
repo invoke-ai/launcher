@@ -226,33 +226,7 @@ function setupInvokeWindowWinTabBridge() {
       return false;
     }
 
-    if (element instanceof HTMLCanvasElement) {
-      return false;
-    }
-
-    return Boolean(
-      element.closest(
-        [
-          'button',
-          'a[href]',
-          'input',
-          'select',
-          'textarea',
-          'label',
-          'summary',
-          '[role="button"]',
-          '[role="link"]',
-          '[role="checkbox"]',
-          '[role="radio"]',
-          '[role="switch"]',
-          '[role="tab"]',
-          '[role="menuitem"]',
-          '[role="option"]',
-          '[role="slider"]',
-          '[contenteditable="true"]',
-        ].join(',')
-      )
-    );
+    return element.closest('canvas') === null;
   };
 
   const dismissTransientUi = (payload: WinTabPenEventPayload) => {

@@ -98,6 +98,7 @@ constexpr ULONGLONG RELEASE_CONFIRMATION_MS = 12;
 constexpr uint32_t RELEASE_CONFIRMATION_PACKET_COUNT = 2;
 constexpr ULONGLONG NON_TIP_BUTTON_PRESSURE_FREEZE_MS = 32;
 constexpr ULONGLONG NON_TIP_BUTTON_COORDINATE_STABILIZATION_MS = 48;
+constexpr size_t MAX_QUEUED_EVENTS = 256;
 
 constexpr WTPKT PK_CONTEXT = 0x0001;
 constexpr WTPKT PK_STATUS = 0x0002;
@@ -254,6 +255,25 @@ void ClearPendingRelease() {
 }
 
 void QueuePenEvent(PenEvent::Kind kind, LONG screenX, LONG screenY, double pressure, DWORD buttons) {
+  if (kind == PenEvent::Kind::Move && !g_bridge.queuedEvents.empty() &&
+      g_bridge.queuedEvents.back().kind == PenEvent::Kind::Move) {
+    g_bridge.queuedEvents.back() = PenEvent{kind, screenX, screenY, pressure, buttons};
+    return;
+  }
+
+  if (g_bridge.queuedEvents.size() >= MAX_QUEUED_EVENTS) {
+    const auto oldestMove =
+        std::find_if(g_bridge.queuedEvents.begin(), g_bridge.queuedEvents.end(), [](const PenEvent &event) {
+          return event.kind == PenEvent::Kind::Move;
+        });
+
+    if (oldestMove != g_bridge.queuedEvents.end()) {
+      g_bridge.queuedEvents.erase(oldestMove);
+    } else if (kind == PenEvent::Kind::Move) {
+      return;
+    }
+  }
+
   g_bridge.queuedEvents.push_back(PenEvent{kind, screenX, screenY, pressure, buttons});
 }
 

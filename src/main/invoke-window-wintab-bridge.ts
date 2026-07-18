@@ -1,5 +1,5 @@
-import type { BrowserWindow, MouseInputEvent } from 'electron';
-import { screen } from 'electron';
+import type { BrowserWindow, IpcMainEvent, MouseInputEvent } from 'electron';
+import { ipcMain, screen } from 'electron';
 
 import type { SimpleLogger } from '@/lib/simple-logger';
 
@@ -34,7 +34,9 @@ type BridgedPenEvent = NativePenEvent & {
 
 const IPC_STATUS_CHANNEL = 'invoke-window:wintab-status';
 const IPC_EVENT_CHANNEL = 'invoke-window:wintab-pen-event';
+const IPC_ACK_CHANNEL = 'invoke-window:wintab-pen-event-ack';
 const SUPPRESS_PRIMARY_MOUSE_GRACE_MS = 200;
+const EVENT_POLL_INTERVAL_MS = 8;
 
 export class InvokeWindowWinTabBridge {
   private readonly window: BrowserWindow;
@@ -45,6 +47,8 @@ export class InvokeWindowWinTabBridge {
   private penContactActive = false;
   private suppressPrimaryMouseUntil = 0;
   private lastPenActivityAt = 0;
+  private batchInFlight = false;
+  private ackListenerInstalled = false;
 
   constructor(window: BrowserWindow, log: SimpleLogger) {
     this.window = window;
@@ -52,6 +56,10 @@ export class InvokeWindowWinTabBridge {
   }
 
   attach = (): void => {
+    if (this.attached || this.pollTimer || this.ackListenerInstalled) {
+      this.detach();
+    }
+
     if (process.platform !== 'win32') {
       this.sendStatus(false, 'WinTab bridge is only available on Windows');
       return;
@@ -79,9 +87,12 @@ export class InvokeWindowWinTabBridge {
     this.attached = true;
     this.penContactActive = result.contactActive;
     this.lastPenActivityAt = Date.now();
+    this.batchInFlight = false;
+    ipcMain.on(IPC_ACK_CHANNEL, this.handleBatchAck);
+    this.ackListenerInstalled = true;
     this.sendStatus(true, 'WinTab attached');
 
-    this.pollTimer = setInterval(this.drainAndForwardEvents, 1);
+    this.pollTimer = setInterval(this.drainAndForwardEvents, EVENT_POLL_INTERVAL_MS);
   };
 
   detach = (): void => {
@@ -94,11 +105,17 @@ export class InvokeWindowWinTabBridge {
       this.addon.detach();
     }
 
+    if (this.ackListenerInstalled) {
+      ipcMain.removeListener(IPC_ACK_CHANNEL, this.handleBatchAck);
+      this.ackListenerInstalled = false;
+    }
+
     this.attached = false;
     this.addon = null;
     this.penContactActive = false;
     this.suppressPrimaryMouseUntil = 0;
     this.lastPenActivityAt = 0;
+    this.batchInFlight = false;
   };
 
   shouldSuppressPrimaryMouse = (mouse: MouseInputEvent): boolean => {
@@ -161,8 +178,16 @@ export class InvokeWindowWinTabBridge {
     this.window.webContents.send(IPC_STATUS_CHANNEL, { enabled, message });
   };
 
+  private handleBatchAck = (event: IpcMainEvent): void => {
+    if (event.sender !== this.window.webContents) {
+      return;
+    }
+
+    this.batchInFlight = false;
+  };
+
   private drainAndForwardEvents = (): void => {
-    if (!this.window || this.window.isDestroyed() || !this.addon) {
+    if (!this.window || this.window.isDestroyed() || !this.addon || this.batchInFlight) {
       return;
     }
 
@@ -173,6 +198,7 @@ export class InvokeWindowWinTabBridge {
 
     const now = Date.now();
     const contentBounds = this.window.getContentBounds();
+    const bridgedEvents: BridgedPenEvent[] = [];
     for (const event of events) {
       this.lastPenActivityAt = now;
       if (event.kind === 'down') {
@@ -186,19 +212,25 @@ export class InvokeWindowWinTabBridge {
       const clientX = dipPoint.x - contentBounds.x;
       const clientY = dipPoint.y - contentBounds.y;
 
-      if (clientX < 0 || clientY < 0 || clientX > contentBounds.width || clientY > contentBounds.height) {
+      if (
+        event.kind !== 'up' &&
+        (clientX < 0 || clientY < 0 || clientX > contentBounds.width || clientY > contentBounds.height)
+      ) {
         continue;
       }
 
-      const bridgedEvent: BridgedPenEvent = {
+      bridgedEvents.push({
         ...event,
         screenX: dipPoint.x,
         screenY: dipPoint.y,
         clientX,
         clientY,
-      };
+      });
+    }
 
-      this.window.webContents.send(IPC_EVENT_CHANNEL, bridgedEvent);
+    if (bridgedEvents.length > 0) {
+      this.batchInFlight = true;
+      this.window.webContents.send(IPC_EVENT_CHANNEL, bridgedEvents);
     }
   };
 }

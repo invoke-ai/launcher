@@ -4,6 +4,7 @@ import { ipcRenderer } from 'electron';
 const IS_INVOKE_HOSTED_WINDOW = process.argv.includes('--invoke-hosted-window');
 const WINTAB_STATUS_CHANNEL = 'invoke-window:wintab-status';
 const WINTAB_EVENT_CHANNEL = 'invoke-window:wintab-pen-event';
+const WINTAB_ACK_CHANNEL = 'invoke-window:wintab-pen-event-ack';
 const SYNTHETIC_POINTER_ID = 424242;
 const SUPPRESS_PRIMARY_MOUSE_GRACE_MS = 200;
 
@@ -394,7 +395,7 @@ function setupInvokeWindowWinTabBridge() {
     }
   });
 
-  ipcRenderer.on(WINTAB_EVENT_CHANNEL, (_event, payload: WinTabPenEventPayload) => {
+  const processWinTabEvent = (payload: WinTabPenEventPayload) => {
     if (!bridgeEnabled) {
       return;
     }
@@ -445,6 +446,16 @@ function setupInvokeWindowWinTabBridge() {
 
     if (payload.kind === 'up') {
       endSyntheticPenSession(payload);
+    }
+  };
+
+  ipcRenderer.on(WINTAB_EVENT_CHANNEL, (_event, payloads: WinTabPenEventPayload[]) => {
+    try {
+      for (const payload of payloads) {
+        processWinTabEvent(payload);
+      }
+    } finally {
+      ipcRenderer.send(WINTAB_ACK_CHANNEL);
     }
   });
 }

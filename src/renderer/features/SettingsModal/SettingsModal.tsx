@@ -14,6 +14,7 @@ import {
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
 
+import { SettingsModalHideLauncherAfterStartup } from '@/renderer/features/SettingsModal/SettingsModalHideLauncherAfterStartup';
 import { SettingsModalInvokeNotifyForPrereleaseUpdates } from '@/renderer/features/SettingsModal/SettingsModalInvokeNotifyForPrereleaseUpdates';
 import { SettingsModalInvokeServerMode } from '@/renderer/features/SettingsModal/SettingsModalInvokeServerMode';
 import { SettingsModalOptInToLauncherPrereleases } from '@/renderer/features/SettingsModal/SettingsModalOptInToLauncherPrereleases';
@@ -35,6 +36,8 @@ export const SettingsModal = memo(() => {
         <ModalCloseButton />
         <ModalBody as={Flex} flexDir="column" gap={4} w="full" h="full" minH={32}>
           <SettingsModalInvokeServerMode />
+          <Divider />
+          <SettingsModalHideLauncherAfterStartup />
           <Divider />
           <SettingsModalInvokeNotifyForPrereleaseUpdates />
           <Divider />

@@ -6,6 +6,7 @@ import { assert } from 'tsafe';
 
 import { BannerInvokeLogoTag } from '@/renderer/features/Banner/BannerInvokeLogoTag';
 import { $launcherVersion } from '@/renderer/features/Banner/state';
+import { HideToTrayButton } from '@/renderer/features/SettingsModal/HideToTrayButton';
 import { SettingsModalOpenButton } from '@/renderer/features/SettingsModal/SettingsModalOpenButton';
 
 const MIN_PROBABILITY = 0.2;
@@ -82,6 +83,7 @@ export const Banner = memo(() => {
         )}
       </GridItem>
       <SettingsModalOpenButton position="absolute" insetBlockStart={3} insetInlineStart={3} />
+      <HideToTrayButton position="absolute" insetBlockStart={3} insetInlineStart={12} />
     </Grid>
   );
 });

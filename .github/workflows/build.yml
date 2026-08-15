@@ -196,6 +196,13 @@ jobs:
       - name: Build
         run: npm run package
 
+      # This build is unsigned (ENABLE_SIGNING is unset); the real signing happens on OSSign's
+      # runner where we never see the logs. So instead of checking signatures, check that every
+      # binary we ship is *accounted for* by the allowlist in scripts/customSign.js. A rule that
+      # silently stops matching is how issue #148 shipped an unsigned winpty-agent.exe.
+      - name: Verify Windows signing coverage
+        run: node scripts/checkWindowsSigningCoverage.js dist/win-unpacked
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

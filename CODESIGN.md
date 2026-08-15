@@ -65,3 +65,32 @@ than environment-scoped because both `build-windows` (no environment) and `wait-
 To debug the signer locally, set `OSSIGN_CONFIG` (raw JSON/YAML) or `OSSIGN_CONFIG_BASE64`
 (base64-encoded) in your environment and run with `ENABLE_SIGNING=true`. Signing is otherwise
 a no-op, since `ENABLE_SIGNING` gates the custom signer in `electron-builder.config.ts`.
+
+#### What gets signed
+
+Every executable we bundle has to be signed, not just the installer: Windows Smart App Control
+refuses to `CreateProcess` an unsigned binary, which is how
+[#148](https://github.com/invoke-ai/launcher/issues/148) happened — the installer was signed but
+the `winpty-agent.exe` that node-pty spawns was not, so the launcher died on startup.
+
+`scripts/customSign.js` holds the allowlist and is the only place to change it:
+
+| Category                  | Files                                                                                                                                                                                                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Signed**                | The NSIS installer and uninstaller, `Invoke Community Edition.exe`, node-pty's own build output (`winpty-agent.exe`, `winpty.dll`, the `.node` addons), the bundled `uv.exe`, and electron-builder's `resources/elevate.exe` (unsigned upstream, and electron-updater spawns it when an update needs admin rights). |
+| **Left alone**            | Microsoft's ConPTY binaries that node-pty redistributes — `OpenConsole.exe` and `conpty.dll`, in **both** `third_party/conpty/` and the `build/Release/conpty/` copy node-pty's post-install step makes on Windows. Already signed by Microsoft; re-signing would replace that.                                     |
+| **Deliberately unsigned** | Electron's own runtime DLLs (`ffmpeg.dll`, `libEGL.dll`, …). Upstream does not sign them either, and they are loaded in-process rather than spawned, so Smart App Control does not gate them.                                                                                                                       |
+
+`electron-builder.config.ts` sets `signExts: ['.dll', '.node']` so those extensions reach the hook
+at all — electron-builder only offers `.exe` by default.
+
+Because signing runs on OSSign's infrastructure, we never see those logs, and a rule that stops
+matching just prints "Skipping…" and ships an unsigned binary. `scripts/checkWindowsSigningCoverage.js`
+guards against that: the Windows job in `.github/workflows/build.yml` runs it against the unsigned
+build on every PR and fails if any bundled binary is not covered by one of the three categories
+above (and re-verifies, via `Get-AuthenticodeSignature`, that the "already signed" ones really are).
+
+Its scope is `dist/win-unpacked` — the tree that gets installed, which is what Smart App Control
+gates at run time. The NSIS installer itself lives in `dist/` and the uninstaller is deleted right
+after signing, so neither is covered by the walk; both are matched by the oldest and
+most-exercised rule in the allowlist.

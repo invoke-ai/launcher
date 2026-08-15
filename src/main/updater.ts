@@ -46,11 +46,12 @@ export const checkForUpdates = async (mainWindow: BrowserWindow, ensureVisible?:
     } catch {
       // Make sure the launcher is visible - it may have been hidden to the tray while the download ran.
       ensureVisible?.();
-      dialog.showMessageBox(mainWindow, {
+      await dialog.showMessageBox(mainWindow, {
         type: 'error',
         title: 'Update Download Error',
         message: 'An error occurred while downloading the update. Please try again later.',
       });
+      return;
     }
 
     // The download can take a while, during which the launcher may have auto-hidden to the tray. Bring it back so this

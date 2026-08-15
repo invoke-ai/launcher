@@ -193,15 +193,22 @@ jobs:
         if: steps.cache-uv.outputs.cache-hit != 'true'
         run: npm run download win
 
+      # ENABLE_SIGNING wires up scripts/customSign.js and signExts exactly as the release build
+      # does, while SIGNING_DRY_RUN makes the hook record what it was offered instead of signing.
+      # The artifacts are therefore byte-identical to a plain unsigned build, but we come out with
+      # proof of which binaries electron-builder actually handed to the signer — which is the only
+      # way to catch a binary that ships unsigned because it was never offered at all.
       - name: Build
         run: npm run package
+        env:
+          ENABLE_SIGNING: 'true'
+          SIGNING_DRY_RUN: ${{ github.workspace }}/dist/offered-for-signing.txt
 
-      # This build is unsigned (ENABLE_SIGNING is unset); the real signing happens on OSSign's
-      # runner where we never see the logs. So instead of checking signatures, check that every
-      # binary we ship is *accounted for* by the allowlist in scripts/customSign.js. A rule that
-      # silently stops matching is how issue #148 shipped an unsigned winpty-agent.exe.
+      # Real signing happens on OSSign's runner where we never see the logs, so a gap there is
+      # invisible until a user with Smart App Control hits it. That is how #148 shipped an unsigned
+      # winpty-agent.exe.
       - name: Verify Windows signing coverage
-        run: node scripts/checkWindowsSigningCoverage.js dist/win-unpacked
+        run: node scripts/checkWindowsSigningCoverage.js dist/win-unpacked "${{ github.workspace }}/dist/offered-for-signing.txt"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

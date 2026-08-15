@@ -23,8 +23,12 @@ export const InstallFlowStepConfigureCustomIndexUrl = memo(() => {
           <Flex flexDir="column" gap={1}>
             <Text fontWeight="semibold">Override the PyTorch index for this installation.</Text>
             <Text>
-              Leave empty to use Invoke&apos;s defaults. When set, torch is installed from this index instead. Useful
-              for e.g. cu126 on 20xx-series cards or ROCm on Windows. You are on your own with this override.
+              Leave empty to use Invoke&apos;s defaults. When set, torch is installed from this index instead - useful
+              for e.g. a different CUDA build than the one Invoke ships. You are on your own with this override.
+            </Text>
+            <Text>
+              The index must carry the exact torch versions Invoke&apos;s lockfile pins, only built differently. If it
+              doesn&apos;t, the install fails rather than quietly falling back.
             </Text>
             <Text>
               Note: on 20xx-series cards the xformers package is still built against Invoke&apos;s default CUDA build,

@@ -67,16 +67,27 @@ describe('pins', () => {
 });
 
 describe('getTorchPackagesFromLock', () => {
-  // Mirrors the real Invoke uv.lock shape: one torch build per platform (pypi + each pytorch index), with the torch
-  // dependency inline-tables (`{ name = "filelock", ... }`) that must not be mistaken for the package name/source.
+  // Mirrors the real Invoke uv.lock shape as closely as a fixture can: one torch build per platform (pypi + each
+  // pytorch index), the torch dependency inline-tables (`{ name = "filelock", ... }`) that must not be mistaken for the
+  // package name/source, plus the constructs a naive parser trips over - `resolution-markers`, `wheels`/`sdist` lists
+  // carrying pytorch-index URLs, `[package.optional-dependencies]` / `[package.metadata]` sub-sections, and
+  // same-name blocks split only by their resolution markers.
   const uvLock = `version = 1
-revision = 1
+revision = 3
 requires-python = ">=3.11"
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform == 'linux'",
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+]
 
 [[package]]
 name = "numpy"
 version = "2.1.3"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/nu/numpy-2.1.3.tar.gz", hash = "sha256:aaaa" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/nu/numpy-2.1.3-cp312-win_amd64.whl", hash = "sha256:bbbb" },
+]
 
 [[package]]
 name = "accelerate"
@@ -85,6 +96,16 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "torch", version = "2.7.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" } },
     { name = "torch", version = "2.10.0+rocm7.1", source = { registry = "https://download.pytorch.org/whl/rocm7.1" } },
+]
+
+[package.optional-dependencies]
+testing = [
+    { name = "torch", version = "2.7.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" } },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "torch", specifier = ">=2.7.1" },
 ]
 
 [[package]]
@@ -100,16 +121,38 @@ dependencies = [
 name = "torch"
 version = "2.7.1+cpu"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
+wheels = [
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-win_amd64.whl", hash = "sha256:cccc" },
+]
 
 [[package]]
 name = "torch"
 version = "2.7.1+cu128"
 source = { registry = "https://download.pytorch.org/whl/cu128" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform == 'linux'",
+]
+wheels = [
+    { url = "https://download-r2.pytorch.org/whl/cu128/torch-2.7.1%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:dddd" },
+]
+
+[[package]]
+name = "torch"
+version = "2.7.1+cu128"
+source = { registry = "https://download.pytorch.org/whl/cu128" }
+resolution-markers = [
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+]
 
 [[package]]
 name = "torch"
 version = "2.10.0+rocm7.1"
 source = { registry = "https://download.pytorch.org/whl/rocm7.1" }
+
+[[package]]
+name = "torchvision"
+version = "0.22.1+cpu"
+source = { registry = "https://download.pytorch.org/whl/cpu" }
 
 [[package]]
 name = "torchvision"
@@ -130,6 +173,17 @@ source = { registry = "https://download.pytorch.org/whl/rocm7.1" }
 name = "xformers"
 version = "0.0.31.post1"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform == 'linux'",
+]
+
+[[package]]
+name = "xformers"
+version = "0.0.31.post1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+]
 `;
 
   it('returns only the selected platform torch packages, with local version tags stripped', () => {
@@ -147,8 +201,64 @@ source = { registry = "https://pypi.org/simple" }
     ]);
   });
 
-  it('selects the cpu build for the cpu platform', () => {
-    expect(getTorchPackagesFromLock(uvLock, 'cpu')).toEqual([{ name: 'torch', version: '2.7.1' }]);
+  it('selects the cpu builds for the cpu platform', () => {
+    expect(getTorchPackagesFromLock(uvLock, 'cpu')).toEqual([
+      { name: 'torch', version: '2.7.1' },
+      { name: 'torchvision', version: '0.22.1' },
+    ]);
+  });
+
+  it('returns each package once even when the lock splits it across resolution markers', () => {
+    // uv emits several same-name blocks with the same source when the resolution differs per marker. Emitting
+    // `torch==A torch==B` in one install command would be unsatisfiable.
+    const names = getTorchPackagesFromLock(uvLock, 'cuda').map((pkg) => pkg.name);
+    expect(names.filter((name) => name === 'torch')).toHaveLength(1);
+  });
+
+  it('ignores pytorch-index URLs that appear only in a wheels list', () => {
+    // The cpu block's `wheels` entry points at a cu128 URL in this fixture only via the r2 host; selection must key off
+    // the package's own top-level `source`, not any URL in the block.
+    const names = getTorchPackagesFromLock(uvLock, 'cuda').map((pkg) => pkg.name);
+    expect(names).toEqual(['torch', 'torchvision']);
+  });
+
+  it('matches the r2 host the pytorch registry is migrating to', () => {
+    const r2Lock = `version = 1
+
+[[package]]
+name = "torch"
+version = "2.7.1+cu128"
+source = { registry = "https://download-r2.pytorch.org/whl/cu128" }
+`;
+    expect(getTorchPackagesFromLock(r2Lock, 'cuda')).toEqual([{ name: 'torch', version: '2.7.1' }]);
+  });
+
+  it('matches the nightly and test channels', () => {
+    const nightlyLock = `version = 1
+
+[[package]]
+name = "torch"
+version = "2.9.0.dev20250101+cu128"
+source = { registry = "https://download.pytorch.org/whl/nightly/cu128" }
+
+[[package]]
+name = "torchvision"
+version = "0.24.0+cpu"
+source = { registry = "https://download.pytorch.org/whl/test/cpu" }
+`;
+    expect(getTorchPackagesFromLock(nightlyLock, 'cuda')).toEqual([{ name: 'torch', version: '2.9.0.dev20250101' }]);
+    expect(getTorchPackagesFromLock(nightlyLock, 'cpu')).toEqual([{ name: 'torchvision', version: '0.24.0' }]);
+  });
+
+  it('does not match a lookalike host', () => {
+    const lookalikeLock = `version = 1
+
+[[package]]
+name = "torch"
+version = "2.7.1+cu128"
+source = { registry = "https://notpytorch.org/whl/cu128" }
+`;
+    expect(getTorchPackagesFromLock(lookalikeLock, 'cuda')).toEqual([]);
   });
 
   it('ignores packages resolved from pypi (e.g. the generic torch build, xformers)', () => {

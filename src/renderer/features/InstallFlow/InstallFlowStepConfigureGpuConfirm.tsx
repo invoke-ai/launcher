@@ -3,8 +3,8 @@ import { useStore } from '@nanostores/react';
 import { memo, useCallback, useEffect } from 'react';
 
 import { InstallFlowStepConfigureGpuPicker } from '@/renderer/features/InstallFlow/InstallFlowStepConfigureGpuPicker';
-import { installFlowApi } from '@/renderer/features/InstallFlow/state';
-import type { GpuBackend, GpuType } from '@/shared/types';
+import { BACKEND_TO_GPU_TYPE, installFlowApi } from '@/renderer/features/InstallFlow/state';
+import type { GpuBackend } from '@/shared/types';
 import { GPU_TYPE_MAP } from '@/shared/types';
 
 /** Human-readable description of a detected backend, for the confirmation prompt. */
@@ -13,13 +13,6 @@ const BACKEND_LABEL: Record<GpuBackend, string> = {
   rocm: 'an AMD GPU (ROCm)',
   metal: 'a Mac GPU (Metal / MPS)',
   cpu: 'no dedicated GPU (CPU only)',
-};
-
-/** Non-CUDA backends map straight to a GPU type. CUDA is handled separately because the generation is ambiguous. */
-const BACKEND_TO_GPU_TYPE: Record<Exclude<GpuBackend, 'cuda'>, GpuType> = {
-  rocm: 'amd',
-  metal: 'nogpu',
-  cpu: 'nogpu',
 };
 
 export const InstallFlowStepConfigureGpuConfirm = memo(() => {
@@ -33,15 +26,6 @@ export const InstallFlowStepConfigureGpuConfirm = memo(() => {
       void installFlowApi.detectGpu();
     }
   }, []);
-
-  // On macOS the only sane answer to "we detected a Mac GPU (Metal / MPS)" is yes, so skip the confirmation prompt and
-  // go straight to the summary. The user can still change it from there.
-  useEffect(() => {
-    if (status === 'done' && detection?.backend === 'metal' && phase === 'confirm') {
-      installFlowApi.$choices.setKey('gpuType', BACKEND_TO_GPU_TYPE.metal);
-      installFlowApi.$gpuConfirmPhase.set('done');
-    }
-  }, [status, detection, phase]);
 
   const onConfirmYes = useCallback(() => {
     const result = installFlowApi.$gpuDetection.get();
@@ -113,14 +97,14 @@ export const InstallFlowStepConfigureGpuConfirm = memo(() => {
   }
 
   if (phase === 'done') {
-    return <DetectedSummary onChange={onConfirmNo} />;
+    return <DetectedSummary backend={detection.backend} onChange={onConfirmNo} />;
   }
 
-  // A discrete AMD GPU on Windows is reported as the CPU backend (no ROCm on Windows), so give it an honest message
-  // rather than the misleading "no dedicated GPU".
-  const isWindowsAmd = detection.backend === 'cpu' && detection.vendor === 'amd';
-  const detectionHeading = isWindowsAmd
-    ? 'We detected an AMD GPU, but ROCm is not supported on Windows, so Invoke will use your CPU.'
+  // AMD hardware that cannot use ROCm - a discrete card on Windows, or integrated Radeon graphics with no ROCm build -
+  // is reported as the CPU backend. Use the probe's own explanation rather than the misleading "no dedicated GPU".
+  const isAmdWithoutRocm = detection.backend === 'cpu' && detection.vendor === 'amd';
+  const detectionHeading = isAmdWithoutRocm
+    ? `${detection.decision}.`
     : `We detected ${BACKEND_LABEL[detection.backend]}.`;
 
   // phase === 'confirm'
@@ -166,12 +150,15 @@ const NvidiaTierPicker = memo(({ onBack }: { onBack: () => void }) => {
 });
 NvidiaTierPicker.displayName = 'NvidiaTierPicker';
 
-const DetectedSummary = memo(({ onChange }: { onChange: () => void }) => {
+const DetectedSummary = memo(({ backend, onChange }: { backend: GpuBackend; onChange: () => void }) => {
   const { gpuType } = useStore(installFlowApi.$choices);
+  // A Mac maps to the same `nogpu` type as a machine with no GPU at all (torch for macOS comes from the default index
+  // either way), so the GPU-type label would read "No dedicated GPU" to an M3 Max owner. Name what we detected instead.
+  const label = backend === 'metal' ? 'Mac GPU (Metal / MPS)' : gpuType ? GPU_TYPE_MAP[gpuType] : '';
   return (
     <Flex flexDir="column" gap={3} alignItems="center">
       <Text fontSize="md">
-        Using <strong>{gpuType ? GPU_TYPE_MAP[gpuType] : ''}</strong>.
+        Using <strong>{label}</strong>.
       </Text>
       <Button variant="link" onClick={onChange}>
         Change

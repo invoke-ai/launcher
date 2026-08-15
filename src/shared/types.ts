@@ -126,9 +126,14 @@ export type GpuBackend = 'cuda' | 'rocm' | 'metal' | 'cpu';
  * vendor can be identified even when the usable backend is `cpu` - e.g. a discrete AMD GPU on Windows, where ROCm is
  * not supported.
  */
-export type GpuVendor = 'nvidia' | 'amd' | 'apple' | 'cpu';
+type GpuVendor = 'nvidia' | 'amd' | 'apple' | 'cpu';
 
-export type GpuConfidence = 'high' | 'medium' | 'low' | 'weak-signal' | 'none';
+/**
+ * How much the detection result should be trusted. `weak-signal` means hardware was seen but the usable backend could
+ * not be confirmed (e.g. integrated Radeon graphics with no ROCm build) - the backend falls back to `cpu`, but the UI
+ * can still explain what was found instead of claiming there is no GPU.
+ */
+export type GpuConfidence = 'high' | 'medium' | 'weak-signal' | 'none';
 
 /**
  * Result of the best-effort hardware probe for the compute backend. Note that `cuda` does not distinguish the Nvidia

@@ -13,6 +13,7 @@ import { emitter, ipc } from '@/renderer/services/ipc';
 import { $installDirDetails, persistedStoreApi, syncInstallDirDetails } from '@/renderer/services/store';
 import type {
   DirDetails,
+  GpuBackend,
   GpuDetectionResult,
   GpuType,
   InstallProcessStatus,
@@ -24,6 +25,18 @@ const steps = ['Location', 'Version', 'Configure', 'Review', 'Install'] as const
 
 /** The sub-views of the GPU confirmation flow in the Configure step. */
 type GpuConfirmPhase = 'confirm' | 'nvidia-tier' | 'manual' | 'done';
+
+/**
+ * Non-CUDA backends map straight to a GPU type. CUDA is handled separately because the generation is ambiguous.
+ *
+ * Both `metal` and `cpu` map to `nogpu`: the launcher's GPU types select a torch index, and macOS torch (MPS included)
+ * comes from the default index either way.
+ */
+export const BACKEND_TO_GPU_TYPE: Record<Exclude<GpuBackend, 'cuda'>, GpuType> = {
+  rocm: 'amd',
+  metal: 'nogpu',
+  cpu: 'nogpu',
+};
 
 const $choices = map<{
   dirDetails: DirDetails | null;
@@ -55,6 +68,9 @@ const $gpuDetectionStatus = atom<'idle' | 'detecting' | 'done' | 'error'>('idle'
 // Which sub-view of the GPU confirmation step is showing. Kept in the store (not component state) so it survives
 // navigating away from and back to the Configure step - otherwise returning would drop back to the manual picker.
 const $gpuConfirmPhase = atom<GpuConfirmPhase>('confirm');
+// Incremented for every detection run (and whenever the flow is reset) so an in-flight run that has been superseded
+// can drop its result instead of writing it into fresh state.
+let gpuDetectionRunId = 0;
 const $installType = computed($choices, ({ dirDetails, release }): InstallType | null => {
   if (!release) {
     return null;
@@ -103,11 +119,23 @@ export const installFlowApi = {
     if ($gpuDetectionStatus.get() === 'detecting') {
       return;
     }
+    const runId = ++gpuDetectionRunId;
     $gpuDetectionStatus.set('detecting');
     const result = await withResultAsync(() => emitter.invoke('util:detect-gpu'));
+    // `beginFlow`/`cancelFlow` reset the status to 'idle' while a probe may still be in flight, which lets a second run
+    // start. Drop the superseded run's result rather than letting it stomp the fresh state.
+    if (runId !== gpuDetectionRunId) {
+      return;
+    }
     if (result.isOk()) {
       $gpuDetection.set(result.value);
       $gpuDetectionStatus.set('done');
+      if (result.value.backend === 'metal') {
+        // On macOS "we detected a Mac GPU (Metal / MPS) - is this correct?" has exactly one sane answer, so skip the
+        // confirmation. Done here rather than in a render effect, which would flash the prompt for a frame first.
+        $choices.setKey('gpuType', BACKEND_TO_GPU_TYPE.metal);
+        $gpuConfirmPhase.set('done');
+      }
     } else {
       // Detection is advisory; on failure we fall back to the manual GPU picker in the Configure step.
       $gpuDetection.set(null);
@@ -130,6 +158,7 @@ export const installFlowApi = {
       repairMode: false,
       customTorchIndexUrl: '',
     });
+    gpuDetectionRunId++;
     $gpuDetection.set(null);
     $gpuDetectionStatus.set('idle');
     $gpuConfirmPhase.set('confirm');
@@ -144,6 +173,7 @@ export const installFlowApi = {
       repairMode: false,
       customTorchIndexUrl: '',
     });
+    gpuDetectionRunId++;
     $gpuDetection.set(null);
     $gpuDetectionStatus.set('idle');
     $gpuConfirmPhase.set('confirm');

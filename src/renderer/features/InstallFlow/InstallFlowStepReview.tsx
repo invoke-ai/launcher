@@ -26,6 +26,7 @@ import {
 import { InstallFlowStepper } from '@/renderer/features/InstallFlow/InstallFlowStepper';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
 import type { GpuType } from '@/shared/types';
+import { redactUrlCredentials } from '@/shared/url';
 
 const GPU_LABEL_MAP: Record<GpuType, string> = {
   'nvidia<30xx': 'a Nvidia 20xx or older GPU',
@@ -86,7 +87,8 @@ export const InstallFlowStepReview = memo(() => {
           {trimmedCustomTorchIndexUrl && (
             <ListItem>
               <Text fontSize="md">
-                Torch will be installed from a <Strong>custom index</Strong>: {trimmedCustomTorchIndexUrl}
+                Torch will be installed from a <Strong>custom index</Strong>:{' '}
+                {redactUrlCredentials(trimmedCustomTorchIndexUrl)}
               </Text>
             </ListItem>
           )}

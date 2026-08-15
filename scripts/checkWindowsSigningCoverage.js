@@ -3,29 +3,68 @@
 const fs = require('fs');
 const path = require('path');
 
-const { classifyBinary, expectedSignerFor } = require('./customSign.js');
+const { classifyBinary, exemptionFor } = require('./customSign.js');
+const { verifyExpectedSigner } = require('./authenticode.js');
 
 /**
- * Verifies that every Windows binary we ship is accounted for by the signing allowlist in
- * scripts/customSign.js.
+ * Verifies that every Windows binary we ship will actually get signed.
  *
- * Signing itself happens on OSSign's runner, where we never see the logs, and a filter that stops
- * matching just prints "Skipping..." and ships an unsigned binary — which is exactly how
- * https://github.com/invoke-ai/launcher/issues/148 reached users. This runs against the *unsigned*
- * build produced by .github/workflows/build.yml on every PR, so a stale allowlist fails there
- * instead of in a release.
+ * Signing happens on OSSign's runner, where we never see the logs, so a gap there is invisible
+ * until an end user with Smart App Control hits it — which is how
+ * https://github.com/invoke-ai/launcher/issues/148 reached a release. This runs against the build
+ * .github/workflows/build.yml produces on every PR and checks the two things that can silently go
+ * wrong:
  *
- * Usage: node scripts/checkWindowsSigningCoverage.js [dist/win-unpacked]
+ * 1. **Reachability.** electron-builder only hands a file to scripts/customSign.js if
+ *    `shouldSignFile` matches it *and* it sits under one of the three roots `signApp` walks (the
+ *    package root, non-recursively; `resources/app.asar.unpacked`; `swiftshader`) — plus the
+ *    separate paths for extraResources and the NSIS elevation helper. Reasoning about that from the
+ *    outside is how you get a check that passes while a binary in `locales/` ships unsigned. So we
+ *    do not reason about it: the PR build runs with SIGNING_DRY_RUN set, customSign.js records
+ *    every path electron-builder actually offered it, and we require every shipped PE to appear in
+ *    that record.
+ * 2. **Pre-signed binaries.** customSign.js never signs over an intact third-party signature. That
+ *    is the safe default, but it means a binary can quietly stop being signed by us just by
+ *    arriving pre-signed. Every such file must be declared in `EXEMPTIONS` with the signer we
+ *    expect, and we verify the signature really is that signer's and really does cover the file.
+ *
+ * Usage: node scripts/checkWindowsSigningCoverage.js <win-unpacked-dir> <dry-run-record>
  */
 
-const BINARY_EXTENSIONS = new Set(['.exe', '.dll', '.node']);
+/**
+ * Is this a PE image? Smart App Control gates a file's contents, not its name, so decide by reading
+ * the headers — a `.pyd`, `.cpl` or extensionless binary counts just as much as a `.dll`, and an
+ * extension-based sweep would never see it.
+ *
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+function isPortableExecutable(filePath) {
+  let handle;
+  try {
+    handle = fs.openSync(filePath, 'r');
+    const header = Buffer.alloc(0x40);
+    if (fs.readSync(handle, header, 0, 0x40, 0) < 0x40 || header.readUInt16LE(0) !== 0x5a4d /* MZ */) {
+      return false;
+    }
+    const peOffset = header.readUInt32LE(0x3c);
+    const signature = Buffer.alloc(4);
+    return fs.readSync(handle, signature, 0, 4, peOffset) === 4 && signature.readUInt32LE(0) === 0x00004550;
+  } catch {
+    return false;
+  } finally {
+    if (handle !== undefined) {
+      fs.closeSync(handle);
+    }
+  }
+}
 
 /**
- * Collect every binary under `dir`.
+ * Collect every file under `dir`.
  *
- * `Dirent.isFile()`/`isDirectory()` are false for symlinks and (on Windows) junctions, so resolve
- * those with `statSync` rather than skipping them — a symlinked binary that the walk ignored would
- * be a silent hole in the coverage guarantee. `seen` breaks symlink cycles.
+ * `Dirent.isFile()`/`isDirectory()` are false for symlinks and, on Windows, for the junctions
+ * electron-builder's copy helper creates — so resolve those with `statSync` rather than skipping
+ * them. `seen` breaks symlink cycles.
  *
  * @param {string} dir
  * @param {Set<string>} [seen]
@@ -45,12 +84,12 @@ function walk(dir, seen = new Set()) {
     try {
       stats = fs.statSync(entryPath);
     } catch {
-      // Broken symlink: nothing ships, nothing to classify.
+      // Broken symlink: nothing ships, nothing to check.
       continue;
     }
     if (stats.isDirectory()) {
       found.push(...walk(entryPath, seen));
-    } else if (stats.isFile() && BINARY_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+    } else if (stats.isFile()) {
       found.push(entryPath);
     }
   }
@@ -58,85 +97,36 @@ function walk(dir, seen = new Set()) {
 }
 
 /**
- * Read a PE file's embedded Authenticode certificate, by hand.
+ * The set of paths customSign.js recorded, normalised for comparison.
  *
- * The obvious implementation is `Get-AuthenticodeSignature`, but it lives in the
- * `Microsoft.PowerShell.Security` module, which does not reliably autoload on GitHub's
- * windows-2022 runners ("the module could not be loaded", CouldNotAutoloadMatchingModule) — so the
- * check failed on the environment rather than on the files. Parsing the PE ourselves has no such
- * dependency and, unlike the PowerShell route, also works when the script is run on Linux/macOS.
- *
- * We verify that a certificate is present and names the expected signer. We do not validate the
- * trust chain: the question here is "did somebody else already sign this, so we should keep our
- * hands off", not "does Windows trust it" — that part is Microsoft's problem, not ours.
- *
- * @param {string} filePath
- * @returns {{ signed: false } | { signed: true, certificate: Buffer }}
+ * @param {string} recordPath
+ * @returns {Set<string>}
  */
-function readEmbeddedCertificate(filePath) {
-  const file = fs.readFileSync(filePath);
+function readOfferedPaths(recordPath) {
+  if (!fs.existsSync(recordPath)) {
+    throw new Error(
+      `no dry-run record at ${recordPath}. The build must run with ENABLE_SIGNING=true and ` +
+        'SIGNING_DRY_RUN set to this path, or nothing proves electron-builder ever offered these ' +
+        'binaries to scripts/customSign.js.'
+    );
+  }
+  const offered = fs
+    .readFileSync(recordPath, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => path.resolve(line));
 
-  // DOS header -> PE header offset, then the COFF header is 20 bytes before the optional header.
-  if (file.length < 0x40 || file.readUInt16LE(0) !== 0x5a4d /* MZ */) {
-    throw new Error('not a PE file (missing MZ header)');
+  if (offered.length === 0) {
+    throw new Error(`the dry-run record at ${recordPath} is empty — the signing hook was never called.`);
   }
-  const peOffset = file.readUInt32LE(0x3c);
-  if (file.length < peOffset + 24 || file.readUInt32LE(peOffset) !== 0x00004550 /* PE\0\0 */) {
-    throw new Error('not a PE file (missing PE signature)');
-  }
-
-  // PE32 (0x10b) puts the data directories 96 bytes into the optional header; PE32+ (0x20b), 112.
-  const optionalHeaderOffset = peOffset + 24;
-  const magic = file.readUInt16LE(optionalHeaderOffset);
-  const dataDirectoryOffset = optionalHeaderOffset + (magic === 0x20b ? 112 : 96);
-
-  // Data directory 4 is IMAGE_DIRECTORY_ENTRY_SECURITY. Unlike every other entry, its first field
-  // is a plain file offset rather than an RVA.
-  const certificateTableOffset = dataDirectoryOffset + 4 * 8;
-  if (file.length < certificateTableOffset + 8) {
-    throw new Error('truncated PE optional header');
-  }
-  const offset = file.readUInt32LE(certificateTableOffset);
-  const size = file.readUInt32LE(certificateTableOffset + 4);
-
-  if (size === 0 || offset === 0) {
-    return { signed: false };
-  }
-  if (offset + size > file.length) {
-    throw new Error('certificate table runs past the end of the file');
-  }
-  // The WIN_CERTIFICATE header is 8 bytes; the PKCS#7 blob follows it.
-  return { signed: true, certificate: file.subarray(offset + 8, offset + size) };
-}
-
-/**
- * Check that `filePath` carries an embedded signature naming `expectedSigner`.
- *
- * X.509 names are ASCII in practice, so a substring search over the DER blob is enough to tell
- * "signed by Microsoft" from "signed by someone else" or "not signed at all".
- *
- * @param {string} filePath
- * @param {string} expectedSigner
- * @returns {string | null} an error description, or null if the signature checks out
- */
-function verifyExpectedSigner(filePath, expectedSigner) {
-  let result;
-  try {
-    result = readEmbeddedCertificate(filePath);
-  } catch (error) {
-    return `could not read its certificate table (${error.message})`;
-  }
-  if (!result.signed) {
-    return 'it carries no embedded signature at all';
-  }
-  if (!result.certificate.includes(Buffer.from(expectedSigner, 'latin1'))) {
-    return `its certificate does not name "${expectedSigner}"`;
-  }
-  return null;
+  return new Set(offered);
 }
 
 function main() {
-  const target = path.resolve(process.argv[2] ?? path.join('dist', 'win-unpacked'));
+  const [targetArg, recordArg] = process.argv.slice(2);
+  const target = path.resolve(targetArg ?? path.join('dist', 'win-unpacked'));
+  const recordPath = path.resolve(recordArg ?? path.join('dist', 'offered-for-signing.txt'));
 
   if (!fs.existsSync(target)) {
     console.error(`Directory not found: ${target}`);
@@ -144,14 +134,22 @@ function main() {
     process.exit(1);
   }
 
-  const binaries = walk(target);
+  let offered;
+  try {
+    offered = readOfferedPaths(recordPath);
+  } catch (error) {
+    console.error(`Windows signing coverage check FAILED: ${error.message}`);
+    process.exit(1);
+  }
+
+  const binaries = walk(target).filter(isPortableExecutable);
   if (binaries.length === 0) {
-    console.error(`No .exe/.dll/.node files found under ${target} — is this the right directory?`);
+    console.error(`No PE binaries found under ${target} — is this the right directory?`);
     process.exit(1);
   }
 
   /** @type {Record<string, string[]>} */
-  const byClass = { sign: [], 'skip-already-signed': [], 'skip-out-of-scope': [], unknown: [] };
+  const byClass = { sign: [], 'skip-already-signed': [] };
   const failures = [];
 
   for (const binary of binaries) {
@@ -159,47 +157,61 @@ function main() {
     const classification = classifyBinary(binary);
     byClass[classification].push(relativePath);
 
-    if (classification === 'unknown') {
-      failures.push(
-        `${relativePath}: not covered by any rule in scripts/customSign.js. ` +
-          'Add it to SIGN_PATTERNS, or to ALREADY_SIGNED_PATTERNS/OUT_OF_SCOPE_PATTERNS with a reason.'
-      );
+    if (classification === 'sign') {
+      if (!offered.has(path.resolve(binary))) {
+        failures.push(
+          `${relativePath}: we intend to sign this, but electron-builder never offered it to the ` +
+            'signing hook, so it would ship unsigned. Its extension likely needs adding to signExts in ' +
+            'electron-builder.config.ts, or it sits outside the directories electron-builder walks.'
+        );
+      }
       continue;
     }
 
-    // "Somebody else already signed it" is a claim we can actually check, so check it.
-    if (classification === 'skip-already-signed') {
-      const expectedSigner = expectedSignerFor(binary);
-      const problem = verifyExpectedSigner(binary, expectedSigner);
-      if (problem !== null) {
-        failures.push(
-          `${relativePath}: ALREADY_SIGNED_PATTERNS claims this is signed by "${expectedSigner}", ` +
-            `but ${problem}. It must either be signed by us or moved out of that list.`
-        );
-      }
+    // Arrived pre-signed, so customSign.js will leave it alone. That has to be a deliberate,
+    // declared decision rather than something that quietly started happening.
+    const exemption = exemptionFor(binary);
+    if (exemption === null) {
+      failures.push(
+        `${relativePath}: ships with a third-party signature, so we do not sign it — but nothing ` +
+          'declares that. Add it to EXEMPTIONS in scripts/customSign.js with the signer you expect, ' +
+          'so the signature gets verified on every build.'
+      );
+      continue;
+    }
+    const problem = verifyExpectedSigner(binary, exemption.expectedSigner);
+    if (problem !== null) {
+      failures.push(
+        `${relativePath}: declared as "${exemption.reason}" signed by "${exemption.expectedSigner}", ` +
+          `but ${problem}.`
+      );
     }
   }
 
   for (const [classification, paths] of Object.entries(byClass)) {
-    console.log(`\n${classification} (${paths.length}):`);
+    console.log(`${classification} (${paths.length}):`);
     for (const relativePath of paths.sort()) {
       console.log(`  ${relativePath}`);
     }
+    console.log();
   }
 
   if (failures.length > 0) {
-    console.error(`\nWindows signing coverage check FAILED (${failures.length}):`);
+    console.error(`Windows signing coverage check FAILED (${failures.length}):`);
     for (const failure of failures) {
       console.error(`  - ${failure}`);
     }
     process.exit(1);
   }
 
-  console.log(`\nWindows signing coverage OK: ${binaries.length} binaries, all accounted for.`);
+  console.log(
+    `Windows signing coverage OK: ${binaries.length} PE binaries, all reachable by the signing hook ` +
+      `(${offered.size} paths offered in total).`
+  );
 }
 
 if (require.main === module) {
   main();
 }
 
-module.exports = { readEmbeddedCertificate, verifyExpectedSigner, walk };
+module.exports = { readOfferedPaths, isPortableExecutable, walk };

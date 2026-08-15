@@ -69,20 +69,16 @@ It already builds and signs using the approach above: it checks out `invoke-ai/l
 OSSign-hosted workflow may need a matching update — open a PR against `OSSign/invoke-ai-launcher`
 and notify OSSign for review.
 
-The flip side is that changing **which files we sign** needs no OSSign-side change at all: the
-allowlist lives in `scripts/customSign.js` here, and the hosted workflow picks it up when it
-checks this repo out at the release ref. Signing is a local `ossign` CLI call per file and
-OSSign's reviewer gate is per _workflow run_, so adding files costs no extra approvals.
+The flip side: changing **which files we sign** needs no OSSign-side change at all. The policy lives
+in `scripts/customSign.js` here, and the hosted workflow picks it up when it checks this repo out at
+the release ref. Signing is a local `ossign` CLI call per file and OSSign's reviewer gate is per
+_workflow run_, so signing more files costs no extra approvals.
 
-### What gets signed
-
-See the "What gets signed" table in [`CODESIGN.md`](../../CODESIGN.md) for the current allowlist
-and the reasoning behind each category. The short version: everything we bundle that Windows may
-`CreateProcess` gets signed — including `winpty-agent.exe` and `uv.exe`, whose omission caused
-[#148](https://github.com/invoke-ai/launcher/issues/148) — while Microsoft-signed ConPTY binaries
-are left untouched. `scripts/checkWindowsSigningCoverage.js` runs in the unsigned PR build and
-fails if any bundled binary falls outside that allowlist, so the gap is caught before a release
-rather than by a user with Smart App Control turned on.
+The default is **sign**, not skip. An allowlist keyed on our own product name is what let
+[#148](https://github.com/invoke-ai/launcher/issues/148) ship an unsigned `winpty-agent.exe`. A
+binary is left alone only if it already carries a signature covering its contents — we never strip
+somebody else's signature — and CI requires each such case to be declared in `EXEMPTIONS` with the
+signer we expect. See [`CODESIGN.md`](../../CODESIGN.md) for the full policy.
 
 ### 2. Add the dispatch credentials as repo-level secrets
 

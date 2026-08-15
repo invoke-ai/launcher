@@ -2,9 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
-const { classifyBinary } = require('./customSign.js');
+const { classifyBinary, expectedSignerFor } = require('./customSign.js');
 
 /**
  * Verifies that every Windows binary we ship is accounted for by the signing allowlist in
@@ -59,30 +58,81 @@ function walk(dir, seen = new Set()) {
 }
 
 /**
- * Ask Windows whether a file carries a valid Authenticode signature. Returns null off Windows,
- * where we cannot check and therefore do not fail.
+ * Read a PE file's embedded Authenticode certificate, by hand.
+ *
+ * The obvious implementation is `Get-AuthenticodeSignature`, but it lives in the
+ * `Microsoft.PowerShell.Security` module, which does not reliably autoload on GitHub's
+ * windows-2022 runners ("the module could not be loaded", CouldNotAutoloadMatchingModule) — so the
+ * check failed on the environment rather than on the files. Parsing the PE ourselves has no such
+ * dependency and, unlike the PowerShell route, also works when the script is run on Linux/macOS.
+ *
+ * We verify that a certificate is present and names the expected signer. We do not validate the
+ * trust chain: the question here is "did somebody else already sign this, so we should keep our
+ * hands off", not "does Windows trust it" — that part is Microsoft's problem, not ours.
  *
  * @param {string} filePath
- * @returns {string | null}
+ * @returns {{ signed: false } | { signed: true, certificate: Buffer }}
  */
-function authenticodeStatus(filePath) {
-  if (process.platform !== 'win32') {
-    return null;
+function readEmbeddedCertificate(filePath) {
+  const file = fs.readFileSync(filePath);
+
+  // DOS header -> PE header offset, then the COFF header is 20 bytes before the optional header.
+  if (file.length < 0x40 || file.readUInt16LE(0) !== 0x5a4d /* MZ */) {
+    throw new Error('not a PE file (missing MZ header)');
   }
-  // A PowerShell *single*-quoted string is literal: backslashes, `$` and backticks are not escapes,
-  // so only `'` needs doubling. JSON.stringify would be wrong here — it escapes for JSON, and
-  // PowerShell would hand `-LiteralPath` a path with doubled backslashes.
-  const script = `(Get-AuthenticodeSignature -LiteralPath '${filePath.replace(/'/g, "''")}').Status`;
+  const peOffset = file.readUInt32LE(0x3c);
+  if (file.length < peOffset + 24 || file.readUInt32LE(peOffset) !== 0x00004550 /* PE\0\0 */) {
+    throw new Error('not a PE file (missing PE signature)');
+  }
+
+  // PE32 (0x10b) puts the data directories 96 bytes into the optional header; PE32+ (0x20b), 112.
+  const optionalHeaderOffset = peOffset + 24;
+  const magic = file.readUInt16LE(optionalHeaderOffset);
+  const dataDirectoryOffset = optionalHeaderOffset + (magic === 0x20b ? 112 : 96);
+
+  // Data directory 4 is IMAGE_DIRECTORY_ENTRY_SECURITY. Unlike every other entry, its first field
+  // is a plain file offset rather than an RVA.
+  const certificateTableOffset = dataDirectoryOffset + 4 * 8;
+  if (file.length < certificateTableOffset + 8) {
+    throw new Error('truncated PE optional header');
+  }
+  const offset = file.readUInt32LE(certificateTableOffset);
+  const size = file.readUInt32LE(certificateTableOffset + 4);
+
+  if (size === 0 || offset === 0) {
+    return { signed: false };
+  }
+  if (offset + size > file.length) {
+    throw new Error('certificate table runs past the end of the file');
+  }
+  // The WIN_CERTIFICATE header is 8 bytes; the PKCS#7 blob follows it.
+  return { signed: true, certificate: file.subarray(offset + 8, offset + size) };
+}
+
+/**
+ * Check that `filePath` carries an embedded signature naming `expectedSigner`.
+ *
+ * X.509 names are ASCII in practice, so a substring search over the DER blob is enough to tell
+ * "signed by Microsoft" from "signed by someone else" or "not signed at all".
+ *
+ * @param {string} filePath
+ * @param {string} expectedSigner
+ * @returns {string | null} an error description, or null if the signature checks out
+ */
+function verifyExpectedSigner(filePath, expectedSigner) {
+  let result;
   try {
-    const status = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-      encoding: 'utf8',
-    }).trim();
-    // Get-AuthenticodeSignature emits a non-terminating error (empty stdout, exit 0) for a path it
-    // cannot resolve, so treat "no answer" as a failure rather than as a pass.
-    return status === '' ? 'error: no status returned' : status;
+    result = readEmbeddedCertificate(filePath);
   } catch (error) {
-    return `error: ${error.message}`;
+    return `could not read its certificate table (${error.message})`;
   }
+  if (!result.signed) {
+    return 'it carries no embedded signature at all';
+  }
+  if (!result.certificate.includes(Buffer.from(expectedSigner, 'latin1'))) {
+    return `its certificate does not name "${expectedSigner}"`;
+  }
+  return null;
 }
 
 function main() {
@@ -119,12 +169,12 @@ function main() {
 
     // "Somebody else already signed it" is a claim we can actually check, so check it.
     if (classification === 'skip-already-signed') {
-      const status = authenticodeStatus(binary);
-      if (status !== null && status !== 'Valid') {
+      const expectedSigner = expectedSignerFor(binary);
+      const problem = verifyExpectedSigner(binary, expectedSigner);
+      if (problem !== null) {
         failures.push(
-          `${relativePath}: ALREADY_SIGNED_PATTERNS claims this is signed upstream, but ` +
-            `Get-AuthenticodeSignature reports "${status}". It must either be signed by us or ` +
-            'moved out of that list.'
+          `${relativePath}: ALREADY_SIGNED_PATTERNS claims this is signed by "${expectedSigner}", ` +
+            `but ${problem}. It must either be signed by us or moved out of that list.`
         );
       }
     }
@@ -148,4 +198,8 @@ function main() {
   console.log(`\nWindows signing coverage OK: ${binaries.length} binaries, all accounted for.`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { readEmbeddedCertificate, verifyExpectedSigner, walk };

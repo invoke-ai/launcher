@@ -88,7 +88,10 @@ Because signing runs on OSSign's infrastructure, we never see those logs, and a 
 matching just prints "Skipping…" and ships an unsigned binary. `scripts/checkWindowsSigningCoverage.js`
 guards against that: the Windows job in `.github/workflows/build.yml` runs it against the unsigned
 build on every PR and fails if any bundled binary is not covered by one of the three categories
-above (and re-verifies, via `Get-AuthenticodeSignature`, that the "already signed" ones really are).
+above. It also re-verifies the "left alone" claim by reading each file's embedded certificate and
+requiring it to name Microsoft — that is a hand-rolled PE parse rather than
+`Get-AuthenticodeSignature`, because the `Microsoft.PowerShell.Security` module does not reliably
+autoload on GitHub's `windows-2022` runners, and parsing the PE also works off Windows.
 
 Its scope is `dist/win-unpacked` — the tree that gets installed, which is what Smart App Control
 gates at run time. The NSIS installer itself lives in `dist/` and the uninstaller is deleted right

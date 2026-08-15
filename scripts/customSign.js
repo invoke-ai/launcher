@@ -59,18 +59,23 @@ const SIGN_PATTERNS = [
 /**
  * Paths that arrive already signed by someone else. Re-signing would replace a Microsoft
  * signature with ours for no benefit, so we leave them alone.
+ *
+ * `expectedSigner` is the string checkWindowsSigningCoverage.js requires to appear in the file's
+ * embedded certificate, so "somebody else already signed this" is verified rather than trusted.
+ *
+ * @type {{ pattern: RegExp, expectedSigner: string }[]}
  */
 const ALREADY_SIGNED_PATTERNS = [
   // node-pty redistributes Microsoft's ConPTY binaries verbatim: OpenConsole.exe (which node-pty
   // does spawn, so it matters) and conpty.dll. Both carry a timestamped Microsoft Code Signing
-  // PCA 2011 signature; checkWindowsSigningCoverage.js re-verifies that on every build.
+  // PCA 2011 signature.
   //
   // Two locations, and both must be listed: `third_party/conpty/<ver>/win10-<arch>` is the stash
   // shipped in the npm tarball, and node-pty's scripts/post-install.js copies the pair for the
   // current arch into `build/Release/conpty` on Windows — that copy is the one loaded at runtime,
   // and it sits inside the build output directory that SIGN_PATTERNS otherwise claims.
-  /\/node_modules\/node-pty\/third_party\/conpty\//,
-  /\/node_modules\/node-pty\/build\/Release\/conpty\//,
+  { pattern: /\/node_modules\/node-pty\/third_party\/conpty\//, expectedSigner: 'Microsoft Corporation' },
+  { pattern: /\/node_modules\/node-pty\/build\/Release\/conpty\//, expectedSigner: 'Microsoft Corporation' },
 ];
 
 /**
@@ -93,7 +98,7 @@ const OUT_OF_SCOPE_PATTERNS = [/\/(ffmpeg|libEGL|libGLESv2|vk_swiftshader|vulkan
 function classifyBinary(filePath) {
   const normalized = filePath.replace(/\\/g, '/');
 
-  if (ALREADY_SIGNED_PATTERNS.some((pattern) => pattern.test(normalized))) {
+  if (expectedSignerFor(filePath) !== null) {
     return 'skip-already-signed';
   }
   if (SIGN_PATTERNS.some((pattern) => pattern.test(normalized))) {
@@ -103,6 +108,18 @@ function classifyBinary(filePath) {
     return 'skip-out-of-scope';
   }
   return 'unknown';
+}
+
+/**
+ * The signer we expect to already own this binary, or null if we do not claim it is pre-signed.
+ *
+ * @param {string} filePath
+ * @returns {string | null}
+ */
+function expectedSignerFor(filePath) {
+  const normalized = filePath.replace(/\\/g, '/');
+  const match = ALREADY_SIGNED_PATTERNS.find((entry) => entry.pattern.test(normalized));
+  return match ? match.expectedSigner : null;
 }
 
 /**
@@ -141,4 +158,4 @@ function sign(configuration) {
 
 // SIGN_PATTERNS is exported so the test can prove the overlap with ALREADY_SIGNED_PATTERNS is real
 // and that classifyBinary's ordering is what resolves it.
-module.exports = { sign, classifyBinary, SIGN_PATTERNS };
+module.exports = { sign, classifyBinary, expectedSignerFor, SIGN_PATTERNS };

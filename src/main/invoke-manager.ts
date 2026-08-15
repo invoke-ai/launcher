@@ -194,9 +194,15 @@ export class InvokeManager {
               this.updateStatus({ type: 'exited' });
               this.log.info(c.green.bold('Invoke process exited normally\r\n'));
             } else if (signal !== undefined && signal !== null) {
-              // Process was killed via signal
-              this.updateStatus({ type: 'exited' });
-              this.log.info(c.yellow(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
+              // Process was killed via signal without us asking for it (the intentional-shutdown case is handled by the
+              // `exiting` branch above). This is an abnormal termination - e.g. the OOM killer or a segfault during
+              // model load - so surface it as an error rather than a clean exit, so the launcher is restored instead
+              // of quitting and the logs stay available.
+              this.updateStatus({
+                type: 'error',
+                error: { message: `Process was terminated with signal ${signal}` },
+              });
+              this.log.info(c.red(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
             } else if (exitCode !== null) {
               // Process exited on its own, with a non-zero code, indicating an error
               this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
@@ -379,6 +385,14 @@ export class InvokeManager {
   };
 
   /**
+   * Whether the underlying Invoke process is currently running. This is independent of the UI window - e.g. after a
+   * window crash the process is still alive.
+   */
+  isProcessRunning = (): boolean => {
+    return this.commandRunner.isRunning();
+  };
+
+  /**
    * Kill the Invoke process and wait for it to exit
    */
   killProcess = async (): Promise<void> => {
@@ -431,12 +445,15 @@ export const createInvokeManager = (arg: {
   });
 
   const cleanupInvokeManager = async () => {
-    const status = invokeManager.getStatus();
-    if (status.type === 'running' || status.type === 'starting') {
+    // Shut down Invoke whenever the process is still alive, regardless of status. Gating on specific statuses missed
+    // the `window-crashed` case (process alive, UI window gone), which would orphan the Python process, leave uvicorn
+    // bound to its port, and strand VRAM after the launcher quit.
+    if (invokeManager.isProcessRunning()) {
       await invokeManager.exitInvoke();
     }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');
+    ipcMain.removeHandler('invoke-process:reopen-window');
     ipcMain.removeHandler('invoke-process:resize');
   };
 

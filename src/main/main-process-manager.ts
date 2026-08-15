@@ -6,6 +6,7 @@ import path from 'path';
 
 import { isDevelopment, manageWindowSize } from '@/main/util';
 import type {
+  InstallProcessStatus,
   InvokeProcessStatus,
   IpcEvents,
   IpcRendererEvents,
@@ -14,8 +15,9 @@ import type {
   WithTimestamp,
 } from '@/shared/types';
 
-// electron-vite resolves this to the icon's runtime path, copying the file into the build output.
-import trayIconPath from '../../assets/images/invoke-avatar-square.png?asset';
+// electron-vite resolves this to the icon's runtime path, copying the file into the build output. We use the RGBA app
+// icon (with a real alpha channel) rather than the opaque avatar square so it reads correctly on a menu bar.
+import trayIconPath from '../../build/icon.png?asset';
 import { checkForUpdates } from './updater';
 
 const NOT_INITIALIZED_MESSAGE = 'Main window is not initialized';
@@ -28,10 +30,18 @@ export class MainProcessManager {
   private tray: Tray | null;
   /** Whether the launcher window is currently hidden to the system tray. */
   private isHiddenToTray: boolean;
+  /**
+   * Whether the launcher was hidden automatically after Invoke started (as opposed to a manual "minimize to tray").
+   * Only an auto-hide arms the "quit when Invoke shuts down normally" behavior - a manual minimize keeps the app
+   * running in the tray.
+   */
+  private autoHiddenAfterStartup: boolean;
   /** Whether the application is in the process of quitting. Used to skip the close-confirmation dialog. */
   private isQuitting: boolean;
-  /** The last known Invoke process status type. Used to decide whether to confirm closing the launcher. */
+  /** The last known Invoke process status type. Used to decide tray behavior and whether to confirm closing. */
   private invokeStatusType: InvokeProcessStatus['type'] | null;
+  /** The last known install process status type. Used to decide whether to confirm closing and to restore on finish. */
+  private installStatusType: InstallProcessStatus['type'] | null;
 
   ipc: IpcListener<IpcEvents>;
   emitter: IpcEmitter<IpcRendererEvents>;
@@ -45,11 +55,19 @@ export class MainProcessManager {
     this.store = store;
     this.tray = null;
     this.isHiddenToTray = false;
+    this.autoHiddenAfterStartup = false;
     this.isQuitting = false;
     this.invokeStatusType = null;
+    this.installStatusType = null;
 
     app.on('before-quit', () => {
       this.isQuitting = true;
+    });
+
+    // On macOS, clicking the Dock icon should bring the launcher back, whether it is hidden to the tray or just closed
+    // to the background. This is also the recovery route if the tray icon failed to render.
+    app.on('activate', () => {
+      this.focusOrRestore();
     });
     this.store.onDidAnyChange((data) => {
       this.sendToWindow('store:changed', data);
@@ -129,31 +147,31 @@ export class MainProcessManager {
     window.once('ready-to-show', () => {
       this.updateStatus({ type: 'idle' });
       window.show();
-      checkForUpdates(window);
+      // If auto-hide fires during a slow update download, make sure the launcher is visible again before showing the
+      // blocking "restart to install" prompt - otherwise it would attach to a hidden window.
+      checkForUpdates(window, this.focusOrRestore);
     });
 
-    // If the user closes the launcher window while Invoke is still running, confirm first. Closing the launcher hides
-    // access to the logs and controls, which is easy to do by accident.
+    // If the user closes the launcher window while work is in progress, confirm first - and tell them what will
+    // actually happen, which depends on whether closing the launcher would take Invoke/the install down with it.
     window.on('close', (event) => {
       if (this.isQuitting || this.isHiddenToTray) {
         return;
       }
-      const isInvokeActive =
-        this.invokeStatusType === 'running' ||
-        this.invokeStatusType === 'starting' ||
-        this.invokeStatusType === 'window-crashed';
-      if (!isInvokeActive) {
+
+      const detail = this.getCloseConfirmationDetail();
+      if (!detail) {
         return;
       }
+
       const choice = dialog.showMessageBoxSync(window, {
         type: 'question',
         buttons: ['Cancel', 'Close Launcher'],
         defaultId: 0,
         cancelId: 0,
         title: 'Close Launcher?',
-        message: 'Invoke is still running.',
-        detail:
-          'Closing the launcher hides access to the logs and controls. Invoke itself will keep running. Are you sure you want to close the launcher?',
+        message: 'Are you sure you want to close the launcher?',
+        detail,
       });
       if (choice === 0) {
         event.preventDefault();
@@ -222,25 +240,28 @@ export class MainProcessManager {
 
   /**
    * React to Invoke process status changes to drive the tray behavior.
-   * - When Invoke starts successfully, hide the launcher to the tray (if enabled and not in server mode).
-   * - When Invoke shuts down normally while hidden, quit the launcher entirely.
+   * - When Invoke first starts successfully, hide the launcher to the tray (if enabled). This applies in server mode
+   *   too - the tray is exactly the point there, since the launcher is the only window.
+   * - When Invoke shuts down normally while it was auto-hidden after startup, quit the launcher entirely.
    * - When Invoke errors or its window crashes while hidden, restore the launcher so the user can see what happened.
    */
   handleInvokeStatusChange = (status: WithTimestamp<InvokeProcessStatus>): void => {
+    const previousStatusType = this.invokeStatusType;
     this.invokeStatusType = status.type;
 
     switch (status.type) {
       case 'running': {
-        // Hide once Invoke is up. This applies in server mode too - the tray icon is exactly the point there, since the
-        // launcher is the only window and the user wants it out of the way while the server runs in the background.
-        if (this.store.get('hideLauncherAfterStartup')) {
-          this.hideToTray();
+        // Only auto-hide on a genuine first start (starting -> running). Reopening the window after a crash goes
+        // window-crashed -> running via reopenWindow(), and must not make the just-restored window vanish again.
+        if (previousStatusType === 'starting' && this.store.get('hideLauncherAfterStartup')) {
+          this.hideToTray({ auto: true });
         }
         break;
       }
       case 'exited': {
-        // Invoke shut down normally. If the launcher was hidden to the tray, the user is done - quit entirely.
-        if (this.isHiddenToTray) {
+        // A normal shutdown (user closed Invoke, or it exited cleanly). Only quit if we auto-hid after startup - a
+        // manual "minimize to tray" should keep the launcher available in the tray instead.
+        if (this.autoHiddenAfterStartup) {
           app.quit();
         }
         break;
@@ -259,15 +280,78 @@ export class MainProcessManager {
   };
 
   /**
-   * Hide the launcher window to the system tray, creating the tray icon if necessary.
+   * React to install process status changes. Installs never auto-hide the launcher, but the user may have manually
+   * minimized it - if an install finishes or fails while hidden, bring the launcher back so the result is visible.
    */
-  hideToTray = (): void => {
+  handleInstallStatusChange = (status: WithTimestamp<InstallProcessStatus>): void => {
+    this.installStatusType = status.type;
+
+    if (this.isHiddenToTray && (status.type === 'completed' || status.type === 'canceled' || status.type === 'error')) {
+      this.showFromTray();
+    }
+  };
+
+  /**
+   * Whether the Invoke process is currently alive (starting up, running, or running-but-window-crashed).
+   */
+  private isInvokeProcessActive = (): boolean => {
+    return (
+      this.invokeStatusType === 'starting' ||
+      this.invokeStatusType === 'running' ||
+      this.invokeStatusType === 'window-crashed'
+    );
+  };
+
+  /**
+   * Whether Invoke currently has its own window keeping the app alive. This is only the case in desktop mode once
+   * running - never during startup, never after the Invoke window crashed, and never in server mode.
+   */
+  private doesInvokeWindowExist = (): boolean => {
+    return this.invokeStatusType === 'running' && !this.store.get('serverMode');
+  };
+
+  /**
+   * Build the confirmation detail text shown when the user tries to close the launcher window, or `null` if no
+   * confirmation is needed. The message reflects what closing the launcher will actually do.
+   */
+  private getCloseConfirmationDetail = (): string | null => {
+    const isInstallActive = this.installStatusType === 'starting' || this.installStatusType === 'installing';
+    if (isInstallActive) {
+      return 'An installation is in progress. Closing the launcher will cancel it. Are you sure you want to continue?';
+    }
+
+    if (!this.isInvokeProcessActive()) {
+      return null;
+    }
+
+    if (this.doesInvokeWindowExist()) {
+      // The Invoke window keeps the process alive, so closing the launcher just loses the logs/controls.
+      return 'The Invoke window will stay open and Invoke will keep running, but you will lose access to the launcher and its logs. Close the launcher anyway?';
+    }
+
+    // The launcher is the only window (server mode, still starting, or the Invoke window crashed), so closing it will
+    // shut Invoke down.
+    return 'Closing the launcher will shut down Invoke. Are you sure you want to continue?';
+  };
+
+  /**
+   * Hide the launcher window to the system tray. If no system tray is available, fall back to a normal minimize so the
+   * window stays recoverable from the taskbar/Dock.
+   *
+   * @param options.auto Whether this hide was triggered automatically after startup (arms quit-on-normal-shutdown).
+   */
+  hideToTray = (options?: { auto?: boolean }): void => {
     if (!this.window || this.window.isDestroyed() || this.isHiddenToTray) {
       return;
     }
-    this.createTray();
+    if (!this.createTray()) {
+      // No usable tray - minimizing keeps the window reachable rather than hiding it into nothing.
+      this.window.minimize();
+      return;
+    }
     this.window.hide();
     this.isHiddenToTray = true;
+    this.autoHiddenAfterStartup = options?.auto ?? false;
   };
 
   /**
@@ -275,35 +359,79 @@ export class MainProcessManager {
    */
   showFromTray = (): void => {
     this.isHiddenToTray = false;
+    this.autoHiddenAfterStartup = false;
     this.destroyTray();
-    if (!this.window || this.window.isDestroyed()) {
+    const window = this.window;
+    if (!window || window.isDestroyed()) {
       return;
     }
-    this.window.show();
-    this.window.focus();
+    // show() alone does not clear a minimized state, so restore first if needed.
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    window.show();
+    window.focus();
   };
 
-  private createTray = (): void => {
-    if (this.tray) {
+  /**
+   * Bring the launcher window to the foreground from the tray, a minimized state, or the background. Used for the
+   * single-instance relaunch and the macOS Dock/activate handlers.
+   */
+  focusOrRestore = (): void => {
+    if (this.isHiddenToTray) {
+      this.showFromTray();
       return;
     }
-    const image = nativeImage.createFromPath(trayIconPath).resize({ width: 16, height: 16 });
-    const tray = new Tray(image.isEmpty() ? trayIconPath : image);
-    tray.setToolTip('Invoke Community Edition');
-    const contextMenu = Menu.buildFromTemplate([
-      { label: 'Show Launcher', click: this.showFromTray },
-      { type: 'separator' },
-      { label: 'Quit', click: () => app.quit() },
-    ]);
-    tray.setContextMenu(contextMenu);
-    // Restoring on click is the expected behavior on Windows/Linux; harmless on macOS where the menu opens on click.
-    tray.on('click', this.showFromTray);
-    tray.on('double-click', this.showFromTray);
-    this.tray = tray;
+    const window = this.window;
+    if (!window || window.isDestroyed()) {
+      return;
+    }
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    window.show();
+    window.focus();
+  };
+
+  /**
+   * Create the system tray icon. Returns whether a tray was successfully created (some platforms have no tray host and
+   * throw here). A tray that "succeeds" but renders nothing on the desktop is still recoverable via the single-instance
+   * lock and the macOS activate handler.
+   */
+  private createTray = (): boolean => {
+    if (this.tray) {
+      return true;
+    }
+    try {
+      // Hand Electron the full-resolution image and let it pick the representation for the current DPI, rather than
+      // baking in a single upscaled 16x16 bitmap.
+      const image = nativeImage.createFromPath(trayIconPath);
+      const tray = new Tray(image);
+      tray.setToolTip('Invoke Community Edition');
+      const contextMenu = Menu.buildFromTemplate([
+        { label: 'Show Launcher', click: () => setImmediate(this.showFromTray) },
+        { type: 'separator' },
+        { label: 'Quit', click: () => app.quit() },
+      ]);
+      tray.setContextMenu(contextMenu);
+      // On Windows/Linux a left click should restore the window. On macOS a click opens the context menu, so we don't
+      // bind it there and rely on the "Show Launcher" item and the Dock instead. Restoring is deferred out of the event
+      // callback so we don't destroy the tray from within its own handler.
+      if (process.platform !== 'darwin') {
+        tray.on('click', () => setImmediate(this.showFromTray));
+        tray.on('double-click', () => setImmediate(this.showFromTray));
+      }
+      this.tray = tray;
+      return true;
+    } catch (error) {
+      console.error('Failed to create system tray icon:', error);
+      return false;
+    }
   };
 
   private destroyTray = (): void => {
     if (this.tray) {
+      this.tray.closeContextMenu();
       this.tray.destroy();
       this.tray = null;
     }

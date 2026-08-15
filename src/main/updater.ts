@@ -10,7 +10,7 @@ autoUpdater.logger = console;
 autoUpdater.autoDownload = false;
 // autoUpdater.forceDevUpdateConfig = true;
 
-export const checkForUpdates = async (mainWindow: BrowserWindow) => {
+export const checkForUpdates = async (mainWindow: BrowserWindow, ensureVisible?: () => void) => {
   try {
     autoUpdater.allowPrerelease = store.get('optInToLauncherPrereleases');
     const updateCheckResult = await autoUpdater.checkForUpdates();
@@ -44,12 +44,18 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
     try {
       await autoUpdater.downloadUpdate();
     } catch {
+      // Make sure the launcher is visible - it may have been hidden to the tray while the download ran.
+      ensureVisible?.();
       dialog.showMessageBox(mainWindow, {
         type: 'error',
         title: 'Update Download Error',
         message: 'An error occurred while downloading the update. Please try again later.',
       });
     }
+
+    // The download can take a while, during which the launcher may have auto-hidden to the tray. Bring it back so this
+    // blocking prompt is actually visible and reachable before we quit to install.
+    ensureVisible?.();
 
     await dialog.showMessageBox(mainWindow, {
       type: 'info',

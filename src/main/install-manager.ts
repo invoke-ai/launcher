@@ -679,6 +679,7 @@ export class InstallManager {
 export const createInstallManager = (arg: {
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  onStatusChange?: (status: WithTimestamp<InstallProcessStatus>) => void;
 }) => {
   const { ipc, sendToWindow } = arg;
 
@@ -691,6 +692,7 @@ export const createInstallManager = (arg: {
     },
     onStatusChange: (status) => {
       sendToWindow('install-process:status', status);
+      arg.onStatusChange?.(status);
     },
   });
 

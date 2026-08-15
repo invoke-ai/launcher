@@ -80,6 +80,88 @@ jobs:
           echo "Downloaded signed artifacts:"
           ls -l dist
 
+      - name: Reconcile signed artifacts with latest.yml
+        # electron-updater downloads *exactly* the filenames latest.yml declares, resolved against
+        # the release's download path — so the payload names and the manifest have to agree byte
+        # for byte. They don't, by default: electron-builder writes manifest URLs with spaces
+        # normalized to '-' (and its own publisher uploads under that name), while artifacts that
+        # travel through GitHub's asset API — as OSSign's do — come back with spaces sanitized to
+        # '.'. v1.8.2 shipped that way: latest.yml pointed at Invoke-Community-Edition-Setup-1.8.2.exe
+        # while the attached asset was Invoke.Community.Edition.Setup.1.8.2.exe, so every Windows
+        # user's update 404'd. Rename the payloads to what the manifest declares ('-' survives
+        # GitHub's sanitizer untouched) and verify the digests, so a mismatch fails the build here
+        # instead of on users' machines.
+        if: steps.check.outputs.signed_artifacts != ''
+        working-directory: dist
+        run: |
+          set -euo pipefail
+
+          if [ ! -f latest.yml ]; then
+            echo "::warning::No latest.yml among the signed artifacts; skipping name reconciliation."
+            exit 0
+          fi
+
+          # Compare names ignoring the separator characters the two sanitizers disagree about.
+          norm() { printf '%s' "$1" | sed 's/%20/-/g; s/[ .]/-/g'; }
+
+          # Emit one "<url>\t<sha512>" line per files[] entry. The trailing top-level sha512 (which
+          # duplicates files[0]) can't clobber an entry: sha is only taken when still unset.
+          entries=$(awk '
+            /^[[:space:]]*-[[:space:]]*url:/ {
+              if (u != "") { print u "\t" s }
+              sub(/^[[:space:]]*-[[:space:]]*url:[[:space:]]*/, ""); u = $0; s = ""
+              next
+            }
+            /^[[:space:]]*sha512:/ && u != "" && s == "" {
+              sub(/^[[:space:]]*sha512:[[:space:]]*/, ""); s = $0
+            }
+            END { if (u != "") { print u "\t" s } }
+          ' latest.yml)
+
+          if [ -z "${entries}" ]; then
+            echo "::error::latest.yml declares no files[] entries; cannot verify what the updater will fetch."
+            exit 1
+          fi
+
+          while IFS=$'\t' read -r want sha; do
+            [ -n "${want}" ] || continue
+
+            if [ ! -f "${want}" ]; then
+              key=$(norm "${want}")
+              found=""
+              for f in *; do
+                [ -f "${f}" ] || continue
+                [ "$(norm "${f}")" = "${key}" ] || continue
+                found="${f}"
+                break
+              done
+              if [ -z "${found}" ]; then
+                echo "::error::latest.yml declares '${want}' but no downloaded artifact matches it, even ignoring '.'/' ' separators. Refusing to attach a release the updater cannot download."
+                exit 1
+              fi
+              echo "Renaming '${found}' -> '${want}' to match latest.yml"
+              mv -- "${found}" "${want}"
+              # electron-updater derives the differential-download blockmap URL by appending
+              # .blockmap to the declared filename, so it has to follow the installer's new name.
+              if [ -f "${found}.blockmap" ]; then
+                mv -- "${found}.blockmap" "${want}.blockmap"
+              fi
+            fi
+
+            if [ -n "${sha}" ]; then
+              actual=$(openssl dgst -sha512 -binary "${want}" | base64 -w0)
+              if [ "${actual}" != "${sha}" ]; then
+                echo "::error::'${want}' does not match the sha512 in latest.yml (expected ${sha}, got ${actual}). electron-updater would reject this download. Refusing to attach."
+                exit 1
+              fi
+            fi
+
+            echo "Verified: ${want}"
+          done <<< "${entries}"
+
+          echo "Artifacts after reconciliation:"
+          ls -l
+
       - name: Upload workflow artifact
         if: steps.check.outputs.signed_artifacts != ''
         uses: actions/upload-artifact@v4

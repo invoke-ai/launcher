@@ -194,14 +194,24 @@ export class InvokeManager {
               this.log.info(c.green.bold('Invoke shut down normally\r\n'));
               return;
             }
-            if (exitCode === 0) {
+            // NOTE ON node-pty EXIT SEMANTICS: node-pty reports a signal-terminated child as `{ exitCode: 0, signal: N }`
+            // and a clean exit as `{ exitCode: N, signal: 0 }` (on Windows `signal` is `undefined`). So we must test
+            // `signal` truthily *and first* - otherwise `exitCode === 0` swallows every signal kill, and the sentinel
+            // `signal: 0` on a normal non-zero exit gets misreported as "terminated with signal 0".
+            if (signal) {
+              // The process was killed by a signal we didn't ask for (the intentional-shutdown case is caught by the
+              // `exiting` branch above). This is an abnormal termination - e.g. the OOM killer or a segfault during
+              // model load - so surface it as an error, not a clean exit, so the launcher is restored instead of
+              // quitting and the logs stay available.
+              this.updateStatus({
+                type: 'error',
+                error: { message: `Process was terminated with signal ${signal}` },
+              });
+              this.log.info(c.red(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
+            } else if (exitCode === 0) {
               // Process exited on its own with no error
               this.updateStatus({ type: 'exited' });
               this.log.info(c.green.bold('Invoke process exited normally\r\n'));
-            } else if (signal !== undefined && signal !== null) {
-              // Process was killed via signal
-              this.updateStatus({ type: 'exited' });
-              this.log.info(c.yellow(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
             } else if (exitCode !== null) {
               // Process exited on its own, with a non-zero code, indicating an error
               this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
@@ -385,6 +395,7 @@ export class InvokeManager {
       this.log.error(c.red('Cannot restart window - no running data available\r\n'));
       return;
     }
+    const runningData = this.lastRunningData;
 
     if (!this.commandRunner.isRunning()) {
       this.log.error(c.red('Cannot restart window - process is not running\r\n'));
@@ -400,8 +411,13 @@ export class InvokeManager {
         return;
       }
 
-      this.createWindow(this.lastRunningData.loopbackUrl);
-      this.updateStatus({ type: 'running', data: this.lastRunningData });
+      if (!this.commandRunner.isRunning() || this.lastRunningData !== runningData) {
+        this.log.warn('Cannot complete window restart - Invoke process state changed\r\n');
+        return;
+      }
+
+      this.createWindow(runningData.loopbackUrl);
+      this.updateStatus({ type: 'running', data: runningData });
     } finally {
       this.isRestartingWindow = false;
     }
@@ -455,6 +471,13 @@ export class InvokeManager {
     const closed = await new Promise<boolean>((resolve) => {
       const timeout = setTimeout(() => {
         window.off('closed', handleClosed);
+
+        if (window.isDestroyed()) {
+          this.log.warn('Closed event timed out, but the Invoke UI window was destroyed\r\n');
+          resolve(true);
+          return;
+        }
+
         this.log.error(c.red('Timed out while restarting Invoke UI window\r\n'));
         resolve(false);
       }, 5000);
@@ -492,6 +515,23 @@ export class InvokeManager {
   };
 
   /**
+   * Whether the underlying Invoke process is currently running. This is independent of the UI window - e.g. after a
+   * window crash the process is still alive.
+   */
+  isProcessRunning = (): boolean => {
+    return this.commandRunner.isRunning();
+  };
+
+  /**
+   * Whether Invoke currently has its own live UI window. This is the source of truth for "does closing the launcher
+   * take Invoke down with it" - it is false during startup, in server mode (no window is ever created), and after the
+   * window has crashed, and only true once a real desktop-mode window exists.
+   */
+  hasWindow = (): boolean => {
+    return this.window !== null && !this.window.isDestroyed();
+  };
+
+  /**
    * Kill the Invoke process and wait for it to exit
    */
   killProcess = async (): Promise<void> => {
@@ -512,6 +552,7 @@ export const createInvokeManager = (arg: {
   store: Store<StoreData>;
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  onStatusChange?: (status: WithTimestamp<InvokeProcessStatus>) => void;
 }) => {
   const { store, ipc, sendToWindow } = arg;
   const invokeManager = new InvokeManager({
@@ -521,6 +562,7 @@ export const createInvokeManager = (arg: {
     },
     onStatusChange: (status) => {
       sendToWindow('invoke-process:status', status);
+      arg.onStatusChange?.(status);
     },
     sendClearLogs: () => {
       sendToWindow('invoke-process:clear-logs');
@@ -547,8 +589,10 @@ export const createInvokeManager = (arg: {
   });
 
   const cleanupInvokeManager = async () => {
-    const status = invokeManager.getStatus();
-    if (status.type === 'running' || status.type === 'starting') {
+    // Shut down Invoke whenever the process is still alive, regardless of status. Gating on specific statuses missed
+    // the `window-crashed` case (process alive, UI window gone), which would orphan the Python process, leave uvicorn
+    // bound to its port, and strand VRAM after the launcher quit.
+    if (invokeManager.isProcessRunning()) {
       await invokeManager.exitInvoke();
     }
     ipcMain.removeHandler('invoke-process:start-invoke');

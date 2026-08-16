@@ -178,10 +178,11 @@ function readPeLayout(file) {
  * Read a PE's embedded PKCS#7 signature blob.
  *
  * @param {string} filePath
+ * @param {Buffer} [contents] the already-read file, to avoid reading it a second time
  * @returns {{ signed: false } | { signed: true, certificate: Buffer }}
  */
-function readEmbeddedCertificate(filePath) {
-  const file = fs.readFileSync(filePath);
+function readEmbeddedCertificate(filePath, contents) {
+  const file = contents ?? fs.readFileSync(filePath);
   const layout = readPeLayout(file);
 
   if (layout.certificateTableSize === 0 || layout.certificateTableOffset === 0) {
@@ -216,13 +217,20 @@ function readEmbeddedCertificate(filePath) {
 /**
  * Describe the signature a PE already carries.
  *
- * `intact` means the file holds a signature whose digest still covers its current contents — the
- * condition under which we must not sign over it. `broken` means there is a certificate table but
- * it does not describe this file, which Windows treats as unsigned, so signing it ourselves is an
- * improvement rather than a loss.
+ * Three outcomes, because "this signature does not cover the file" and "I could not understand this
+ * signature" call for opposite handling and must not share a state:
+ *
+ * - `intact` — the digest still covers the file's contents. We must not sign over it.
+ * - `broken` — there is a certificate table, but it does not describe this file. Windows treats
+ *   that as unsigned, so replacing it loses nothing.
+ * - `unreadable` — a well-formed certificate table holding a PKCS#7 blob this parser could not
+ *   make sense of. It may be perfectly valid and merely beyond us, so the safe move is to leave the
+ *   file alone and make CI complain rather than silently replace a working signature. Note how
+ *   narrow this is: a malformed certificate table is `broken`, not `unreadable`, because Windows
+ *   would not honour it either.
  *
  * @param {string} filePath
- * @returns {{ state: 'unsigned' } | { state: 'intact', certificate: Buffer } | { state: 'broken', reason: string }}
+ * @returns {{ state: 'unsigned' } | { state: 'intact', certificate: Buffer } | { state: 'broken' | 'unreadable', reason: string }}
  */
 function inspectSignature(filePath) {
   let file;
@@ -231,9 +239,13 @@ function inspectSignature(filePath) {
   try {
     file = fs.readFileSync(filePath);
     layout = readPeLayout(file);
-    embedded = readEmbeddedCertificate(filePath);
+    embedded = readEmbeddedCertificate(filePath, file);
   } catch (error) {
-    return { state: 'broken', reason: `its certificate table could not be read (${error.message})` };
+    // Deliberately `broken`, not `unreadable`. Everything reachable here — a malformed PE, or a
+    // WIN_CERTIFICATE whose type/revision/length readEmbeddedCertificate rejects — is something
+    // Windows itself treats as unsigned. There is no working signature to preserve, so signing over
+    // it is correct. Only a signature we merely failed to *parse* warrants deferring.
+    return { state: 'broken', reason: `its PE headers or certificate table could not be read (${error.message})` };
   }
   if (!embedded.signed) {
     return { state: 'unsigned' };
@@ -243,7 +255,10 @@ function inspectSignature(filePath) {
   try {
     signed = readSignedDigest(embedded.certificate);
   } catch (error) {
-    return { state: 'broken', reason: `its signature could not be parsed (${error.message})` };
+    // Not the same thing as a mismatch: this signature may be perfectly valid and simply beyond
+    // what this parser understands. Saying so lets the caller refuse to touch the file rather than
+    // replacing a signature it failed to read.
+    return { state: 'unreadable', reason: `its signature could not be parsed (${error.message})` };
   }
 
   const actual = computeAuthenticodeDigest(file, layout, signed.algorithm);
@@ -299,6 +314,9 @@ function computeAuthenticodeDigest(file, layout, algorithm) {
 function readSignedDigest(certificate) {
   const contentInfo = readDer(certificate, 0);
   const contentInfoFields = readDerSequence(contentInfo.content);
+  if (contentInfoFields.length < 2) {
+    throw new Error('PKCS#7 ContentInfo has no content');
+  }
   if (decodeOid(contentInfoFields[0].content) !== SIGNED_DATA_OID) {
     throw new Error('PKCS#7 blob is not signedData');
   }
@@ -306,7 +324,13 @@ function readSignedDigest(certificate) {
   const signedData = readDer(contentInfoFields[1].content, 0);
   const signedDataFields = readDerSequence(signedData.content);
   // version, digestAlgorithms, encapContentInfo, ...
+  if (signedDataFields.length < 3) {
+    throw new Error('signedData has no encapContentInfo');
+  }
   const encapContentInfoFields = readDerSequence(signedDataFields[2].content);
+  if (encapContentInfoFields.length < 2) {
+    throw new Error('encapContentInfo has no content');
+  }
   if (decodeOid(encapContentInfoFields[0].content) !== SPC_INDIRECT_DATA_OID) {
     throw new Error('signature does not carry Authenticode indirect data');
   }
@@ -318,8 +342,18 @@ function readSignedDigest(certificate) {
     spcIndirectData = readDer(spcIndirectData.content, 0);
   }
   const spcFields = readDerSequence(spcIndirectData.content);
+  if (spcFields.length < 2) {
+    throw new Error('SpcIndirectDataContent has no messageDigest');
+  }
   const digestInfoFields = readDerSequence(spcFields[1].content);
-  const algorithmOid = decodeOid(readDerSequence(digestInfoFields[0].content)[0].content);
+  if (digestInfoFields.length < 2) {
+    throw new Error('DigestInfo is missing its algorithm or digest');
+  }
+  const algorithmFields = readDerSequence(digestInfoFields[0].content);
+  if (algorithmFields.length < 1) {
+    throw new Error('DigestInfo has no algorithm identifier');
+  }
+  const algorithmOid = decodeOid(algorithmFields[0].content);
   const algorithm = DIGEST_ALGORITHM_OIDS[algorithmOid];
   if (!algorithm) {
     throw new Error(`unsupported digest algorithm ${algorithmOid}`);
@@ -345,7 +379,7 @@ function verifyExpectedSigner(filePath, expectedSigner) {
   if (signature.state === 'unsigned') {
     return 'it carries no embedded signature at all';
   }
-  if (signature.state === 'broken') {
+  if (signature.state === 'broken' || signature.state === 'unreadable') {
     return signature.reason;
   }
   if (!signature.certificate.includes(Buffer.from(expectedSigner, 'latin1'))) {

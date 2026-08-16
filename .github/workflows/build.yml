@@ -207,8 +207,9 @@ jobs:
       - name: Build
         # The hook appends to the record rather than truncating it, so that concurrent
         # electron-builder processes cannot wipe each other's entries. Freshness is this step's job.
+        # This job's default shell is PowerShell, where `rm -f` is an ambiguous alias for Remove-Item.
         run: |
-          rm -f "${{ github.workspace }}/dist/offered-for-signing.txt"
+          Remove-Item -Force -ErrorAction SilentlyContinue "${{ github.workspace }}/dist/offered-for-signing.txt"
           npm run package
         env:
           ENABLE_SIGNING: 'true'

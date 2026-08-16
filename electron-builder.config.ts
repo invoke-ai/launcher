@@ -3,9 +3,14 @@ import type { Configuration, WindowsConfiguration } from 'electron-builder';
 const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
   if (process.env.ENABLE_SIGNING) {
     return {
+      // electron-builder only offers `.exe` files to the signing hook unless we widen it here.
+      // node-pty ships a `winpty.dll` and several `.node` addons next to `winpty-agent.exe`, and
+      // they would otherwise never reach scripts/customSign.js. This only controls what is
+      // *offered*; customSign.js still decides what is actually signed.
+      signExts: ['.dll', '.node'],
       signtoolOptions: {
-        // Delegate signing to our own script. This script is called once for each executable. The script contains
-        // logic to skip signing for executables that are not meant to be signed, such as the bundled uv binary.
+        // Delegate signing to our own script. This script is called once for each binary. The
+        // script holds the allowlist of what we sign — see scripts/customSign.js.
         sign: './scripts/customSign.js',
         // We use a custom signing script to handle the signing process, so the selected algorithms are essentially
         // placeholders. We only want to sign the executable once, so we select a single algo.

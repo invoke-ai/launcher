@@ -44,11 +44,12 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
     try {
       await autoUpdater.downloadUpdate();
     } catch {
-      dialog.showMessageBox(mainWindow, {
+      await dialog.showMessageBox(mainWindow, {
         type: 'error',
         title: 'Update Download Error',
         message: 'An error occurred while downloading the update. Please try again later.',
       });
+      return;
     }
 
     await dialog.showMessageBox(mainWindow, {

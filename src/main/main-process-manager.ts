@@ -129,6 +129,12 @@ export class MainProcessManager {
   };
 
   createWindow = () => {
+    // Never build a window in a process that doesn't hold the single-instance lock. A non-primary instance is on its way
+    // to quitting, and the activate/second-instance paths can reach this before that bail-out completes.
+    if (!app.hasSingleInstanceLock()) {
+      return;
+    }
+
     const window = new BrowserWindow({
       minWidth: 800,
       minHeight: 600,
@@ -160,11 +166,10 @@ export class MainProcessManager {
     window.once('ready-to-show', () => {
       this.updateStatus({ type: 'idle' });
       window.show();
-      // Only check for updates once per app run, not every time the launcher window is (re)created. The updater shows
-      // its own top-level dialogs, so it does not depend on this window being visible.
+      // Only check for updates once per app run, not every time the launcher window is (re)created on a recovery path.
       if (!this.hasCheckedForUpdates) {
         this.hasCheckedForUpdates = true;
-        checkForUpdates();
+        checkForUpdates(window);
       }
     });
 
@@ -371,15 +376,18 @@ export class MainProcessManager {
       return;
     }
     if (this.createTray()) {
+      // True "hide to tray": the window leaves the taskbar and is only recoverable through our own code, so it is safe
+      // to track hidden/auto state and drive restore-on-crash and quit-on-normal-shutdown off it.
       this.window.hide();
+      this.isHiddenToTray = true;
+      this.autoHiddenAfterStartup = options?.auto ?? false;
     } else {
-      // No usable tray host - fall back to a normal minimize so the window stays reachable from the taskbar/Dock. We
-      // still track the hidden/auto state so the contract (restore-on-crash, quit-on-normal-shutdown) holds; only the
-      // presentation degrades from "hidden to tray" to "minimized".
+      // No usable tray host - degrade to a plain minimize. Crucially we do NOT set the hidden/auto flags: a minimized
+      // window is reachable from the taskbar/Dock and the user can restore it with no code of ours running, which would
+      // otherwise leave those flags stale-true forever (suppressing the close-confirmation and quitting a visible
+      // launcher). Minimizing without the flags keeps every gated behavior correct.
       this.window.minimize();
     }
-    this.isHiddenToTray = true;
-    this.autoHiddenAfterStartup = options?.auto ?? false;
   };
 
   /**
@@ -407,13 +415,15 @@ export class MainProcessManager {
    * single-instance relaunch and the macOS Dock/activate handlers would silently do nothing, leaving no route back.
    */
   focusOrRestore = (): void => {
-    if (this.isHiddenToTray) {
-      this.showFromTray();
-      return;
-    }
     const window = this.window;
+    // Check for a gone window FIRST. If the launcher was closed (desktop mode keeps Invoke's window alive), recreate it -
+    // this must win over the tray branch, since showFromTray() gives up on a null window and would leave no route back.
     if (!window || window.isDestroyed()) {
       this.createWindow();
+      return;
+    }
+    if (this.isHiddenToTray) {
+      this.showFromTray();
       return;
     }
     if (window.isMinimized()) {

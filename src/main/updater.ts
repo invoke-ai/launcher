@@ -1,3 +1,4 @@
+import type { BrowserWindow } from 'electron';
 import { dialog } from 'electron';
 import electronUpdater from 'electron-updater';
 
@@ -9,7 +10,7 @@ autoUpdater.logger = console;
 autoUpdater.autoDownload = false;
 // autoUpdater.forceDevUpdateConfig = true;
 
-export const checkForUpdates = async () => {
+export const checkForUpdates = async (mainWindow: BrowserWindow) => {
   try {
     autoUpdater.allowPrerelease = store.get('optInToLauncherPrereleases');
     const updateCheckResult = await autoUpdater.checkForUpdates();
@@ -29,10 +30,10 @@ export const checkForUpdates = async () => {
       'The update will be downloaded in the background. You will be notified when the download is complete and the update is ready to install.',
     ].join('\n');
 
-    // These dialogs are intentionally not parented to the launcher window. The launcher can be hidden to the tray (or
-    // minimized) at any point during the unbounded update check/download, and a window-modal dialog attached to a hidden
-    // window is unreachable - the user could never click "Restart and Install". Top-level dialogs are always visible.
-    const { response } = await dialog.showMessageBox({
+    // These dialogs are parented to the launcher window so they are modal to it while it is visible. If the launcher has
+    // been hidden to the tray by auto-hide, Electron degrades a dialog with a non-shown parent to an independent
+    // top-level window, so it stays reachable either way.
+    const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'question',
       title: 'Update Available',
       message,
@@ -46,7 +47,7 @@ export const checkForUpdates = async () => {
     try {
       await autoUpdater.downloadUpdate();
     } catch {
-      await dialog.showMessageBox({
+      await dialog.showMessageBox(mainWindow, {
         type: 'error',
         title: 'Update Download Error',
         message: 'An error occurred while downloading the update. Please try again later.',
@@ -54,7 +55,7 @@ export const checkForUpdates = async () => {
       return;
     }
 
-    await dialog.showMessageBox({
+    await dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update Downloaded',
       message: 'Update downloaded and ready to install.',

@@ -7,7 +7,7 @@ import path from 'path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 const { readOfferedPaths, isPortableExecutable, comparablePath } = require('./checkWindowsSigningCoverage.js') as {
-  readOfferedPaths: (recordPath: string) => Set<string>;
+  readOfferedPaths: (recordPath: string, platform?: string) => Set<string>;
   isPortableExecutable: (filePath: string) => boolean;
   comparablePath: (filePath: string, platform?: string) => string;
 };
@@ -125,6 +125,21 @@ describe('comparablePath', () => {
 });
 
 describe('readOfferedPaths', () => {
+  it('applies the win32 normalisation to every entry', () => {
+    // Regression: this was `.map(comparablePath)`, and map passes (element, index, array) — so the
+    // index landed in the platform parameter, the record side was never lowercased while the lookup
+    // side was, and every binary read as "never offered". CI caught it; no test could, because the
+    // win32 branch is inert on the Linux runner unless the platform is injected.
+    const recordPath = path.join(makeTempDir(), 'offered.txt');
+    const entries = ['Alpha.exe', 'Beta.exe', 'Gamma.exe'].map((name) => path.join(path.sep, 'Build', name));
+    fs.writeFileSync(recordPath, `${entries.join('\n')}\n`);
+
+    const offered = readOfferedPaths(recordPath, 'win32');
+    for (const entry of entries) {
+      expect(offered.has(comparablePath(entry.toLowerCase(), 'win32'))).toBe(true);
+    }
+  });
+
   it('fails when the record is missing', () => {
     expect(() => readOfferedPaths(path.join(makeTempDir(), 'absent.txt'))).toThrow(/no dry-run record/);
   });

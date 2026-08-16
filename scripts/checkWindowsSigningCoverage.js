@@ -133,9 +133,10 @@ function comparablePath(filePath, platform = process.platform) {
  * The set of paths customSign.js recorded, normalised for comparison.
  *
  * @param {string} recordPath
+ * @param {string} [platform] overridable so the win32 normalisation is testable off Windows
  * @returns {Set<string>}
  */
-function readOfferedPaths(recordPath) {
+function readOfferedPaths(recordPath, platform = process.platform) {
   if (!fs.existsSync(recordPath)) {
     throw new Error(
       `no dry-run record at ${recordPath}. The build must run with ENABLE_SIGNING=true and ` +
@@ -148,7 +149,9 @@ function readOfferedPaths(recordPath) {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map(comparablePath);
+    // Not `.map(comparablePath)` — map passes (element, index, array), so the index would land in
+    // the platform parameter and silently disable the win32 normalisation on this side only.
+    .map((line) => comparablePath(line, platform));
 
   if (offered.length === 0) {
     throw new Error(`the dry-run record at ${recordPath} is empty — the signing hook was never called.`);

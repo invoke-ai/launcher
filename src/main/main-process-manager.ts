@@ -129,9 +129,10 @@ export class MainProcessManager {
   };
 
   createWindow = () => {
-    // Never build a window in a process that doesn't hold the single-instance lock. A non-primary instance is on its way
-    // to quitting, and the activate/second-instance paths can reach this before that bail-out completes.
-    if (!app.hasSingleInstanceLock()) {
+    // Don't build a window we shouldn't. A non-primary instance (no single-instance lock) is on its way out; and the
+    // primary can still reach this via activate/second-instance during its own async shutdown. `hasSingleInstanceLock()`
+    // is not a "not quitting" test (the lock is held until exit), so we check `isQuitting` explicitly too.
+    if (!app.hasSingleInstanceLock() || this.isQuitting) {
       return;
     }
 
@@ -419,6 +420,11 @@ export class MainProcessManager {
     // Check for a gone window FIRST. If the launcher was closed (desktop mode keeps Invoke's window alive), recreate it -
     // this must win over the tray branch, since showFromTray() gives up on a null window and would leave no route back.
     if (!window || window.isDestroyed()) {
+      // Reset hide state defensively so the fresh window can't inherit stale hidden/auto flags, which would re-suppress
+      // the close-confirmation and re-arm quit-on-shutdown.
+      this.isHiddenToTray = false;
+      this.autoHiddenAfterStartup = false;
+      this.destroyTray();
       this.createWindow();
       return;
     }

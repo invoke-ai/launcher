@@ -55,6 +55,9 @@ export type StoreData = {
   /**
    * When enabled, the launcher window is hidden to the system tray once Invoke has started successfully. It is restored
    * again if Invoke errors or its window crashes, and the launcher quits entirely when Invoke shuts down normally.
+   *
+   * These automatic behaviors require a working system tray. On hosts where no tray is available, the launcher is
+   * minimized instead and the auto-restore/auto-quit behaviors are skipped.
    */
   hideLauncherAfterStartup: boolean;
 };

@@ -18,7 +18,8 @@ export const SettingsModalHideLauncherAfterStartup = memo(() => {
       </Flex>
       <FormHelperText>
         Once Invoke has started, hide the launcher to the system tray. Click the tray icon to bring it back to view the
-        logs. The launcher reappears if Invoke crashes and closes when Invoke shuts down normally.
+        logs. The launcher reappears if Invoke crashes and closes when Invoke shuts down normally. On systems without a
+        system tray, the launcher is minimized instead and these automatic behaviors are skipped.
       </FormHelperText>
     </FormControl>
   );

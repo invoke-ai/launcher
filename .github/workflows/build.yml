@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - 'main'
+    # Also on release tags. This workflow does not produce the release artifacts — build-and-sign.yml
+    # dispatches those to OSSign — but it is the only place the Windows signing coverage check runs,
+    # and a coverage regression matters most at exactly the moment a release is cut. It runs in
+    # parallel with OSSign's multi-hour reviewer wait, so it delays nothing.
+    tags:
+      - 'v*'
   release:
     types: [released]
   pull_request:
@@ -193,8 +199,27 @@ jobs:
         if: steps.cache-uv.outputs.cache-hit != 'true'
         run: npm run download win
 
+      # ENABLE_SIGNING wires up scripts/customSign.js and signExts exactly as the release build
+      # does, while SIGNING_DRY_RUN makes the hook record what it was offered instead of signing.
+      # The artifacts are therefore byte-identical to a plain unsigned build, but we come out with
+      # proof of which binaries electron-builder actually handed to the signer — which is the only
+      # way to catch a binary that ships unsigned because it was never offered at all.
       - name: Build
-        run: npm run package
+        # The hook appends to the record rather than truncating it, so that concurrent
+        # electron-builder processes cannot wipe each other's entries. Freshness is this step's job.
+        # This job's default shell is PowerShell, where `rm -f` is an ambiguous alias for Remove-Item.
+        run: |
+          Remove-Item -Force -ErrorAction SilentlyContinue "${{ github.workspace }}/dist/offered-for-signing.txt"
+          npm run package
+        env:
+          ENABLE_SIGNING: 'true'
+          SIGNING_DRY_RUN: ${{ github.workspace }}/dist/offered-for-signing.txt
+
+      # Real signing happens on OSSign's runner where we never see the logs, so a gap there is
+      # invisible until a user with Smart App Control hits it. That is how #148 shipped an unsigned
+      # winpty-agent.exe.
+      - name: Verify Windows signing coverage
+        run: node scripts/checkWindowsSigningCoverage.js dist/win-unpacked "${{ github.workspace }}/dist/offered-for-signing.txt"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

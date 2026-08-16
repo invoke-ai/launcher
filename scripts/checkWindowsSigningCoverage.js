@@ -4,7 +4,18 @@ const fs = require('fs');
 const path = require('path');
 
 const { classifyBinary, exemptionFor } = require('./customSign.js');
-const { verifyExpectedSigner } = require('./authenticode.js');
+const { verifyExpectedSigner, inspectSignature } = require('./authenticode.js');
+
+/**
+ * Why authenticode.js could not read a file, for the failure message.
+ *
+ * @param {string} filePath
+ * @returns {string}
+ */
+function problemFor(filePath) {
+  const signature = inspectSignature(filePath);
+  return 'reason' in signature ? signature.reason : 'no further detail available';
+}
 
 /**
  * Verifies that every Windows binary we ship will actually get signed.
@@ -97,6 +108,28 @@ function walk(dir, seen = new Set()) {
 }
 
 /**
+ * Normalise a path for comparison between the two sides.
+ *
+ * The record is written from the paths electron-builder constructs; the walk builds its own from the
+ * CLI argument. Both start from the same working directory today, so this is belt-and-braces rather
+ * than a fix for an observed failure — but Windows filesystems are case-insensitive, so two spellings
+ * of the same file are the same file, and a case-sensitive compare would report *every* binary as
+ * never offered while pointing the reader at signExts and electron-builder's walk roots, neither of
+ * which would be the problem.
+ *
+ * It does not normalise junctions, 8.3 short names or `\\?\` prefixes; nothing in the current build
+ * produces those on either side.
+ *
+ * @param {string} filePath
+ * @param {string} [platform] overridable so both branches are testable off Windows
+ * @returns {string}
+ */
+function comparablePath(filePath, platform = process.platform) {
+  const resolved = path.resolve(filePath);
+  return platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+/**
  * The set of paths customSign.js recorded, normalised for comparison.
  *
  * @param {string} recordPath
@@ -115,7 +148,7 @@ function readOfferedPaths(recordPath) {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => path.resolve(line));
+    .map(comparablePath);
 
   if (offered.length === 0) {
     throw new Error(`the dry-run record at ${recordPath} is empty — the signing hook was never called.`);
@@ -149,7 +182,7 @@ function main() {
   }
 
   /** @type {Record<string, string[]>} */
-  const byClass = { sign: [], 'skip-already-signed': [] };
+  const byClass = { sign: [], 'skip-already-signed': [], 'skip-unreadable-signature': [] };
   const failures = [];
 
   for (const binary of binaries) {
@@ -158,13 +191,25 @@ function main() {
     byClass[classification].push(relativePath);
 
     if (classification === 'sign') {
-      if (!offered.has(path.resolve(binary))) {
+      if (!offered.has(comparablePath(binary))) {
         failures.push(
           `${relativePath}: we intend to sign this, but electron-builder never offered it to the ` +
             'signing hook, so it would ship unsigned. Its extension likely needs adding to signExts in ' +
             'electron-builder.config.ts, or it sits outside the directories electron-builder walks.'
         );
       }
+      continue;
+    }
+
+    if (classification === 'skip-unreadable-signature') {
+      // customSign.js declined to touch this rather than risk destroying a signature it could not
+      // read. Either way it does not get our signature, so somebody has to look at it.
+      failures.push(
+        `${relativePath}: it carries a signature scripts/authenticode.js could not parse, so ` +
+          'customSign.js left it alone rather than risk overwriting a working signature — meaning ' +
+          'nothing verified it and nothing signed it. Confirm whether the signature is genuine and ' +
+          `declare it in EXEMPTIONS, or teach authenticode.js to read it. ${problemFor(binary)}`
+      );
       continue;
     }
 
@@ -214,4 +259,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { readOfferedPaths, isPortableExecutable, walk };
+module.exports = { readOfferedPaths, isPortableExecutable, walk, comparablePath };

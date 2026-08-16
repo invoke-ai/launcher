@@ -97,6 +97,12 @@ binaries we know about — currently Microsoft's ConPTY pair from node-pty and t
 A binary whose certificate no longer matches its contents is signed by us, declared or not: Windows
 treats it as unsigned anyway, so replacing it loses nothing.
 
+"Its signature does not cover this file" and "I could not parse this signature" are kept apart,
+because they call for opposite handling. The second may describe a perfectly valid signature that is
+simply beyond our parser, so we neither replace it nor claim to have verified it — the file is left
+untouched and the coverage check fails, which puts a person in the loop rather than silently
+destroying a working signature.
+
 `electron-builder.config.ts` sets `signExts: ['.dll', '.node']`, because electron-builder only offers
 `.exe` files to the hook by default (`shouldSignFile` in app-builder-lib).
 
@@ -118,12 +124,22 @@ artifacts stay byte-identical to a plain unsigned build.
 PEs are found by reading file headers, not by extension — Smart App Control gates contents, not
 names, so a `.pyd` or extensionless binary counts just as much.
 
+A dry run signs nothing, so `customSign.js` refuses to start when `SIGNING_DRY_RUN` and
+`OSSIGN_CONFIG`/`OSSIGN_CONFIG_BASE64` are both set — honouring the dry run there would ship an
+entire release unsigned with no error and no CI signal. Worth knowing because `npm run package`
+loads `.env` into the environment, so the variable has a way of arriving unintended.
+
 **Pre-signed binaries.** Each one must be declared in `EXEMPTIONS`, and the declaration is verified:
 `authenticode.js` recomputes the file's Authenticode digest and requires it to match the digest the
 signature commits to, then requires the certificate to name the expected signer. What it does _not_
 do is validate the trust chain or the RSA signature itself — the threat being guarded is dependency
 drift, not an adversary, and anyone able to plant a forged blob in `node_modules` could equally edit
 the exemption list.
+
+The check runs on pushes to `main`, on pull requests, and on `v*` tags — the last so that a coverage
+regression is caught when a release is cut, not only when the PR landed. It cannot run inside the
+release build itself: `build-and-sign.yml` hands the Windows build to OSSign's infrastructure and
+never builds Windows here.
 
 Two scope limits worth knowing. The walk covers `dist/win-unpacked`, the tree that gets installed;
 the NSIS installer lives in `dist/` and the uninstaller is deleted right after signing, so neither is

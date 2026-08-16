@@ -34,7 +34,7 @@ const signedFilePaths = new Set();
  * scripts/checkWindowsSigningCoverage.js fails if a binary shows up pre-signed without one.
  */
 
-/** @typedef {'sign' | 'skip-already-signed'} BinaryClass */
+/** @typedef {'sign' | 'skip-already-signed' | 'skip-unreadable-signature'} BinaryClass */
 
 /**
  * Binaries we expect to arrive already signed, and by whom.
@@ -87,7 +87,16 @@ function exemptionFor(filePath) {
  * @returns {BinaryClass}
  */
 function classifyBinary(filePath) {
-  return inspectSignature(filePath).state === 'intact' ? 'skip-already-signed' : 'sign';
+  switch (inspectSignature(filePath).state) {
+    case 'intact':
+      return 'skip-already-signed';
+    case 'unreadable':
+      // Not "bad signature" — "signature we could not read". Replacing it might destroy a working
+      // one, so we leave it and let CI complain instead.
+      return 'skip-unreadable-signature';
+    default:
+      return 'sign';
+  }
 }
 
 /**
@@ -114,20 +123,48 @@ function sign(configuration) {
   }
 
   const dryRunRecord = process.env.SIGNING_DRY_RUN;
+  // Definedness, not truthiness: @ossign/ossign gates on `!== undefined`, and the CLI honours a
+  // defined-but-empty OSSIGN_CONFIG. Using truthiness here would let `OSSIGN_CONFIG=""` slip past
+  // the guard below and produce exactly the silent unsigned build it exists to prevent.
+  const hasSigningConfig = process.env.OSSIGN_CONFIG !== undefined || process.env.OSSIGN_CONFIG_BASE64 !== undefined;
+
+  // A dry run signs nothing. If a signing config is also present then somebody meant to produce a
+  // real, signed build, and honouring the dry run would ship every binary unsigned with no error,
+  // no failing exit code and no CI signal — strictly worse than #148, which was one file. Note that
+  // `npm run package` loads .env into the environment, so this variable has a way of arriving
+  // without anyone intending it. Refuse the contradiction rather than guessing which one wins.
+  if (dryRunRecord && hasSigningConfig) {
+    throw new Error(
+      'SIGNING_DRY_RUN is set together with OSSIGN_CONFIG/OSSIGN_CONFIG_BASE64. A dry run does not ' +
+        'sign anything, so continuing would silently produce an unsigned build. Unset SIGNING_DRY_RUN ' +
+        'to sign for real, or unset the signing config to record what would be signed.'
+    );
+  }
+
   if (dryRunRecord) {
+    // Append only. Truncating here would look tidier, but several electron-builder processes can
+    // share one record, and whichever started last would wipe the others' entries — turning a
+    // stale record (which can only ever mask a regression) into a spurious "never offered"
+    // failure. Starting from a clean record is the caller's job; build.yml deletes it first.
     fs.mkdirSync(path.dirname(dryRunRecord), { recursive: true });
     fs.appendFileSync(dryRunRecord, `${filePath}\n`);
     console.log(`[dry run] offered for signing: ${filePath}`);
     return;
   }
 
-  // Never sign over an intact third-party signature — see the note above EXEMPTIONS. A signature
-  // that does not match the file is not one Windows would honour, so those we do replace.
+  // Never sign over an intact third-party signature — see the note above EXEMPTIONS.
   const signature = inspectSignature(filePath);
   if (signature.state === 'intact') {
     const exemption = exemptionFor(filePath);
     const provenance = exemption ? exemption.reason : 'UNDECLARED — add it to EXEMPTIONS';
     console.log(`Skipping ${filePath} — already signed (${provenance})`);
+    return;
+  }
+  if (signature.state === 'unreadable') {
+    // We could not read this signature, which is not the same as knowing it is bad — it may be
+    // valid and merely beyond our parser. Replacing it would destroy a working signature, so leave
+    // it alone; checkWindowsSigningCoverage.js fails the build so somebody looks.
+    console.log(`Skipping ${filePath} — not signed, because ${signature.reason}`);
     return;
   }
   if (signature.state === 'broken') {

@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - 'main'
+    # Also on release tags. This workflow does not produce the release artifacts — build-and-sign.yml
+    # dispatches those to OSSign — but it is the only place the Windows signing coverage check runs,
+    # and a coverage regression matters most at exactly the moment a release is cut. It runs in
+    # parallel with OSSign's multi-hour reviewer wait, so it delays nothing.
+    tags:
+      - 'v*'
   release:
     types: [released]
   pull_request:
@@ -199,7 +205,11 @@ jobs:
       # proof of which binaries electron-builder actually handed to the signer — which is the only
       # way to catch a binary that ships unsigned because it was never offered at all.
       - name: Build
-        run: npm run package
+        # The hook appends to the record rather than truncating it, so that concurrent
+        # electron-builder processes cannot wipe each other's entries. Freshness is this step's job.
+        run: |
+          rm -f "${{ github.workspace }}/dist/offered-for-signing.txt"
+          npm run package
         env:
           ENABLE_SIGNING: 'true'
           SIGNING_DRY_RUN: ${{ github.workspace }}/dist/offered-for-signing.txt

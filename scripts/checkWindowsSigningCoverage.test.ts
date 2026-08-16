@@ -6,9 +6,10 @@ import os from 'os';
 import path from 'path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-const { readOfferedPaths, isPortableExecutable } = require('./checkWindowsSigningCoverage.js') as {
+const { readOfferedPaths, isPortableExecutable, comparablePath } = require('./checkWindowsSigningCoverage.js') as {
   readOfferedPaths: (recordPath: string) => Set<string>;
   isPortableExecutable: (filePath: string) => boolean;
+  comparablePath: (filePath: string, platform?: string) => string;
 };
 
 const SCRIPT = path.join(__dirname, 'checkWindowsSigningCoverage.js');
@@ -102,6 +103,27 @@ describe('isPortableExecutable', () => {
   });
 });
 
+describe('comparablePath', () => {
+  // The two sides of the reachability comparison are built independently, and Windows filesystems
+  // are case-insensitive, so two spellings of one path are one file.
+  const mixed = path.join(path.sep, 'Some', 'Path', 'App.exe');
+  const lower = path.join(path.sep, 'some', 'path', 'app.exe');
+
+  it('resolves relative paths so both sides are comparable', () => {
+    expect(comparablePath('dist/win-unpacked')).toBe(comparablePath(path.resolve('dist/win-unpacked')));
+  });
+
+  it('treats two spellings of one path as equal on Windows', () => {
+    // The platform is injectable so this branch is exercised on the Linux test runner too — the
+    // suite never runs on Windows, and an untested branch here fails the whole check closed.
+    expect(comparablePath(mixed, 'win32')).toBe(comparablePath(lower, 'win32'));
+  });
+
+  it('keeps them distinct off Windows, where case is significant', () => {
+    expect(comparablePath(mixed, 'linux')).not.toBe(comparablePath(lower, 'linux'));
+  });
+});
+
 describe('readOfferedPaths', () => {
   it('fails when the record is missing', () => {
     expect(() => readOfferedPaths(path.join(makeTempDir(), 'absent.txt'))).toThrow(/no dry-run record/);
@@ -144,6 +166,25 @@ describe('the coverage check', () => {
     const { root, recordPath } = makeTree({ 'surprise.dll': fs.readFileSync(SIGNED_PE) });
     const { code, output } = run(root, recordPath);
     expect(output).toMatch(/nothing.*declares that/s);
+    expect(code).toBe(1);
+  });
+
+  it('fails on a binary whose signature could not be parsed', () => {
+    // customSign.js declines to touch these rather than risk destroying a valid signature, so they
+    // end up with nobody's signature verified and nobody's applied. Somebody has to look.
+    const file = fs.readFileSync(SIGNED_PE);
+    const peOffset = file.readUInt32LE(0x3c);
+    const optionalHeaderOffset = peOffset + 24;
+    const isPe32Plus = file.readUInt16LE(optionalHeaderOffset) === 0x20b;
+    const tableOffset = file.readUInt32LE(optionalHeaderOffset + (isPe32Plus ? 112 : 96) + 4 * 8);
+    file.fill(0xff, tableOffset + 8, tableOffset + 64);
+
+    const { root, recordPath } = makeTree({ 'app.exe': unsignedPeBytes(), 'odd.dll': file });
+    const { code, output } = run(root, recordPath);
+    expect(output).toMatch(/could not parse/);
+    // The reason from authenticode.js must reach the message, not just the static prefix.
+    expect(output).toMatch(/signature could not be parsed/);
+    expect(output).toContain('odd.dll');
     expect(code).toBe(1);
   });
 

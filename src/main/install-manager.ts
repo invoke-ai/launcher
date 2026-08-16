@@ -697,7 +697,13 @@ export const createInstallManager = (arg: {
   });
 
   ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
-    installManager.startInstall(installationPath, gpuType, version, repair);
+    // startInstall has unguarded throws after it sets `starting`/`installing` (platform assert, env resolution). If one
+    // escapes, the status would pin at an active value forever, wrongly reporting "install in progress". Catch here and
+    // surface it as an error so the status is accurate.
+    installManager.startInstall(installationPath, gpuType, version, repair).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      installManager.updateStatus({ type: 'error', error: { message } });
+    });
   });
   ipc.handle('install-process:cancel-install', async () => {
     await installManager.cancelInstall();

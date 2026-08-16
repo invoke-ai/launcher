@@ -1,4 +1,3 @@
-import type { BrowserWindow } from 'electron';
 import { dialog } from 'electron';
 import electronUpdater from 'electron-updater';
 
@@ -10,7 +9,7 @@ autoUpdater.logger = console;
 autoUpdater.autoDownload = false;
 // autoUpdater.forceDevUpdateConfig = true;
 
-export const checkForUpdates = async (mainWindow: BrowserWindow, ensureVisible?: () => void) => {
+export const checkForUpdates = async () => {
   try {
     autoUpdater.allowPrerelease = store.get('optInToLauncherPrereleases');
     const updateCheckResult = await autoUpdater.checkForUpdates();
@@ -30,7 +29,10 @@ export const checkForUpdates = async (mainWindow: BrowserWindow, ensureVisible?:
       'The update will be downloaded in the background. You will be notified when the download is complete and the update is ready to install.',
     ].join('\n');
 
-    const { response } = await dialog.showMessageBox(mainWindow, {
+    // These dialogs are intentionally not parented to the launcher window. The launcher can be hidden to the tray (or
+    // minimized) at any point during the unbounded update check/download, and a window-modal dialog attached to a hidden
+    // window is unreachable - the user could never click "Restart and Install". Top-level dialogs are always visible.
+    const { response } = await dialog.showMessageBox({
       type: 'question',
       title: 'Update Available',
       message,
@@ -44,9 +46,7 @@ export const checkForUpdates = async (mainWindow: BrowserWindow, ensureVisible?:
     try {
       await autoUpdater.downloadUpdate();
     } catch {
-      // Make sure the launcher is visible - it may have been hidden to the tray while the download ran.
-      ensureVisible?.();
-      await dialog.showMessageBox(mainWindow, {
+      await dialog.showMessageBox({
         type: 'error',
         title: 'Update Download Error',
         message: 'An error occurred while downloading the update. Please try again later.',
@@ -54,11 +54,7 @@ export const checkForUpdates = async (mainWindow: BrowserWindow, ensureVisible?:
       return;
     }
 
-    // The download can take a while, during which the launcher may have auto-hidden to the tray. Bring it back so this
-    // blocking prompt is actually visible and reachable before we quit to install.
-    ensureVisible?.();
-
-    await dialog.showMessageBox(mainWindow, {
+    await dialog.showMessageBox({
       type: 'info',
       title: 'Update Downloaded',
       message: 'Update downloaded and ready to install.',

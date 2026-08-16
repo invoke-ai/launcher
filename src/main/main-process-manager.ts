@@ -42,6 +42,16 @@ export class MainProcessManager {
   private invokeStatusType: InvokeProcessStatus['type'] | null;
   /** The last known install process status type. Used to decide whether to confirm closing and to restore on finish. */
   private installStatusType: InstallProcessStatus['type'] | null;
+  /** Whether tray creation has already failed once (some platforms have no tray host). Avoids re-throwing every call. */
+  private trayCreationFailed: boolean;
+  /** Guards the one-time update check so recreating the launcher window does not re-prompt. */
+  private hasCheckedForUpdates: boolean;
+  /**
+   * Source of truth for whether Invoke currently has its own window. Injected from the Invoke manager (see
+   * {@link setInvokeWindowChecker}) so the close-confirmation reflects reality rather than re-reading `serverMode`,
+   * which the user can toggle mid-session.
+   */
+  private invokeHasWindow: () => boolean;
 
   ipc: IpcListener<IpcEvents>;
   emitter: IpcEmitter<IpcRendererEvents>;
@@ -59,6 +69,9 @@ export class MainProcessManager {
     this.isQuitting = false;
     this.invokeStatusType = null;
     this.installStatusType = null;
+    this.trayCreationFailed = false;
+    this.hasCheckedForUpdates = false;
+    this.invokeHasWindow = () => false;
 
     app.on('before-quit', () => {
       this.isQuitting = true;
@@ -147,9 +160,21 @@ export class MainProcessManager {
     window.once('ready-to-show', () => {
       this.updateStatus({ type: 'idle' });
       window.show();
-      // If auto-hide fires during a slow update download, make sure the launcher is visible again before showing the
-      // blocking "restart to install" prompt - otherwise it would attach to a hidden window.
-      checkForUpdates(window, this.focusOrRestore);
+      // Only check for updates once per app run, not every time the launcher window is (re)created. The updater shows
+      // its own top-level dialogs, so it does not depend on this window being visible.
+      if (!this.hasCheckedForUpdates) {
+        this.hasCheckedForUpdates = true;
+        checkForUpdates();
+      }
+    });
+
+    // Null out our reference when the window is actually destroyed, so recovery paths know to recreate it rather than
+    // poking a dead window. Without this, closing the launcher in desktop mode (Invoke keeps the app alive) would leave
+    // every restore route a no-op.
+    window.on('closed', () => {
+      if (this.window === window) {
+        this.window = null;
+      }
     });
 
     // If the user closes the launcher window while work is in progress, confirm first - and tell them what will
@@ -303,11 +328,12 @@ export class MainProcessManager {
   };
 
   /**
-   * Whether Invoke currently has its own window keeping the app alive. This is only the case in desktop mode once
-   * running - never during startup, never after the Invoke window crashed, and never in server mode.
+   * Inject the source of truth for whether Invoke currently has a live window. Wired from the Invoke manager so the
+   * close-confirmation reflects the real window state instead of re-deriving it from `serverMode` (which the user can
+   * toggle mid-session, making the dialog lie in both directions).
    */
-  private doesInvokeWindowExist = (): boolean => {
-    return this.invokeStatusType === 'running' && !this.store.get('serverMode');
+  setInvokeWindowChecker = (hasWindow: () => boolean): void => {
+    this.invokeHasWindow = hasWindow;
   };
 
   /**
@@ -324,7 +350,7 @@ export class MainProcessManager {
       return null;
     }
 
-    if (this.doesInvokeWindowExist()) {
+    if (this.invokeHasWindow()) {
       // The Invoke window keeps the process alive, so closing the launcher just loses the logs/controls.
       return 'The Invoke window will stay open and Invoke will keep running, but you will lose access to the launcher and its logs. Close the launcher anyway?';
     }
@@ -344,12 +370,14 @@ export class MainProcessManager {
     if (!this.window || this.window.isDestroyed() || this.isHiddenToTray) {
       return;
     }
-    if (!this.createTray()) {
-      // No usable tray - minimizing keeps the window reachable rather than hiding it into nothing.
+    if (this.createTray()) {
+      this.window.hide();
+    } else {
+      // No usable tray host - fall back to a normal minimize so the window stays reachable from the taskbar/Dock. We
+      // still track the hidden/auto state so the contract (restore-on-crash, quit-on-normal-shutdown) holds; only the
+      // presentation degrades from "hidden to tray" to "minimized".
       this.window.minimize();
-      return;
     }
-    this.window.hide();
     this.isHiddenToTray = true;
     this.autoHiddenAfterStartup = options?.auto ?? false;
   };
@@ -374,8 +402,9 @@ export class MainProcessManager {
   };
 
   /**
-   * Bring the launcher window to the foreground from the tray, a minimized state, or the background. Used for the
-   * single-instance relaunch and the macOS Dock/activate handlers.
+   * Bring the launcher window to the foreground from the tray, a minimized state, or the background. If the window was
+   * closed entirely (e.g. in desktop mode where the Invoke window keeps the app alive), recreate it - otherwise the
+   * single-instance relaunch and the macOS Dock/activate handlers would silently do nothing, leaving no route back.
    */
   focusOrRestore = (): void => {
     if (this.isHiddenToTray) {
@@ -384,6 +413,7 @@ export class MainProcessManager {
     }
     const window = this.window;
     if (!window || window.isDestroyed()) {
+      this.createWindow();
       return;
     }
     if (window.isMinimized()) {
@@ -402,21 +432,26 @@ export class MainProcessManager {
     if (this.tray) {
       return true;
     }
+    if (this.trayCreationFailed) {
+      // We already tried and the platform threw - don't reconstruct and re-throw on every hide.
+      return false;
+    }
     try {
-      // Hand Electron the full-resolution image and let it pick the representation for the current DPI, rather than
-      // baking in a single upscaled 16x16 bitmap.
+      // Hand Electron the full-resolution RGBA icon rather than a pre-scaled bitmap. There is only a single 1x
+      // representation, so this is about the alpha channel and letting Electron do the downscale, not multi-DPI.
       const image = nativeImage.createFromPath(trayIconPath);
       const tray = new Tray(image);
       tray.setToolTip('Invoke Community Edition');
+      // All restore paths are deferred out of the tray's own event/menu callbacks via setImmediate, so we never destroy
+      // the tray from inside one of its handlers.
       const contextMenu = Menu.buildFromTemplate([
         { label: 'Show Launcher', click: () => setImmediate(this.showFromTray) },
         { type: 'separator' },
-        { label: 'Quit', click: () => app.quit() },
+        { label: 'Quit', click: () => setImmediate(() => app.quit()) },
       ]);
       tray.setContextMenu(contextMenu);
       // On Windows/Linux a left click should restore the window. On macOS a click opens the context menu, so we don't
-      // bind it there and rely on the "Show Launcher" item and the Dock instead. Restoring is deferred out of the event
-      // callback so we don't destroy the tray from within its own handler.
+      // bind it there and rely on the "Show Launcher" item and the Dock instead.
       if (process.platform !== 'darwin') {
         tray.on('click', () => setImmediate(this.showFromTray));
         tray.on('double-click', () => setImmediate(this.showFromTray));
@@ -425,6 +460,7 @@ export class MainProcessManager {
       return true;
     } catch (error) {
       console.error('Failed to create system tray icon:', error);
+      this.trayCreationFailed = true;
       return false;
     }
   };

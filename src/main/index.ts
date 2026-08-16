@@ -67,6 +67,10 @@ const [invoke, cleanupInvoke] = createInvokeManager({
   onStatusChange: main.handleInvokeStatusChange,
 });
 
+// Give the close-confirmation the real Invoke window state (not a stale serverMode guess), so it tells the truth about
+// whether closing the launcher will shut Invoke down.
+main.setInvokeWindowChecker(invoke.hasWindow);
+
 main.ipc.handle('main-process:get-status', () => main.getStatus());
 main.ipc.handle('install-process:get-status', () => install.getStatus());
 main.ipc.handle('invoke-process:get-status', () => invoke.getStatus());

@@ -189,20 +189,24 @@ export class InvokeManager {
               this.log.info(c.green.bold('Invoke shut down normally\r\n'));
               return;
             }
-            if (exitCode === 0) {
-              // Process exited on its own with no error
-              this.updateStatus({ type: 'exited' });
-              this.log.info(c.green.bold('Invoke process exited normally\r\n'));
-            } else if (signal !== undefined && signal !== null) {
-              // Process was killed via signal without us asking for it (the intentional-shutdown case is handled by the
+            // NOTE ON node-pty EXIT SEMANTICS: node-pty reports a signal-terminated child as `{ exitCode: 0, signal: N }`
+            // and a clean exit as `{ exitCode: N, signal: 0 }` (on Windows `signal` is `undefined`). So we must test
+            // `signal` truthily *and first* - otherwise `exitCode === 0` swallows every signal kill, and the sentinel
+            // `signal: 0` on a normal non-zero exit gets misreported as "terminated with signal 0".
+            if (signal) {
+              // The process was killed by a signal we didn't ask for (the intentional-shutdown case is caught by the
               // `exiting` branch above). This is an abnormal termination - e.g. the OOM killer or a segfault during
-              // model load - so surface it as an error rather than a clean exit, so the launcher is restored instead
-              // of quitting and the logs stay available.
+              // model load - so surface it as an error, not a clean exit, so the launcher is restored instead of
+              // quitting and the logs stay available.
               this.updateStatus({
                 type: 'error',
                 error: { message: `Process was terminated with signal ${signal}` },
               });
               this.log.info(c.red(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
+            } else if (exitCode === 0) {
+              // Process exited on its own with no error
+              this.updateStatus({ type: 'exited' });
+              this.log.info(c.green.bold('Invoke process exited normally\r\n'));
             } else if (exitCode !== null) {
               // Process exited on its own, with a non-zero code, indicating an error
               this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
@@ -390,6 +394,15 @@ export class InvokeManager {
    */
   isProcessRunning = (): boolean => {
     return this.commandRunner.isRunning();
+  };
+
+  /**
+   * Whether Invoke currently has its own live UI window. This is the source of truth for "does closing the launcher
+   * take Invoke down with it" - it is false during startup, in server mode (no window is ever created), and after the
+   * window has crashed, and only true once a real desktop-mode window exists.
+   */
+  hasWindow = (): boolean => {
+    return this.window !== null && !this.window.isDestroyed();
   };
 
   /**

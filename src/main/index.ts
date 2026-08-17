@@ -35,6 +35,19 @@ app.commandLine.appendSwitch('disable-backing-store-limit');
 const main = new MainProcessManager({ store });
 let isShuttingDown = false;
 
+// Only allow a single instance. Without this, once the launcher is hidden to the tray (and especially if the tray icon
+// failed to render), relaunching from the desktop would start a second instance contending for the same electron-store
+// file and install directory while the first runs invisibly. Instead, a second launch focuses/restores the existing
+// window.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    main.focusOrRestore();
+  });
+}
+
 // Create ConsoleManager for terminal functionality
 const [, cleanupConsole] = createConsoleManager({
   ipc: main.ipc,
@@ -44,12 +57,20 @@ const [, cleanupConsole] = createConsoleManager({
 const [install, cleanupInstall] = createInstallManager({
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
+  // Restore the launcher if the user manually minimized it during an install that then finished or failed.
+  onStatusChange: main.handleInstallStatusChange,
 });
 const [invoke, cleanupInvoke] = createInvokeManager({
   store,
   ipc: main.ipc,
   sendToWindow: main.sendToWindow,
+  // Let the main process manager drive tray behavior (auto-hide/restore/quit) based on the Invoke status.
+  onStatusChange: main.handleInvokeStatusChange,
 });
+
+// Give the close-confirmation the real Invoke window state (not a stale serverMode guess), so it tells the truth about
+// whether closing the launcher will shut Invoke down.
+main.setInvokeWindowChecker(invoke.hasWindow);
 
 main.ipc.handle('main-process:get-status', () => main.getStatus());
 main.ipc.handle('install-process:get-status', () => install.getStatus());
@@ -81,9 +102,15 @@ async function cleanup() {
 
 /**
  * This method will be called when Electron has finished initialization and is ready to create browser windows.
- * Some APIs can only be used after this event occurs.
+ * Some APIs can only be used after this event occurs. A non-primary instance is on its way to quitting, so it must not
+ * create a window.
  */
-app.on('ready', main.createWindow);
+app.on('ready', () => {
+  if (!gotSingleInstanceLock) {
+    return;
+  }
+  main.createWindow();
+});
 
 /**
  * Quit when all windows are closed.

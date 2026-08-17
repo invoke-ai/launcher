@@ -37,6 +37,8 @@ export class InvokeManager {
   private commandRunner: CommandRunner;
   private cols: number | undefined;
   private rows: number | undefined;
+  private windowsClosingWithoutExiting: WeakSet<BrowserWindow>;
+  private isRestartingWindow: boolean;
 
   constructor(arg: {
     store: Store<StoreData>;
@@ -60,6 +62,8 @@ export class InvokeManager {
     this.commandRunner = new CommandRunner();
     this.cols = undefined;
     this.rows = undefined;
+    this.windowsClosingWithoutExiting = new WeakSet();
+    this.isRestartingWindow = false;
   }
 
   getStatus = (): WithTimestamp<InvokeProcessStatus> => {
@@ -81,6 +85,7 @@ export class InvokeManager {
   };
 
   startInvoke = async (location: string) => {
+    this.lastRunningData = null;
     this.updateStatus({ type: 'starting' });
 
     // Clear logs from previous session
@@ -147,7 +152,7 @@ export class InvokeManager {
         this.lastRunningData = data;
 
         // Only open the window if server mode is not enabled
-        if (!this.store.get('serverMode')) {
+        if (!this.store.get('serverMode') && (!this.window || this.window.isDestroyed())) {
           this.createWindow(data.loopbackUrl);
         }
 
@@ -189,14 +194,24 @@ export class InvokeManager {
               this.log.info(c.green.bold('Invoke shut down normally\r\n'));
               return;
             }
-            if (exitCode === 0) {
+            // NOTE ON node-pty EXIT SEMANTICS: node-pty reports a signal-terminated child as `{ exitCode: 0, signal: N }`
+            // and a clean exit as `{ exitCode: N, signal: 0 }` (on Windows `signal` is `undefined`). So we must test
+            // `signal` truthily *and first* - otherwise `exitCode === 0` swallows every signal kill, and the sentinel
+            // `signal: 0` on a normal non-zero exit gets misreported as "terminated with signal 0".
+            if (signal) {
+              // The process was killed by a signal we didn't ask for (the intentional-shutdown case is caught by the
+              // `exiting` branch above). This is an abnormal termination - e.g. the OOM killer or a segfault during
+              // model load - so surface it as an error, not a clean exit, so the launcher is restored instead of
+              // quitting and the logs stay available.
+              this.updateStatus({
+                type: 'error',
+                error: { message: `Process was terminated with signal ${signal}` },
+              });
+              this.log.info(c.red(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
+            } else if (exitCode === 0) {
               // Process exited on its own with no error
               this.updateStatus({ type: 'exited' });
               this.log.info(c.green.bold('Invoke process exited normally\r\n'));
-            } else if (signal !== undefined && signal !== null) {
-              // Process was killed via signal
-              this.updateStatus({ type: 'exited' });
-              this.log.info(c.yellow(`Invoke process was terminated with signal ${signal}, exit code ${exitCode}\r\n`));
             } else if (exitCode !== null) {
               // Process exited on its own, with a non-zero code, indicating an error
               this.updateStatus({ type: 'error', error: { message: `Process exited with code ${exitCode}` } });
@@ -207,6 +222,7 @@ export class InvokeManager {
               this.log.info(c.red('Invoke process was killed unexpectedly\r\n'));
             }
 
+            this.lastRunningData = null;
             this.closeWindow();
           },
         }
@@ -275,6 +291,10 @@ export class InvokeManager {
               ? 'Killed'
               : `Unknown (${details.reason})`;
 
+      if (this.windowsClosingWithoutExiting.has(window)) {
+        return;
+      }
+
       this.log.error(c.red(`UI Window unexpectedly exited with exit code ${details.exitCode}: ${reasonMessage}\r\n`));
 
       // Update status to window-crashed if we still have the running data
@@ -290,12 +310,14 @@ export class InvokeManager {
       }
 
       // Close the crashed window (it may still be visible but unresponsive)
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.destroy();
+      if (!window.isDestroyed()) {
+        window.destroy();
       }
 
       // Clean up the window reference
-      this.window = null;
+      if (this.window === window) {
+        this.window = null;
+      }
     });
 
     window.webContents.on('unresponsive', () => {
@@ -358,6 +380,49 @@ export class InvokeManager {
     this.updateStatus({ type: 'running', data: this.lastRunningData });
   };
 
+  restartWindow = async (): Promise<void> => {
+    if (this.isRestartingWindow) {
+      this.log.warn('Window restart is already in progress\r\n');
+      return;
+    }
+
+    if (!this.window || this.window.isDestroyed()) {
+      this.log.warn('Cannot restart window - window is not open\r\n');
+      return;
+    }
+
+    if (!this.lastRunningData) {
+      this.log.error(c.red('Cannot restart window - no running data available\r\n'));
+      return;
+    }
+    const runningData = this.lastRunningData;
+
+    if (!this.commandRunner.isRunning()) {
+      this.log.error(c.red('Cannot restart window - process is not running\r\n'));
+      return;
+    }
+
+    this.log.info('Restarting Invoke UI window...\r\n');
+    this.isRestartingWindow = true;
+
+    try {
+      const closed = await this.closeWindowWithoutExiting();
+      if (!closed) {
+        return;
+      }
+
+      if (!this.commandRunner.isRunning() || this.lastRunningData !== runningData) {
+        this.log.warn('Cannot complete window restart - Invoke process state changed\r\n');
+        return;
+      }
+
+      this.createWindow(runningData.loopbackUrl);
+      this.updateStatus({ type: 'running', data: runningData });
+    } finally {
+      this.isRestartingWindow = false;
+    }
+  };
+
   /**
    * Exit Invoke and wait for process to properly terminate
    */
@@ -365,6 +430,7 @@ export class InvokeManager {
     this.log.info(c.cyan('Shutting down...\r\n'));
     this.updateStatus({ type: 'exiting' });
     await this.killProcess();
+    this.lastRunningData = null;
     this.closeWindow();
   };
 
@@ -378,14 +444,103 @@ export class InvokeManager {
     this.window = null;
   };
 
+  saveAppWindowProps = (window: BrowserWindow): void => {
+    this.store.set('appWindowProps', {
+      bounds: window.getBounds(),
+      isMaximized: window.isMaximized(),
+      isFullScreen: window.isFullScreen(),
+    });
+  };
+
+  closeWindowWithoutExiting = async (): Promise<boolean> => {
+    if (!this.window) {
+      return true;
+    }
+
+    const window = this.window;
+    if (window.isDestroyed()) {
+      if (this.window === window) {
+        this.window = null;
+      }
+      return true;
+    }
+
+    this.saveAppWindowProps(window);
+    this.windowsClosingWithoutExiting.add(window);
+
+    const closed = await new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => {
+        window.off('closed', handleClosed);
+
+        if (window.isDestroyed()) {
+          this.log.warn('Closed event timed out, but the Invoke UI window was destroyed\r\n');
+          resolve(true);
+          return;
+        }
+
+        this.log.error(c.red('Timed out while restarting Invoke UI window\r\n'));
+        resolve(false);
+      }, 5000);
+
+      const handleClosed = () => {
+        clearTimeout(timeout);
+        resolve(true);
+      };
+
+      window.once('closed', handleClosed);
+
+      try {
+        window.destroy();
+      } catch (error) {
+        clearTimeout(timeout);
+        window.off('closed', handleClosed);
+        this.log.error(
+          c.red(`Failed to close Invoke UI window: ${error instanceof Error ? error.message : error}\r\n`)
+        );
+        resolve(false);
+      }
+    });
+
+    this.windowsClosingWithoutExiting.delete(window);
+
+    if (!closed) {
+      return false;
+    }
+
+    if (this.window === window) {
+      this.window = null;
+    }
+
+    return true;
+  };
+
+  /**
+   * Whether the underlying Invoke process is currently running. This is independent of the UI window - e.g. after a
+   * window crash the process is still alive.
+   */
+  isProcessRunning = (): boolean => {
+    return this.commandRunner.isRunning();
+  };
+
+  /**
+   * Whether Invoke currently has its own live UI window. This is the source of truth for "does closing the launcher
+   * take Invoke down with it" - it is false during startup, in server mode (no window is ever created), and after the
+   * window has crashed, and only true once a real desktop-mode window exists.
+   */
+  hasWindow = (): boolean => {
+    return this.window !== null && !this.window.isDestroyed();
+  };
+
   /**
    * Kill the Invoke process and wait for it to exit
    */
   killProcess = async (): Promise<void> => {
     if (!this.commandRunner.isRunning()) {
+      this.lastRunningData = null;
       return;
     }
     await this.commandRunner.kill(10_000);
+    this.lastRunningData = null;
   };
 }
 
@@ -397,6 +552,7 @@ export const createInvokeManager = (arg: {
   store: Store<StoreData>;
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  onStatusChange?: (status: WithTimestamp<InvokeProcessStatus>) => void;
 }) => {
   const { store, ipc, sendToWindow } = arg;
   const invokeManager = new InvokeManager({
@@ -406,6 +562,7 @@ export const createInvokeManager = (arg: {
     },
     onStatusChange: (status) => {
       sendToWindow('invoke-process:status', status);
+      arg.onStatusChange?.(status);
     },
     sendClearLogs: () => {
       sendToWindow('invoke-process:clear-logs');
@@ -424,17 +581,24 @@ export const createInvokeManager = (arg: {
   ipc.handle('invoke-process:reopen-window', () => {
     invokeManager.reopenWindow();
   });
+  ipc.handle('invoke-process:restart-window', async () => {
+    await invokeManager.restartWindow();
+  });
   ipc.handle('invoke-process:resize', (_, cols, rows) => {
     invokeManager.resizePty(cols, rows);
   });
 
   const cleanupInvokeManager = async () => {
-    const status = invokeManager.getStatus();
-    if (status.type === 'running' || status.type === 'starting') {
+    // Shut down Invoke whenever the process is still alive, regardless of status. Gating on specific statuses missed
+    // the `window-crashed` case (process alive, UI window gone), which would orphan the Python process, leave uvicorn
+    // bound to its port, and strand VRAM after the launcher quit.
+    if (invokeManager.isProcessRunning()) {
       await invokeManager.exitInvoke();
     }
     ipcMain.removeHandler('invoke-process:start-invoke');
     ipcMain.removeHandler('invoke-process:exit-invoke');
+    ipcMain.removeHandler('invoke-process:reopen-window');
+    ipcMain.removeHandler('invoke-process:restart-window');
     ipcMain.removeHandler('invoke-process:resize');
   };
 

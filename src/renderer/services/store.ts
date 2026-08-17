@@ -8,6 +8,7 @@ const getDefaults = (): StoreData => ({
   serverMode: false,
   notifyForPrereleaseUpdates: true,
   optInToLauncherPrereleases: false,
+  hideLauncherAfterStartup: false,
 });
 
 /**

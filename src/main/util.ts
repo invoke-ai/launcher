@@ -471,14 +471,14 @@ export const manageWindowSize = (
     }
   }
 
-  // Save window size and position when it is closed and clear the event listener
+  // Save window size and position on close. We intentionally do not remove this listener: a close may be prevented
+  // (e.g. by a confirmation dialog), and we still want to persist the latest bounds when the window is eventually closed.
   const handleClose = () => {
     setWindowProps({
       bounds: window.getBounds(),
       isMaximized: window.isMaximized(),
       isFullScreen: window.isFullScreen(),
     });
-    window.off('close', handleClose);
   };
 
   window.on('close', handleClose);

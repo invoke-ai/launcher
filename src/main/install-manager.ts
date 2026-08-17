@@ -830,6 +830,7 @@ export class InstallManager {
 export const createInstallManager = (arg: {
   ipc: IpcListener<IpcEvents>;
   sendToWindow: <T extends keyof IpcRendererEvents>(channel: T, ...args: IpcRendererEvents[T]) => void;
+  onStatusChange?: (status: WithTimestamp<InstallProcessStatus>) => void;
 }) => {
   const { ipc, sendToWindow } = arg;
 
@@ -842,11 +843,18 @@ export const createInstallManager = (arg: {
     },
     onStatusChange: (status) => {
       sendToWindow('install-process:status', status);
+      arg.onStatusChange?.(status);
     },
   });
 
   ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, customTorchIndexUrl, repair) => {
-    installManager.startInstall(installationPath, gpuType, version, customTorchIndexUrl, repair);
+    // startInstall has unguarded throws after it sets `starting`/`installing` (platform assert, env resolution). If one
+    // escapes, the status would pin at an active value forever, wrongly reporting "install in progress". Catch here and
+    // surface it as an error so the status is accurate.
+    installManager.startInstall(installationPath, gpuType, version, customTorchIndexUrl, repair).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      installManager.updateStatus({ type: 'error', error: { message } });
+    });
   });
   ipc.handle('install-process:cancel-install', async () => {
     await installManager.cancelInstall();

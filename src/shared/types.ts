@@ -116,7 +116,7 @@ export const schema: Schema<StoreData> = {
  * - Whether to install xformers - torch's own SDP is faster for 30xx + series GPUs, otherwise xformers is faster.
  * - Which pypi indices to use for torch.
  */
-export type GpuType = 'nvidia<30xx' | 'nvidia>=30xx' | 'amd' | 'nogpu';
+export type GpuType = 'nvidia<30xx' | 'nvidia>=30xx' | 'amd' | 'intel' | 'nogpu';
 
 /**
  * A map of GPU types to human-readable names.
@@ -125,7 +125,39 @@ export const GPU_TYPE_MAP: Record<GpuType, string> = {
   'nvidia<30xx': 'Nvidia (20xx and below)',
   'nvidia>=30xx': 'Nvidia (30xx and above)',
   amd: 'AMD',
+  intel: 'Intel Arc',
   nogpu: 'No dedicated GPU',
+};
+
+/**
+ * The compute backend detected on the system. Advisory only - the user confirms or overrides it in the install flow.
+ */
+export type GpuBackend = 'cuda' | 'rocm' | 'xpu' | 'metal' | 'cpu';
+
+/**
+ * The hardware vendor behind the detected backend. `cpu` means no dedicated GPU vendor was identified. Note that a
+ * vendor can be identified even when the usable backend is `cpu` - e.g. a discrete AMD GPU on Windows, where ROCm is
+ * not supported, or Intel graphics too old for PyTorch's XPU build.
+ */
+type GpuVendor = 'nvidia' | 'amd' | 'intel' | 'apple' | 'cpu';
+
+/**
+ * How much the detection result should be trusted. `weak-signal` means hardware was seen but the usable backend could
+ * not be confirmed (e.g. integrated Radeon graphics with no ROCm build) - the backend falls back to `cpu`, but the UI
+ * can still explain what was found instead of claiming there is no GPU.
+ */
+export type GpuConfidence = 'high' | 'medium' | 'weak-signal' | 'none';
+
+/**
+ * Result of the best-effort hardware probe for the compute backend. Note that `cuda` does not distinguish the Nvidia
+ * generation (20xx vs 30xx+) - that still requires a user choice because it cannot be reliably auto-detected.
+ */
+export type GpuDetectionResult = {
+  backend: GpuBackend;
+  vendor: GpuVendor;
+  confidence: GpuConfidence;
+  /** Human-readable explanation of why this backend was chosen (for logging/debugging). */
+  decision: string;
 };
 
 /**
@@ -321,7 +353,13 @@ type InstallProcessIpcEvents = Namespaced<
   'install-process',
   {
     'get-status': () => WithTimestamp<InstallProcessStatus>;
-    'start-install': (location: string, gpuType: GpuType, version: string, repair?: boolean) => void;
+    'start-install': (
+      location: string,
+      gpuType: GpuType,
+      version: string,
+      customTorchIndexUrl?: string,
+      repair?: boolean
+    ) => void;
     'cancel-install': () => void;
     resize: (cols: number, rows: number) => void;
   }
@@ -358,6 +396,7 @@ type UtilIpcEvents = Namespaced<
     'get-default-install-dir': () => string;
     'open-directory': (path: string) => string;
     'get-launcher-version': () => string;
+    'detect-gpu': () => GpuDetectionResult;
   }
 >;
 

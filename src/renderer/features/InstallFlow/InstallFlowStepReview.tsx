@@ -26,16 +26,19 @@ import {
 import { InstallFlowStepper } from '@/renderer/features/InstallFlow/InstallFlowStepper';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
 import type { GpuType } from '@/shared/types';
+import { redactUrlCredentials } from '@/shared/url';
 
 const GPU_LABEL_MAP: Record<GpuType, string> = {
   'nvidia<30xx': 'a Nvidia 20xx or older GPU',
   'nvidia>=30xx': 'a Nvidia 30xx or newer GPU',
   amd: 'an AMD GPU',
+  intel: 'an Intel Arc GPU',
   nogpu: 'no GPU',
 };
 
 export const InstallFlowStepReview = memo(() => {
-  const { dirDetails, gpuType, release, repairMode } = useStore(installFlowApi.$choices);
+  const { dirDetails, gpuType, release, repairMode, customTorchIndexUrl } = useStore(installFlowApi.$choices);
+  const trimmedCustomTorchIndexUrl = customTorchIndexUrl.trim();
   const installType = useStore(installFlowApi.$installType);
 
   const onChangeRepairMode = useCallback((e: ChangeEvent<HTMLInputElement>) => {
@@ -82,6 +85,14 @@ export const InstallFlowStepReview = memo(() => {
               You have <Strong>{GPU_LABEL_MAP[gpuType]}.</Strong>
             </Text>
           </ListItem>
+          {trimmedCustomTorchIndexUrl && (
+            <ListItem>
+              <Text fontSize="md">
+                Torch will be installed from a <Strong>custom index</Strong>:{' '}
+                {redactUrlCredentials(trimmedCustomTorchIndexUrl)}
+              </Text>
+            </ListItem>
+          )}
         </UnorderedList>
         <Spacer />
       </BodyContent>

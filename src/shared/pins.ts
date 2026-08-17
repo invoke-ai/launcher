@@ -5,6 +5,9 @@ const zPlatformIndicies = z.object({
   cuda: z.string().optional(),
   cpu: z.string().optional(),
   rocm: z.string().optional(),
+  // Intel XPU. Present for win32/linux from the Invoke release that added the `xpu` extra; absent on darwin and on
+  // older releases, hence optional like every other entry.
+  xpu: z.string().optional(),
 });
 
 const zPins = z.object({
@@ -34,6 +37,76 @@ export type InvokeReleaseInstallFiles = {
   pins: Pins;
   pyprojectToml: string;
   uvLock: string;
+};
+
+export type LockedPackage = { name: string; version: string };
+
+type TorchPlatform = 'cuda' | 'rocm' | 'xpu' | 'cpu';
+
+/**
+ * Matches a package's own top-level `source` against the PyTorch download index for the given torch platform. Invoke's
+ * lockfile contains a torch build for every platform (e.g. `.../whl/cu128`, `.../whl/rocm7.1`, `.../whl/cpu`); we only
+ * want the packages for the platform the user is actually installing. The exact suffix (cu128 vs cu126) is what the
+ * custom index overrides, so we match the platform category, not the exact URL.
+ *
+ * The host is matched as `<anything>.pytorch.org` rather than the literal `download.pytorch.org`: PyTorch is in the
+ * middle of migrating to `download-r2.pytorch.org` (today's lock already serves every *wheel* from there), and the
+ * channel segment is optional so the nightly/test channels (`.../whl/nightly/cu128`) match too. A miss here silently
+ * turns the whole override into a no-op, so the pattern is deliberately permissive about everything except the
+ * platform category.
+ *
+ * The pattern is anchored to the start of a line (`^` with the `m` flag) so it matches the package's own `source = {…}`
+ * line and NOT the `source = {…}` nested inside other packages' `dependencies = [ { name = "torch", …, source = {…} } ]`
+ * inline tables (which are indented) - otherwise every package that depends on torch would match.
+ */
+const TORCH_INDEX_SOURCE_PATTERN: Record<TorchPlatform, RegExp> = {
+  cuda: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cu\d+[^}]*\}/m,
+  rocm: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?rocm[^}]*\}/m,
+  xpu: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?xpu\b[^}]*\}/m,
+  cpu: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cpu\b[^}]*\}/m,
+};
+
+/**
+ * Parse the torch-family packages for a given torch platform out of an Invoke release's `uv.lock`.
+ *
+ * We select every `[[package]]` block whose `source` points at the PyTorch download index for `torchPlatform` (e.g.
+ * for `cuda`, `https://download.pytorch.org/whl/cu128`). These are exactly the packages a custom torch index would
+ * replace - and we deliberately ignore the other platforms' torch builds, which carry different versions and would
+ * otherwise conflict.
+ *
+ * The local version tag (e.g. `+cu128`) is stripped so the returned `==<version>` pin matches the equivalent build on
+ * a different index (e.g. `2.7.1` matches `2.7.1+cu126`). Regex-based on purpose to avoid pulling in a TOML parser
+ * dependency, mirroring `getDeclaredOptionalDependencies` in the install manager.
+ *
+ * Results are deduplicated by package name, keeping the first match. uv splits a package into several `[[package]]`
+ * blocks with the same name and source when the resolution differs per `resolution-markers` - today's lock does this
+ * for `xformers` and the `nvidia-*-cu12` family, and nothing exempts the torch family from it. Emitting
+ * `torch==A torch==B` in one command would be an unsatisfiable requirement set.
+ */
+export const getTorchPackagesFromLock = (uvLock: string, torchPlatform: TorchPlatform): LockedPackage[] => {
+  const sourcePattern = TORCH_INDEX_SOURCE_PATTERN[torchPlatform];
+  const packages: LockedPackage[] = [];
+  const seenNames = new Set<string>();
+
+  // Split into individual `[[package]]` blocks. The first chunk (before the first `[[package]]`) is dropped.
+  for (const block of uvLock.split(/\n\[\[package\]\]/).slice(1)) {
+    // Only consider packages resolved from the PyTorch download index for the selected platform.
+    if (!sourcePattern.test(block)) {
+      continue;
+    }
+
+    const name = block.match(/^name\s*=\s*"([^"]+)"/m)?.[1];
+    const version = block.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+    if (!name || !version || seenNames.has(name)) {
+      continue;
+    }
+    seenNames.add(name);
+
+    // Strip the local version tag (e.g. `2.7.1+cu128` -> `2.7.1`) so the pin resolves against a different index.
+    packages.push({ name, version: version.split('+')[0]! });
+  }
+
+  return packages;
 };
 
 const getInvokeReleaseTag = (targetVersion: string): string => {

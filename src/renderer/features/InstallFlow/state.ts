@@ -34,6 +34,7 @@ type GpuConfirmPhase = 'confirm' | 'nvidia-tier' | 'manual' | 'done';
  */
 export const BACKEND_TO_GPU_TYPE: Record<Exclude<GpuBackend, 'cuda'>, GpuType> = {
   rocm: 'amd',
+  xpu: 'intel',
   metal: 'nogpu',
   cpu: 'nogpu',
 };

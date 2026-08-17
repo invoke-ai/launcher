@@ -5,6 +5,9 @@ const zPlatformIndicies = z.object({
   cuda: z.string().optional(),
   cpu: z.string().optional(),
   rocm: z.string().optional(),
+  // Intel XPU. Present for win32/linux from the Invoke release that added the `xpu` extra; absent on darwin and on
+  // older releases, hence optional like every other entry.
+  xpu: z.string().optional(),
 });
 
 const zPins = z.object({
@@ -38,7 +41,7 @@ export type InvokeReleaseInstallFiles = {
 
 export type LockedPackage = { name: string; version: string };
 
-type TorchPlatform = 'cuda' | 'rocm' | 'cpu';
+type TorchPlatform = 'cuda' | 'rocm' | 'xpu' | 'cpu';
 
 /**
  * Matches a package's own top-level `source` against the PyTorch download index for the given torch platform. Invoke's
@@ -59,6 +62,7 @@ type TorchPlatform = 'cuda' | 'rocm' | 'cpu';
 const TORCH_INDEX_SOURCE_PATTERN: Record<TorchPlatform, RegExp> = {
   cuda: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cu\d+[^}]*\}/m,
   rocm: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?rocm[^}]*\}/m,
+  xpu: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?xpu\b[^}]*\}/m,
   cpu: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cpu\b[^}]*\}/m,
 };
 

@@ -124,6 +124,14 @@ async function listDir(dirPath: string): Promise<string[]> {
   }
 }
 
+async function readLink(linkPath: string): Promise<string> {
+  try {
+    return await fs.readlink(linkPath);
+  } catch {
+    return '';
+  }
+}
+
 function parseKfdProperties(text: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const line of text.split(/\r?\n/)) {
@@ -225,13 +233,39 @@ async function probeKfdTopology(): Promise<{ exists: boolean; gfxTargets: string
   };
 }
 
-async function probeAmdRenderDevices(): Promise<{ hasAmdRenderDevice: boolean }> {
+/** PCI vendor ids as sysfs reports them. */
+const PCI_VENDOR_AMD = '0x1002';
+const PCI_VENDOR_INTEL = '0x8086';
+
+type DrmDevice = {
+  /** PCI vendor id, e.g. `0x8086`. */
+  vendor: string;
+  /** PCI device id, e.g. `0x56a0`. */
+  device: string;
+  /** Kernel driver bound to the device, e.g. `i915`, `xe`, `amdgpu`. Empty when it cannot be read. */
+  driver: string;
+};
+
+/**
+ * Enumerate the render nodes under `/sys/class/drm`, with the PCI ids and kernel driver of each. One pass serves both
+ * the AMD and the Intel probes.
+ */
+async function probeDrmDevices(): Promise<DrmDevice[]> {
   const drmPath = '/sys/class/drm';
   const entries = (await listDir(drmPath)).filter((name) => name.startsWith('renderD'));
 
-  const vendors = await Promise.all(entries.map((entry) => readFile(path.join(drmPath, entry, 'device', 'vendor'))));
-
-  return { hasAmdRenderDevice: vendors.some((vendor) => vendor.toLowerCase() === '0x1002') };
+  return Promise.all(
+    entries.map(async (entry) => {
+      const devicePath = path.join(drmPath, entry, 'device');
+      const [vendor, device, driver] = await Promise.all([
+        readFile(path.join(devicePath, 'vendor')),
+        readFile(path.join(devicePath, 'device')),
+        // `device/driver` is a symlink into /sys/bus/pci/drivers/<name>; the basename is the driver.
+        readLink(path.join(devicePath, 'driver')),
+      ]);
+      return { vendor: vendor.toLowerCase(), device: device.toLowerCase(), driver: path.basename(driver) };
+    })
+  );
 }
 
 async function hasNvidiaGpu(): Promise<BackendProbe> {
@@ -251,7 +285,7 @@ async function hasNvidiaGpu(): Promise<BackendProbe> {
   return { detected: false, confidence: 'none', reason: 'No NVIDIA evidence found' };
 }
 
-async function hasRocmGpu(): Promise<BackendProbe> {
+async function hasRocmGpu(drmDevices: Promise<DrmDevice[]>): Promise<BackendProbe> {
   // Every probe below is Linux-only (ROCm tools, `/sys/class/kfd`, `/sys/class/drm`). Without this guard an `amd-smi`
   // that happens to be on a Windows PATH would route the user to `pins.torchIndexUrl.win32.rocm`, which does not
   // exist - the exact outcome the Windows AMD probe below exists to prevent.
@@ -308,8 +342,8 @@ async function hasRocmGpu(): Promise<BackendProbe> {
     return { detected: true, confidence: 'medium', reason: '`rocm-smi --showproductname` reported a GPU' };
   }
 
-  const renderDevices = await probeAmdRenderDevices();
-  if ((await fileExists('/dev/kfd')) || renderDevices.hasAmdRenderDevice || kfdTopology.exists) {
+  const hasAmdRenderDevice = (await drmDevices).some((device) => device.vendor === PCI_VENDOR_AMD);
+  if ((await fileExists('/dev/kfd')) || hasAmdRenderDevice || kfdTopology.exists) {
     return {
       detected: false,
       confidence: 'weak-signal',
@@ -344,13 +378,13 @@ async function hasMacGpuCapabilities(): Promise<BackendProbe> {
 }
 
 /**
- * Detect a discrete AMD GPU on Windows. There is no supported ROCm-on-Windows install path, so this never yields a
- * usable GPU backend - it exists purely so we can tell the user "we saw your AMD card, but Windows will use the CPU"
- * instead of the misleading "no dedicated GPU detected". These are exactly the users the custom-index field targets.
+ * The display adapter names Windows reports, one per line. Empty on other platforms or if the query fails.
+ *
+ * Shared by the AMD and Intel probes so a packaged app spawns `powershell` once, not once per vendor.
  */
-async function hasWindowsAmdGpu(): Promise<BackendProbe> {
+async function probeWindowsDisplayAdapters(): Promise<string[]> {
   if (process.platform !== 'win32') {
-    return { detected: false, confidence: 'none', reason: 'Not Windows' };
+    return [];
   }
 
   const videoControllers = await runProbe('powershell', [
@@ -360,19 +394,129 @@ async function hasWindowsAmdGpu(): Promise<BackendProbe> {
     'Get-CimInstance Win32_VideoController | ForEach-Object { $_.Name }',
   ]);
 
-  if (videoControllers.ok && /\b(AMD|Radeon|ATI)\b/i.test(videoControllers.stdout)) {
+  if (!videoControllers.ok) {
+    return [];
+  }
+
+  return videoControllers.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Detect a discrete AMD GPU on Windows. There is no supported ROCm-on-Windows install path, so this never yields a
+ * usable GPU backend - it exists purely so we can tell the user "we saw your AMD card, but Windows will use the CPU"
+ * instead of the misleading "no dedicated GPU detected". These are exactly the users the custom-index field targets.
+ */
+async function hasWindowsAmdGpu(windowsAdapters: Promise<string[]>): Promise<BackendProbe> {
+  if (process.platform !== 'win32') {
+    return { detected: false, confidence: 'none', reason: 'Not Windows' };
+  }
+
+  if ((await windowsAdapters).some((adapter) => /\b(AMD|Radeon|ATI)\b/i.test(adapter))) {
     return { detected: true, confidence: 'medium', reason: 'Windows reported an AMD/Radeon display adapter' };
   }
 
   return { detected: false, confidence: 'none', reason: 'No AMD display adapter reported by Windows' };
 }
 
+/**
+ * PCI device id prefixes of the Intel GPUs PyTorch's XPU build supports.
+ *
+ * Intel's supported list is the Arc graphics family (A-series and B-series), Core Ultra processors with built-in Arc
+ * graphics, and Data Center GPU Max. Everything older - UHD Graphics, pre-Arc Iris Xe - has no XPU support, and
+ * installing the +xpu wheels there produces a multi-GB install that cannot run. As with the ROCm gfx allowlist, an
+ * unrecognised device falls through to the CPU backend and the user can still pick Intel by hand.
+ *
+ * - `0x56xx` covers DG2 / Arc A-series, desktop (`56a0` A770, `56a1` A750, ...) and mobile (`5690` A770M, ...).
+ * - `0xe2xx` covers BMG / Arc B-series.
+ * - `0x0bdx` covers Data Center GPU Max (Ponte Vecchio).
+ */
+const XPU_SUPPORTED_PCI_DEVICE_PREFIXES = ['0x56', '0xe2', '0x0bd'];
+
+/**
+ * Kernel drivers that only ever bind Xe-architecture hardware. Anything on the `xe` driver (Lunar Lake and newer
+ * integrated Arc graphics, Battlemage) is XPU-capable, which saves maintaining device ids for the Core Ultra iGPUs.
+ * `i915` is not usable as a signal - it covers everything back to Sandy Bridge - hence the device id list above.
+ */
+const XPU_CAPABLE_DRIVERS = ['xe'];
+
+/**
+ * Detect an Intel GPU that PyTorch's XPU backend can actually use.
+ *
+ * PyTorch publishes `+xpu` wheels for linux-x86_64 and windows-amd64 only, so this is guarded to those platforms - on
+ * macOS an Intel iGPU means Metal or CPU, never XPU.
+ */
+async function hasIntelXpuGpu(
+  drmDevices: Promise<DrmDevice[]>,
+  windowsAdapters: Promise<string[]>
+): Promise<BackendProbe> {
+  if (process.platform === 'win32') {
+    // Intel brands exactly the XPU-capable GPUs as "Arc" - the A/B-series cards and the Core Ultra integrated GPU all
+    // report as "Intel(R) Arc(TM) ...". An "Intel(R) UHD Graphics 620" is a real Intel GPU with no XPU support.
+    const adapters = await windowsAdapters;
+    const intelAdapters = adapters.filter((adapter) => /\bintel\b/i.test(adapter));
+    const arcAdapters = intelAdapters.filter((adapter) => /\barc\b/i.test(adapter));
+
+    if (arcAdapters.length > 0) {
+      return { detected: true, confidence: 'high', reason: `Windows reported an Intel Arc GPU (${arcAdapters[0]})` };
+    }
+
+    if (intelAdapters.length > 0) {
+      return {
+        detected: false,
+        confidence: 'weak-signal',
+        reason: `We detected Intel graphics (${intelAdapters[0]}), but PyTorch's XPU build supports Arc graphics only, so Invoke will use your CPU`,
+      };
+    }
+
+    return { detected: false, confidence: 'none', reason: 'No Intel display adapter reported by Windows' };
+  }
+
+  if (process.platform !== 'linux') {
+    return { detected: false, confidence: 'none', reason: 'PyTorch publishes no XPU wheels for this platform' };
+  }
+
+  const intelDevices = (await drmDevices).filter((device) => device.vendor === PCI_VENDOR_INTEL);
+
+  if (intelDevices.length === 0) {
+    return { detected: false, confidence: 'none', reason: 'No Intel evidence found' };
+  }
+
+  const supported = intelDevices.filter(
+    (device) =>
+      XPU_CAPABLE_DRIVERS.includes(device.driver) ||
+      XPU_SUPPORTED_PCI_DEVICE_PREFIXES.some((prefix) => device.device.startsWith(prefix))
+  );
+
+  if (supported.length > 0) {
+    return {
+      detected: true,
+      confidence: 'high',
+      reason: `Found an Intel GPU with XPU support (PCI ${supported[0]?.device}, ${supported[0]?.driver} driver)`,
+    };
+  }
+
+  return {
+    detected: false,
+    confidence: 'weak-signal',
+    reason: `We detected Intel graphics (PCI ${intelDevices[0]?.device}), but PyTorch's XPU build supports Arc graphics only, so Invoke will use your CPU`,
+  };
+}
+
 async function detect(): Promise<GpuDetectionResult> {
-  const [nvidia, rocm, mac, windowsAmd] = await Promise.all([
+  // Started, not awaited: several probes consume these and would otherwise either run the query twice or serialise
+  // behind each other. Every probe still runs concurrently below.
+  const drmDevices = probeDrmDevices();
+  const windowsAdapters = probeWindowsDisplayAdapters();
+
+  const [nvidia, rocm, intel, mac, windowsAmd] = await Promise.all([
     hasNvidiaGpu(),
-    hasRocmGpu(),
+    hasRocmGpu(drmDevices),
+    hasIntelXpuGpu(drmDevices, windowsAdapters),
     hasMacGpuCapabilities(),
-    hasWindowsAmdGpu(),
+    hasWindowsAmdGpu(windowsAdapters),
   ]);
 
   if (nvidia.detected) {
@@ -381,6 +525,11 @@ async function detect(): Promise<GpuDetectionResult> {
 
   if (rocm.detected) {
     return { backend: 'rocm', vendor: 'amd', confidence: rocm.confidence, decision: rocm.reason };
+  }
+
+  // After the discrete-GPU backends: a machine with an NVIDIA card and an Intel iGPU should install CUDA.
+  if (intel.detected) {
+    return { backend: 'xpu', vendor: 'intel', confidence: intel.confidence, decision: intel.reason };
   }
 
   if (mac.detected) {
@@ -398,10 +547,16 @@ async function detect(): Promise<GpuDetectionResult> {
     };
   }
 
+  // We saw hardware from a vendor but could not confirm a usable backend for it. The backend is still CPU, but "no
+  // dedicated GPU" would be a lie to someone staring at a Radeon or an Arc - carry the reason through so the UI can
+  // explain itself. AMD first: a discrete Radeon is more likely to be the card the user cares about than the Intel
+  // iGPU that also sits in the same machine.
   if (rocm.confidence === 'weak-signal') {
-    // We saw AMD hardware but could not confirm a ROCm-capable GPU. The backend is still CPU, but "no dedicated GPU"
-    // would be a lie to someone staring at a Radeon - carry the reason through so the UI can explain itself.
     return { backend: 'cpu', vendor: 'amd', confidence: 'weak-signal', decision: rocm.reason };
+  }
+
+  if (intel.confidence === 'weak-signal') {
+    return { backend: 'cpu', vendor: 'intel', confidence: 'weak-signal', decision: intel.reason };
   }
 
   return CPU_FALLBACK;

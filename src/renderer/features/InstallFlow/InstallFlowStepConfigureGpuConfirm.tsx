@@ -11,6 +11,7 @@ import { GPU_TYPE_MAP } from '@/shared/types';
 const BACKEND_LABEL: Record<GpuBackend, string> = {
   cuda: 'an NVIDIA GPU (CUDA)',
   rocm: 'an AMD GPU (ROCm)',
+  xpu: 'an Intel Arc GPU (XPU)',
   metal: 'a Mac GPU (Metal / MPS)',
   cpu: 'no dedicated GPU (CPU only)',
 };
@@ -100,10 +101,12 @@ export const InstallFlowStepConfigureGpuConfirm = memo(() => {
     return <DetectedSummary backend={detection.backend} onChange={onConfirmNo} />;
   }
 
-  // AMD hardware that cannot use ROCm - a discrete card on Windows, or integrated Radeon graphics with no ROCm build -
-  // is reported as the CPU backend. Use the probe's own explanation rather than the misleading "no dedicated GPU".
-  const isAmdWithoutRocm = detection.backend === 'cpu' && detection.vendor === 'amd';
-  const detectionHeading = isAmdWithoutRocm
+  // Hardware we recognised but whose accelerated backend is unusable - a Radeon on Windows, integrated Radeon graphics
+  // with no ROCm build, Intel graphics older than Arc - is reported as the CPU backend. Use the probe's own
+  // explanation rather than the misleading "no dedicated GPU".
+  const isUnusableVendorGpu =
+    detection.backend === 'cpu' && (detection.vendor === 'amd' || detection.vendor === 'intel');
+  const detectionHeading = isUnusableVendorGpu
     ? `${detection.decision}.`
     : `We detected ${BACKEND_LABEL[detection.backend]}.`;
 

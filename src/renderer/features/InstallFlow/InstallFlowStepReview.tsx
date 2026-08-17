@@ -32,6 +32,7 @@ const GPU_LABEL_MAP: Record<GpuType, string> = {
   'nvidia<30xx': 'a Nvidia 20xx or older GPU',
   'nvidia>=30xx': 'a Nvidia 30xx or newer GPU',
   amd: 'an AMD GPU',
+  intel: 'an Intel Arc GPU',
   nogpu: 'no GPU',
 };
 

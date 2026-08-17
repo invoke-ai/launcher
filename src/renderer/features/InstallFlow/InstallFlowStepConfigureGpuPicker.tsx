@@ -13,10 +13,12 @@ export const InstallFlowStepConfigureGpuPicker = memo(() => {
   return (
     <>
       <Heading>What GPU do you have?</Heading>
-      <ButtonGroup variant="outline">
+      <ButtonGroup variant="outline" flexWrap="wrap" justifyContent="center" rowGap={2}>
         <GpuButton type="nvidia<30xx" />
         <GpuButton type="nvidia>=30xx" />
         <GpuButton type="amd" />
+        {/* PyTorch publishes +xpu wheels for linux-x86_64 and windows-amd64 only - on a Mac, Intel means Metal or CPU. */}
+        {operatingSystem !== 'macOS' && <GpuButton type="intel" />}
         <GpuButton type="nogpu" />
       </ButtonGroup>
       {operatingSystem === 'macOS' && <Text fontSize="md">Tip: Macs usually have no dedicated GPU.</Text>}

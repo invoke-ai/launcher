@@ -165,9 +165,24 @@ version = "0.25.0+rocm7.1"
 source = { registry = "https://download.pytorch.org/whl/rocm7.1" }
 
 [[package]]
+name = "torch"
+version = "2.13.0+xpu"
+source = { registry = "https://download.pytorch.org/whl/xpu" }
+
+[[package]]
+name = "torchvision"
+version = "0.28.0+xpu"
+source = { registry = "https://download.pytorch.org/whl/xpu" }
+
+[[package]]
 name = "triton-rocm"
 version = "3.6.0"
 source = { registry = "https://download.pytorch.org/whl/rocm7.1" }
+
+[[package]]
+name = "triton-xpu"
+version = "3.7.2"
+source = { registry = "https://download.pytorch.org/whl/xpu" }
 
 [[package]]
 name = "xformers"
@@ -199,6 +214,20 @@ resolution-markers = [
       { name: 'torchvision', version: '0.25.0' },
       { name: 'triton-rocm', version: '3.6.0' },
     ]);
+  });
+
+  it('selects the intel xpu builds for the xpu platform', () => {
+    expect(getTorchPackagesFromLock(uvLock, 'xpu')).toEqual([
+      { name: 'torch', version: '2.13.0' },
+      { name: 'torchvision', version: '0.28.0' },
+      { name: 'triton-xpu', version: '3.7.2' },
+    ]);
+  });
+
+  it('does not confuse the xpu and cpu indexes', () => {
+    // `whl/xpu` and `whl/cpu` differ by one character; a sloppy pattern matches both.
+    expect(getTorchPackagesFromLock(uvLock, 'cpu').map((pkg) => pkg.version)).not.toContain('2.13.0');
+    expect(getTorchPackagesFromLock(uvLock, 'xpu').map((pkg) => pkg.version)).not.toContain('2.7.1');
   });
 
   it('selects the cpu builds for the cpu platform', () => {

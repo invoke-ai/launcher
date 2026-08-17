@@ -34,7 +34,7 @@ const shouldUseBootstrapInstall = (version: string): boolean => {
   return compare(version.replace(/^v/, ''), MIN_BOOTSTRAP_INSTALL_VERSION) >= 0;
 };
 
-const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'cpu' | null): string[] => {
+const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'xpu' | 'cpu' | null): string[] => {
   const extras: string[] = [];
 
   if (torchPlatform && process.platform !== 'darwin') {

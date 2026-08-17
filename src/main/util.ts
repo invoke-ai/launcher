@@ -76,7 +76,7 @@ export const getActivateVenvCommand = (installLocation: string): string => {
  * @param gpuType The GPU type
  * @returns The platform corresponding to the GPU type
  */
-export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'cpu' => {
+export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'xpu' | 'cpu' => {
   if (process.platform === 'darwin') {
     // macOS uses MPS, but we don't need to provide a separate option for this because pytorch doesn't have a separate index url for MPS
     return 'cpu';
@@ -84,6 +84,9 @@ export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'cpu' => {
     switch (gpuType) {
       case 'amd':
         return 'rocm';
+      case 'intel':
+        // Intel's XPU backend. PyTorch publishes +xpu wheels for linux-x86_64 and windows-amd64 only.
+        return 'xpu';
       case 'nvidia<30xx':
       case 'nvidia>=30xx':
         return 'cuda';

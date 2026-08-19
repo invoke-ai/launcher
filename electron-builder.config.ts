@@ -27,7 +27,7 @@ export default {
   directories: {
     output: 'dist',
   },
-  files: ['package.json', 'out/**/*', 'node_modules/node-pty/**/*'],
+  files: ['package.json', 'out/**/*', 'node_modules/node-pty/**/*', 'node_modules/wintab-pen-bridge/**/*'],
   extraResources: [
     {
       from: 'assets/bin',

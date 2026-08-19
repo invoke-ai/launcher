@@ -30,6 +30,9 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
       'The update will be downloaded in the background. You will be notified when the download is complete and the update is ready to install.',
     ].join('\n');
 
+    // These dialogs are parented to the launcher window so they are modal to it while it is visible. If the launcher has
+    // been hidden to the tray by auto-hide, Electron degrades a dialog with a non-shown parent to an independent
+    // top-level window, so it stays reachable either way.
     const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'question',
       title: 'Update Available',

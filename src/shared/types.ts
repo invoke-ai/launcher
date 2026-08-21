@@ -116,7 +116,7 @@ export const schema: Schema<StoreData> = {
  * - Whether to install xformers - torch's own SDP is faster for 30xx + series GPUs, otherwise xformers is faster.
  * - Which pypi indices to use for torch.
  */
-export type GpuType = 'nvidia<30xx' | 'nvidia>=30xx' | 'amd' | 'nogpu';
+export type GpuType = 'nvidia<30xx' | 'nvidia>=30xx' | 'amd' | 'intel' | 'nogpu';
 
 /**
  * A map of GPU types to human-readable names.
@@ -125,6 +125,7 @@ export const GPU_TYPE_MAP: Record<GpuType, string> = {
   'nvidia<30xx': 'Nvidia (20xx and below)',
   'nvidia>=30xx': 'Nvidia (30xx and above)',
   amd: 'AMD',
+  intel: 'Intel Arc (XPU)',
   nogpu: 'No dedicated GPU',
 };
 

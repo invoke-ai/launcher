@@ -5,6 +5,7 @@ const zPlatformIndicies = z.object({
   cuda: z.string().optional(),
   cpu: z.string().optional(),
   rocm: z.string().optional(),
+  xpu: z.string().optional(),
 });
 
 const zPins = z.object({

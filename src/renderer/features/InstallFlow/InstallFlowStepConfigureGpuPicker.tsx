@@ -17,6 +17,7 @@ export const InstallFlowStepConfigureGpuPicker = memo(() => {
         <GpuButton type="nvidia<30xx" />
         <GpuButton type="nvidia>=30xx" />
         <GpuButton type="amd" />
+        <GpuButton type="intel" />
         <GpuButton type="nogpu" />
       </ButtonGroup>
       {operatingSystem === 'macOS' && <Text fontSize="md">Tip: Macs usually have no dedicated GPU.</Text>}

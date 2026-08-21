@@ -76,12 +76,14 @@ export const getActivateVenvCommand = (installLocation: string): string => {
  * @param gpuType The GPU type
  * @returns The platform corresponding to the GPU type
  */
-export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'cpu' => {
+export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'cpu' | 'xpu' => {
   if (process.platform === 'darwin') {
     // macOS uses MPS, but we don't need to provide a separate option for this because pytorch doesn't have a separate index url for MPS
     return 'cpu';
   } else {
     switch (gpuType) {
+      case 'intel':
+        return 'xpu';
       case 'amd':
         return 'rocm';
       case 'nvidia<30xx':

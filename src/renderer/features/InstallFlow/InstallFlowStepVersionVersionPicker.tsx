@@ -2,6 +2,7 @@ import { Button, ButtonGroup, ExternalLink, Flex, Heading, Input, Text } from '@
 import { useStore } from '@nanostores/react';
 import { valid } from '@renovatebot/pep440';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { EllipsisLoadingText } from '@/renderer/common/EllipsisLoadingText';
 import {
@@ -13,9 +14,10 @@ import type { GHReleaseData } from '@/renderer/services/gh';
 import { $latestGHReleases, syncGHReleases } from '@/renderer/services/gh';
 
 export const InstallFlowStepVersionVersionPicker = memo(() => {
+  const { t } = useTranslation();
   return (
     <>
-      <Heading>Which version should we install?</Heading>
+      <Heading>{t('installFlow.version.title')}</Heading>
       <VersionPicker />
     </>
   );
@@ -23,6 +25,7 @@ export const InstallFlowStepVersionVersionPicker = memo(() => {
 InstallFlowStepVersionVersionPicker.displayName = 'InstallFlowStepVersionVersionPicker';
 
 const VersionPicker = memo(() => {
+  const { t } = useTranslation();
   const latestGHReleases = useStore($latestGHReleases);
   const { release } = useStore(installFlowApi.$choices);
   const installType = useStore(installFlowApi.$installType);
@@ -30,7 +33,7 @@ const VersionPicker = memo(() => {
   if (latestGHReleases.isError) {
     return (
       <Text role="button" onClick={syncGHReleases} fontSize="md" color="error.300" fontWeight="semibold">
-        Unable to get available releases from GitHub. Click here to retry.
+        {t('installFlow.version.releasesError')}
       </Text>
     );
   }
@@ -38,7 +41,7 @@ const VersionPicker = memo(() => {
   if (latestGHReleases.isLoading || latestGHReleases.isUninitialized) {
     return (
       <EllipsisLoadingText fontSize="md" color="base.300" fontWeight="semibold">
-        Loading releases
+        {t('installFlow.version.loading')}
       </EllipsisLoadingText>
     );
   }
@@ -59,11 +62,15 @@ const VersionPicker = memo(() => {
 VersionPicker.displayName = 'VersionPicker';
 
 const GHVersionLink = memo(({ release }: { release: GHReleaseData }) => {
-  return <ExternalLink fontSize="md" color="base.300" href={release.url} label="Release Notes" />;
+  const { t } = useTranslation();
+  return (
+    <ExternalLink fontSize="md" color="base.300" href={release.url} label={t('installFlow.version.releaseNotes')} />
+  );
 });
 GHVersionLink.displayName = 'GHVersionLink';
 
 const StableVersionButton = memo(({ release }: { release: GHReleaseData }) => {
+  const { t } = useTranslation();
   const selectedRelease = useStore(installFlowApi.$choices).release;
   const onClick = useCallback(() => {
     installFlowApi.$choices.setKey('release', { type: 'gh', ...release, isPrerelease: false });
@@ -76,13 +83,14 @@ const StableVersionButton = memo(({ release }: { release: GHReleaseData }) => {
         selectedRelease?.type === 'gh' && selectedRelease?.version === release.version ? 'invokeBlue' : 'base'
       }
     >
-      Stable ({release.version})
+      {t('installFlow.version.stable', { version: release.version })}
     </Button>
   );
 });
 StableVersionButton.displayName = 'StableVersionButton';
 
 const PrereleaseVersionButton = memo(({ release }: { release: GHReleaseData }) => {
+  const { t } = useTranslation();
   const selectedRelease = useStore(installFlowApi.$choices).release;
   const onClick = useCallback(() => {
     installFlowApi.$choices.setKey('release', { type: 'gh', ...release, isPrerelease: true });
@@ -95,13 +103,14 @@ const PrereleaseVersionButton = memo(({ release }: { release: GHReleaseData }) =
         selectedRelease?.type === 'gh' && selectedRelease?.version === release.version ? 'invokeBlue' : 'base'
       }
     >
-      Prerelease ({release.version})
+      {t('installFlow.version.prerelease', { version: release.version })}
     </Button>
   );
 });
 PrereleaseVersionButton.displayName = 'PrereleaseVersionButton';
 
 const ManualVersionButton = memo(() => {
+  const { t } = useTranslation();
   const selectedRelease = useStore(installFlowApi.$choices).release;
   const onClick = useCallback(() => {
     installFlowApi.$choices.setKey('release', { type: 'manual', version: '' });
@@ -113,13 +122,14 @@ const ManualVersionButton = memo(() => {
       onClick={onClick}
       colorScheme={selectedRelease?.type === 'manual' ? 'invokeBlue' : 'base'}
     >
-      Manual
+      {t('installFlow.version.manual')}
     </Button>
   );
 });
 ManualVersionButton.displayName = 'ManualVersionButton';
 
 const ManualVersionEntry = memo(({ version }: { version: string }) => {
+  const { t } = useTranslation();
   const ref = useRef<HTMLInputElement>(null);
   const [localVersion, setLocalVersion] = useState(version);
 
@@ -143,7 +153,7 @@ const ManualVersionEntry = memo(({ version }: { version: string }) => {
       <Input
         ref={ref}
         value={localVersion}
-        placeholder="Enter version"
+        placeholder={t('installFlow.version.enterVersion')}
         onBlur={onBlur}
         onChange={onChange}
         variant="outline"
@@ -154,7 +164,7 @@ const ManualVersionEntry = memo(({ version }: { version: string }) => {
       <ManualVersionWarning />
       {!!version && !isValid && (
         <Text fontSize="md" color="error.300">
-          Invalid version specifier.
+          {t('installFlow.version.invalidSpecifier')}
         </Text>
       )}
     </Flex>

@@ -1,6 +1,7 @@
 import { Flex, Icon, Link, Text } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PiArrowsCounterClockwise } from 'react-icons/pi';
 
 import { EllipsisLoadingText } from '@/renderer/common/EllipsisLoadingText';
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: Props) => {
+  const { t } = useTranslation();
   const latestGHReleases = useStore($latestGHReleases);
   const availableUpdates = useAvailableUpdates(installDirDetails.version);
   const { notifyForPrereleaseUpdates } = useStore(persistedStoreApi.$atom);
@@ -26,7 +28,7 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (latestGHReleases.isError) {
     return (
       <Flex as={Link} onClick={syncGHReleases} alignItems="center" gap={2} userSelect="none">
-        <Text color="error.300">Unable to check for updates.</Text>
+        <Text color="error.300">{t('launchFlow.unableToCheckForUpdates')}</Text>
         <Icon as={PiArrowsCounterClockwise} boxSize={4} />
       </Flex>
     );
@@ -35,7 +37,7 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (latestGHReleases.isLoading || latestGHReleases.isUninitialized) {
     return (
       <EllipsisLoadingText fontSize="sm" userSelect="none" color="base.300">
-        Checking for updates
+        {t('launchFlow.checkingForUpdates')}
       </EllipsisLoadingText>
     );
   }
@@ -43,7 +45,8 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (availableUpdates.stable !== null) {
     return (
       <Text as={Link} onClick={beginInstallFlow} color="invokeGreen.300" userSelect="none">
-        Invoke <Strong fontSize="sm">{availableUpdates.stable.version}</Strong> is available! Click here to update.
+        {t('launchFlow.updateAvailablePrefix')} <Strong fontSize="sm">{availableUpdates.stable.version}</Strong>{' '}
+        {t('launchFlow.updateAvailableSuffix')}
       </Text>
     );
   }
@@ -51,14 +54,15 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (availableUpdates.pre !== null && notifyForPrereleaseUpdates) {
     return (
       <Text as={Link} onClick={beginInstallFlow} color="invokeGreen.300" userSelect="none">
-        Invoke <Strong fontSize="sm">{availableUpdates.pre.version}</Strong> is available! Click here to update.
+        {t('launchFlow.updateAvailablePrefix')} <Strong fontSize="sm">{availableUpdates.pre.version}</Strong>{' '}
+        {t('launchFlow.updateAvailableSuffix')}
       </Text>
     );
   }
 
   return (
     <Flex as={Link} onClick={syncGHReleases} alignItems="center" gap={2} userSelect="none" color="base.300">
-      <Text>Up to date.</Text>
+      <Text>{t('launchFlow.upToDate')}</Text>
       <Icon as={PiArrowsCounterClockwise} boxSize={4} />
     </Flex>
   );

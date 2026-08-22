@@ -1,6 +1,7 @@
 import { Text } from '@invoke-ai/ui-library';
 import { valid } from '@renovatebot/pep440';
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Strong } from '@/renderer/common/Strong';
 import type { InstallType } from '@/shared/types';
@@ -10,33 +11,38 @@ type Props = {
 };
 
 export const InstallFlowInstallTypeDescription = memo(({ installType }: Props) => {
+  const { t } = useTranslation();
   if (installType.type === 'fresh') {
     return (
       <Text fontSize="md">
-        We&apos;ll install <Strong>Invoke {installType.newVersion}</Strong>.
+        {t('installFlow.installType.freshPrefix')} <Strong>Invoke {installType.newVersion}</Strong>
+        {t('installFlow.installType.freshSuffix')}
       </Text>
     );
   }
   if (installType.type === 'reinstall') {
     return (
       <Text fontSize="md">
-        We&apos;ll reinstall your existing <Strong>Invoke {installType.installedVersion}</Strong> install.
+        {t('installFlow.installType.reinstallPrefix')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.reinstallSuffix')}
       </Text>
     );
   }
   if (installType.type === 'upgrade') {
     return (
       <Text fontSize="md">
-        We&apos;ll upgrade your existing <Strong>Invoke {installType.installedVersion}</Strong> install to{' '}
-        <Strong>{installType.newVersion}</Strong>.
+        {t('installFlow.installType.upgradePrefix')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.upgradeMiddle')} <Strong>{installType.newVersion}</Strong>
+        {t('installFlow.installType.upgradeSuffix')}
       </Text>
     );
   }
   if (installType.type === 'downgrade') {
     return (
       <Text fontSize="md">
-        We&apos;ll downgrade your existing <Strong>Invoke {installType.installedVersion}</Strong> install to{' '}
-        <Strong>{installType.newVersion}</Strong>.
+        {t('installFlow.installType.downgradePrefix')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.downgradeMiddle')} <Strong>{installType.newVersion}</Strong>
+        {t('installFlow.installType.downgradeSuffix')}
       </Text>
     );
   }
@@ -49,8 +55,9 @@ export const InstallFlowInstallTypeDescription = memo(({ installType }: Props) =
 
     return (
       <Text fontSize="md">
-        We&apos;ll install the manually specified version <Strong>{installType.newVersion}</Strong> on top of your
-        existing <Strong>Invoke {installType.installedVersion}</Strong> install.
+        {t('installFlow.installType.manualPrefix')} <Strong>{installType.newVersion}</Strong>
+        {t('installFlow.installType.manualMiddle')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.manualSuffix')}
       </Text>
     );
   }
@@ -59,9 +66,10 @@ export const InstallFlowInstallTypeDescription = memo(({ installType }: Props) =
 InstallFlowInstallTypeDescription.displayName = 'InstallFlowInstallTypeDescription';
 
 export const ManualVersionWarning = memo(() => {
+  const { t } = useTranslation();
   return (
     <Text fontSize="md" color="warning.300" fontWeight="semibold">
-      Manual version installation can break things. Make sure to back up your data first.
+      {t('installFlow.installType.manualWarning')}
     </Text>
   );
 });

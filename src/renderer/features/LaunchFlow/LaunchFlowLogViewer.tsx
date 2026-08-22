@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { startCase } from 'es-toolkit/compat';
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   $invokeProcessStatus,
@@ -11,14 +12,27 @@ import { XTermLogViewer } from '@/renderer/features/XTermLogViewer/XTermLogViewe
 import { XTermLogViewerStatusIndicator } from '@/renderer/features/XTermLogViewer/XTermLogViewerStatusIndicator';
 import type { InvokeProcessStatus } from '@/shared/types';
 
-const getMessage = (status: InvokeProcessStatus) => {
+const STATUS_KEY: Record<string, string> = {
+  uninitialized: 'launchFlow.status.uninitialized',
+  starting: 'launchFlow.status.starting',
+  exiting: 'launchFlow.status.exiting',
+  exited: 'launchFlow.status.exited',
+  'window-crashed': 'launchFlow.status.windowCrashed',
+};
+
+const getMessage = (status: InvokeProcessStatus, t: ReturnType<typeof useTranslation>['t']) => {
   if (status.type === 'running') {
-    return `Running at ${status.data.loopbackUrl}`;
+    return t('launchFlow.runningAt', { loopbackUrl: status.data.loopbackUrl });
+  }
+  const key = STATUS_KEY[status.type];
+  if (key) {
+    return t(key);
   }
   return startCase(status.type);
 };
 
 export const LaunchFlowLogViewer = memo(() => {
+  const { t } = useTranslation();
   const invokeProcessStatus = useStore($invokeProcessStatus);
 
   return (
@@ -29,7 +43,7 @@ export const LaunchFlowLogViewer = memo(() => {
         top={2}
         right={2}
       >
-        {getMessage(invokeProcessStatus)}
+        {getMessage(invokeProcessStatus, t)}
       </XTermLogViewerStatusIndicator>
     </XTermLogViewer>
   );

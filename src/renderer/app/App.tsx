@@ -6,6 +6,7 @@ import { MainContent } from '@/renderer/app/MainContent';
 import { ThemeProvider } from '@/renderer/app/ThemeProvider';
 import { DiscordButton } from '@/renderer/common/DiscordButton';
 import { GitHubButton } from '@/renderer/common/GitHubButton';
+import { LanguageButton } from '@/renderer/common/LanguageButton';
 import { SystemInfoLoadingGate, SystemInfoProvider } from '@/renderer/contexts/SystemInfoContext';
 import { Banner } from '@/renderer/features/Banner/Banner';
 import { Console } from '@/renderer/features/Console/Console';
@@ -33,6 +34,7 @@ export const App = () => {
                 <ConsoleOpenButton />
                 <DiscordButton />
                 <GitHubButton />
+                <LanguageButton />
               </Flex>
             </SystemInfoLoadingGate>
             <SettingsModal />

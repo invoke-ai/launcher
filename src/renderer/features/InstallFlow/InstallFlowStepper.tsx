@@ -34,7 +34,9 @@ export const InstallFlowStepper = memo(() => {
             <StepIndicator borderRadius="base">
               <StepStatus complete={complete} incomplete={<StepNumber />} active={<StepNumber />} />
             </StepIndicator>
-            <StepTitle color={activeStep >= index ? undefined : 'base.300'}>{t('installFlow.steps.' + step.toLowerCase())}</StepTitle>
+            <StepTitle color={activeStep >= index ? undefined : 'base.300'}>
+              {t(`installFlow.steps.${step.toLowerCase()}`)}
+            </StepTitle>
             <StepSeparator />
           </Step>
         );

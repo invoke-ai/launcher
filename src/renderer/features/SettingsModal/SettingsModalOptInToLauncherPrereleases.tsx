@@ -2,8 +2,8 @@ import { Checkbox, Flex, FormControl, FormHelperText, FormLabel, Icon } from '@i
 import { useStore } from '@nanostores/react';
 import type { ChangeEvent } from 'react';
 import { memo, useCallback } from 'react';
-import { PiFlaskFill } from 'react-icons/pi';
 import { useTranslation } from 'react-i18next';
+import { PiFlaskFill } from 'react-icons/pi';
 
 import { persistedStoreApi } from '@/renderer/services/store';
 

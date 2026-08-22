@@ -16,9 +16,9 @@ import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { SettingsModalHideLauncherAfterStartup } from '@/renderer/features/SettingsModal/SettingsModalHideLauncherAfterStartup';
-import { SettingsModalLanguage } from '@/renderer/features/SettingsModal/SettingsModalLanguage';
 import { SettingsModalInvokeNotifyForPrereleaseUpdates } from '@/renderer/features/SettingsModal/SettingsModalInvokeNotifyForPrereleaseUpdates';
 import { SettingsModalInvokeServerMode } from '@/renderer/features/SettingsModal/SettingsModalInvokeServerMode';
+import { SettingsModalLanguage } from '@/renderer/features/SettingsModal/SettingsModalLanguage';
 import { SettingsModalOptInToLauncherPrereleases } from '@/renderer/features/SettingsModal/SettingsModalOptInToLauncherPrereleases';
 import { SettingsModalResetButton } from '@/renderer/features/SettingsModal/SettingsModalResetButton';
 import { $isSettingsOpen } from '@/renderer/features/SettingsModal/state';

@@ -7,11 +7,14 @@ export default {
       title: 'הגדרות',
       language: 'שפה',
       serverMode: 'מצב שרת',
-      serverModeHelper: 'הרץ את Invoke במצב ללא ממשק (headless). תוכל לגשת ל- Invoke מכל מחשב ברשת המקומית שלך בכתובת המוצגת.',
+      serverModeHelper:
+        'הרץ את Invoke במצב ללא ממשק (headless). תוכל לגשת ל- Invoke מכל מחשב ברשת המקומית שלך בכתובת המוצגת.',
       hideLauncherAfterStartup: 'הסתר את המשגר לאחר ההפעלה',
-      hideLauncherHelper: 'לאחר ש- Invoke מתחיל, הסתר את המשגר למגש המערכת. לחץ על סמל המגש כדי להחזיר אותו ולצפות ביומנים. המשגר חוזר אם Invoke קורס ונסגר כש- Invoke נסגר כרגיל.',
+      hideLauncherHelper:
+        'לאחר ש- Invoke מתחיל, הסתר את המשגר למגש המערכת. לחץ על סמל המגש כדי להחזיר אותו ולצפות ביומנים. המשגר חוזר אם Invoke קורס ונסגר כש- Invoke נסגר כרגיל.',
       notifyForPrereleaseUpdates: 'עדכן אותי על גרסאות Invoke מקדימות',
-      notifyHelper: 'הצג התראה כאשר גרסה מקדימה של Invoke זמינה. גם אם זה מושבת, עדיין תוכל לבחור להתקין גרסה מקדימה בעת עדכון או התקנה של Invoke.',
+      notifyHelper:
+        'הצג התראה כאשר גרסה מקדימה של Invoke זמינה. גם אם זה מושבת, עדיין תוכל לבחור להתקין גרסה מקדימה בעת עדכון או התקנה של Invoke.',
       optInToLauncherPrereleases: 'הרשם לגרסות המשגר המוקדמות',
       optInHelper: 'בדוק גרסאות מקדימות של המשגר בעת ההפעלה. אם זה מושבת, המשגר יבדוק רק גרסאות יציבות.',
     },

@@ -45,7 +45,8 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (availableUpdates.stable !== null) {
     return (
       <Text as={Link} onClick={beginInstallFlow} color="invokeGreen.300" userSelect="none">
-        {t('launchFlow.updateAvailablePrefix')} <Strong fontSize="sm">{availableUpdates.stable.version}</Strong> {t('launchFlow.updateAvailableSuffix')}
+        {t('launchFlow.updateAvailablePrefix')} <Strong fontSize="sm">{availableUpdates.stable.version}</Strong>{' '}
+        {t('launchFlow.updateAvailableSuffix')}
       </Text>
     );
   }
@@ -53,7 +54,8 @@ export const LaunchFlowUpdateCheckerNotification = memo(({ installDirDetails }: 
   if (availableUpdates.pre !== null && notifyForPrereleaseUpdates) {
     return (
       <Text as={Link} onClick={beginInstallFlow} color="invokeGreen.300" userSelect="none">
-        {t('launchFlow.updateAvailablePrefix')} <Strong fontSize="sm">{availableUpdates.pre.version}</Strong> {t('launchFlow.updateAvailableSuffix')}
+        {t('launchFlow.updateAvailablePrefix')} <Strong fontSize="sm">{availableUpdates.pre.version}</Strong>{' '}
+        {t('launchFlow.updateAvailableSuffix')}
       </Text>
     );
   }

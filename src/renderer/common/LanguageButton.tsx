@@ -28,6 +28,7 @@ export const LanguageButton = memo(() => {
         {LANGUAGES.map((lang) => (
           <MenuItem
             key={lang.code}
+            // eslint-disable-next-line react/jsx-no-bind -- menu item needs per-language callback
             onClick={() => onChange(lang.code as LanguageCode)}
             isDisabled={lang.code === language}
           >

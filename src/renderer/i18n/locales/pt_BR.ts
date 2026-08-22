@@ -5,19 +5,23 @@ export default {
       title: 'Configurações',
       language: 'Idioma',
       serverMode: 'Modo de Servidor',
-      serverModeHelper: "Execute o Invoke no modo \"headless\" sem interface (UI). Você pode acessar o Invoke em qualquer computador da sua rede local pelo URL exibido.",
+      serverModeHelper:
+        'Execute o Invoke no modo "headless" sem interface (UI). Você pode acessar o Invoke em qualquer computador da sua rede local pelo URL exibido.',
       hideLauncherAfterStartup: 'Ocultar o lançador após a inicialização',
-      hideLauncherHelper: 'Depois que o Invoke iniciar, oculte o lançador na bandeja do sistema. Clique no ícone da bandeja para trazê-lo de volta e ver os logs. O lançador reaparece se o Invoke travar e fecha quando o Invoke é encerrado normalmente.',
+      hideLauncherHelper:
+        'Depois que o Invoke iniciar, oculte o lançador na bandeja do sistema. Clique no ícone da bandeja para trazê-lo de volta e ver os logs. O lançador reaparece se o Invoke travar e fecha quando o Invoke é encerrado normalmente.',
       notifyForPrereleaseUpdates: 'Notificar sobre pré-lançamentos do Invoke',
-      notifyHelper: 'Mostre uma notificação quando uma versão de pré-lançamento do Invoke estiver disponível. Mesmo se isso estiver desativado, você ainda poderá escolher instalar uma versão de pré-lançamento ao atualizar ou instalar o Invoke.',
+      notifyHelper:
+        'Mostre uma notificação quando uma versão de pré-lançamento do Invoke estiver disponível. Mesmo se isso estiver desativado, você ainda poderá escolher instalar uma versão de pré-lançamento ao atualizar ou instalar o Invoke.',
       optInToLauncherPrereleases: 'Optar por pré-lançamentos do lançador',
-      optInHelper: 'Verifique se há versões de pré-lançamento do lançador na inicialização. Se desativado, o lançador só verificará versões estáveis.'
+      optInHelper:
+        'Verifique se há versões de pré-lançamento do lançador na inicialização. Se desativado, o lançador só verificará versões estáveis.',
     },
     firstRun: {
       welcome: 'Bem-vindo ao Invoke.',
       installOrSelect: 'Instale ou selecione uma instalação existente para gerenciar.',
       selectExisting: 'Selecionar uma instalação existente',
-      install: 'Instalar'
+      install: 'Instalar',
     },
     launchFlow: {
       welcomeBack: 'Bem-vindo de volta.',
@@ -27,7 +31,8 @@ export default {
       manage: 'Gerenciar',
       launch: 'Iniciar',
       windowCrashed: 'Janela travou',
-      windowCrashedHelper: 'A janela da interface do Invoke fechou inesperadamente, mas o servidor ainda está em execução.',
+      windowCrashedHelper:
+        'A janela da interface do Invoke fechou inesperadamente, mas o servidor ainda está em execução.',
       windowCrashedAction: 'Você pode reabrir a janela ou encerrar o servidor.',
       back: 'Voltar',
       restarting: 'Reiniciando',
@@ -50,8 +55,8 @@ export default {
         starting: 'Iniciando',
         exiting: 'Saindo',
         exited: 'Saiu',
-        windowCrashed: 'Janela travou'
-      }
+        windowCrashed: 'Janela travou',
+      },
     },
     installFlow: {
       whatGpu: 'Qual GPU você tem?',
@@ -60,14 +65,14 @@ export default {
         nvidiaNew: 'Nvidia (30xx e superiores)',
         amd: 'AMD',
         intel: 'Intel Arc (XPU)',
-        noGpu: 'Sem GPU dedicada'
+        noGpu: 'Sem GPU dedicada',
       },
       gpuLabel: {
         nvidiaOld: 'uma GPU Nvidia 20xx ou mais antiga',
         nvidiaNew: 'uma GPU Nvidia 30xx ou mais recente',
         amd: 'uma GPU AMD',
         intel: 'uma GPU Intel Arc',
-        noGpu: 'nenhuma GPU'
+        noGpu: 'nenhuma GPU',
       },
       location: {
         whereTitle: 'Onde devemos instalar o Invoke?',
@@ -78,7 +83,7 @@ export default {
         notDirectory: 'Isso não é um diretório.',
         invalidTitle: 'Local de instalação inválido.',
         freshTitle: 'Instalação nova.',
-        existingTitle: 'Instalação existente do Invoke {{version}} encontrada.'
+        existingTitle: 'Instalação existente do Invoke {{version}} encontrada.',
       },
       version: {
         title: 'Qual versão devemos instalar?',
@@ -89,7 +94,7 @@ export default {
         prerelease: 'Pré-lançamento ({{version}})',
         manual: 'Manual',
         enterVersion: 'Digitar versão',
-        invalidSpecifier: 'Especificador de versão inválido.'
+        invalidSpecifier: 'Especificador de versão inválido.',
       },
       review: {
         title: 'Revisar a instalação.',
@@ -102,7 +107,7 @@ export default {
         youHavePrefix: 'Você tem',
         repairModeTitle: 'O modo de reparo pode corrigir problemas de instalação ou atualização.',
         repairModeBody: 'Ele reinstala o python e recria o ambiente virtual.',
-        repairMode: 'Modo de reparo'
+        repairMode: 'Modo de reparo',
       },
       installType: {
         freshPrefix: 'Vamos instalar',
@@ -118,7 +123,8 @@ export default {
         manualPrefix: 'Vamos instalar a versão especificada manualmente',
         manualMiddle: ' por cima da sua',
         manualSuffix: ' instalação existente.',
-        manualWarning: 'A instalação manual de versão pode quebrar as coisas. Certifique-se de fazer backup dos seus dados primeiro.'
+        manualWarning:
+          'A instalação manual de versão pode quebrar as coisas. Certifique-se de fazer backup dos seus dados primeiro.',
       },
       common: {
         back: 'Voltar',
@@ -126,27 +132,27 @@ export default {
         cancel: 'Cancelar',
         install: 'Instalar',
         finish: 'Concluir',
-        canceling: 'Cancelando'
-      }
+        canceling: 'Cancelando',
+      },
     },
     console: {
       open: 'Abrir Terminal',
       notStarted: {
         start: 'Iniciar Console de Desenvolvimento',
         activatePrefix: 'Vamos ativar o ambiente virtual da instalação em',
-        activateSuffix: '.'
+        activateSuffix: '.',
       },
       running: {
         title: 'Console de Desenvolvimento',
         kill: 'Encerrar Console',
         restart: 'Reiniciar Console',
-        hide: 'Ocultar Console'
-      }
+        hide: 'Ocultar Console',
+      },
     },
     errorBoundary: {
       title: 'Ocorreu um erro.',
       error: 'Erro',
-      unknownError: 'Ocorreu um erro desconhecido.'
-    }
-  }
+      unknownError: 'Ocorreu um erro desconhecido.',
+    },
+  },
 };

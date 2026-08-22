@@ -63,14 +63,16 @@ export const InstallFlowStepReview = memo(() => {
           {release.type === 'gh' && release.isPrerelease && (
             <ListItem>
               <Text fontSize="md">
-                {t('installFlow.review.prereleasePrefix')} <Strong>{t('installFlow.review.prereleaseStrong')}</Strong>{t('installFlow.review.prereleaseSuffix')}
+                {t('installFlow.review.prereleasePrefix')} <Strong>{t('installFlow.review.prereleaseStrong')}</Strong>
+                {t('installFlow.review.prereleaseSuffix')}
               </Text>
             </ListItem>
           )}
           {release.type === 'gh' && !release.isPrerelease && (
             <ListItem>
               <Text fontSize="md">
-                {t('installFlow.review.stablePrefix')} <Strong>{t('installFlow.review.stableStrong')}</Strong>{t('installFlow.review.stableSuffix')}
+                {t('installFlow.review.stablePrefix')} <Strong>{t('installFlow.review.stableStrong')}</Strong>
+                {t('installFlow.review.stableSuffix')}
               </Text>
             </ListItem>
           )}

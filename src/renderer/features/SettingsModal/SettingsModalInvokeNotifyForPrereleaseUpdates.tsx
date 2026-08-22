@@ -1,8 +1,8 @@
 import { Checkbox, Flex, FormControl, FormHelperText, FormLabel, Icon } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
-import { PiFlaskFill } from 'react-icons/pi';
 import { useTranslation } from 'react-i18next';
+import { PiFlaskFill } from 'react-icons/pi';
 
 import { persistedStoreApi } from '@/renderer/services/store';
 

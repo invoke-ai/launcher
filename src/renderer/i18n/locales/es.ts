@@ -5,13 +5,17 @@ export default {
       title: 'Configuración',
       language: 'Idioma',
       serverMode: 'Modo servidor',
-      serverModeHelper: 'Ejecuta Invoke en modo "headless" sin interfaz de usuario. Puedes acceder a Invoke desde cualquier equipo de tu red local mediante la URL mostrada.',
+      serverModeHelper:
+        'Ejecuta Invoke en modo "headless" sin interfaz de usuario. Puedes acceder a Invoke desde cualquier equipo de tu red local mediante la URL mostrada.',
       hideLauncherAfterStartup: 'Ocultar el iniciador al iniciar',
-      hideLauncherHelper: 'Una vez iniciado Invoke, oculta el iniciador en la bandeja del sistema. Haz clic en el icono de la bandeja para volver a mostrarlo y ver los registros. El iniciador reaparece si Invoke falla y se cierra cuando Invoke se apaga normalmente.',
+      hideLauncherHelper:
+        'Una vez iniciado Invoke, oculta el iniciador en la bandeja del sistema. Haz clic en el icono de la bandeja para volver a mostrarlo y ver los registros. El iniciador reaparece si Invoke falla y se cierra cuando Invoke se apaga normalmente.',
       notifyForPrereleaseUpdates: 'Notificar prelanzamientos de Invoke',
-      notifyHelper: 'Muestra una notificación cuando esté disponible una versión preliminar de Invoke. Aunque esté desactivado, podrás elegir instalar una versión preliminar al actualizar o instalar Invoke.',
+      notifyHelper:
+        'Muestra una notificación cuando esté disponible una versión preliminar de Invoke. Aunque esté desactivado, podrás elegir instalar una versión preliminar al actualizar o instalar Invoke.',
       optInToLauncherPrereleases: 'Optar por prelanzamientos del iniciador',
-      optInHelper: 'Busca versiones preliminares del iniciador al arrancar. Si está desactivado, el iniciador solo buscará versiones estables.',
+      optInHelper:
+        'Busca versiones preliminares del iniciador al arrancar. Si está desactivado, el iniciador solo buscará versiones estables.',
     },
     firstRun: {
       welcome: 'Bienvenido a Invoke.',
@@ -27,7 +31,8 @@ export default {
       manage: 'Gestionar',
       launch: 'Iniciar',
       windowCrashed: 'La ventana se cerró',
-      windowCrashedHelper: 'La ventana de la interfaz de Invoke se cerró inesperadamente, pero el servidor sigue en ejecución.',
+      windowCrashedHelper:
+        'La ventana de la interfaz de Invoke se cerró inesperadamente, pero el servidor sigue en ejecución.',
       windowCrashedAction: 'Puedes volver a abrir la ventana o apagar el servidor.',
       back: 'Atrás',
       restarting: 'Reiniciando',
@@ -115,7 +120,8 @@ export default {
         manualPrefix: 'Instalaremos la versión especificada manualmente',
         manualMiddle: ' sobre tu',
         manualSuffix: ' instalación.',
-        manualWarning: 'La instalación manual de versiones puede romper cosas. Asegúrate de respaldar tus datos primero.',
+        manualWarning:
+          'La instalación manual de versiones puede romper cosas. Asegúrate de respaldar tus datos primero.',
       },
       version: {
         title: '¿Qué versión deberíamos instalar?',

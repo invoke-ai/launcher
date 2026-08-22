@@ -29,7 +29,7 @@ import vi from './locales/vi';
 import zhCN from './locales/zh_CN';
 import zhTW from './locales/zh_TW';
 
-export type LanguageEntry = { code: string; label: string; native: string };
+type LanguageEntry = { code: string; label: string; native: string };
 
 export const LANGUAGES: LanguageEntry[] = [
   { code: 'en', label: 'English', native: 'English' },
@@ -62,11 +62,34 @@ export const LANGUAGES: LanguageEntry[] = [
 ];
 
 const resources = {
-  ar: ar, az: az, bg: bg, de: de, en: en, en_GB: enGB,
-  es: es, fi: fi, fr: fr, he: he, hu: hu, it: it, ja: ja,
-  ko: ko, mn: mn, nl: nl, pl: pl, pt: pt, pt_BR: ptBR,
-  ro: ro, ru: ru, sv: sv, tr: tr, uk: uk, vi: vi,
-  zh: zhCN, zh_CN: zhCN, zh_TW: zhTW,
+  ar: ar,
+  az: az,
+  bg: bg,
+  de: de,
+  en: en,
+  en_GB: enGB,
+  es: es,
+  fi: fi,
+  fr: fr,
+  he: he,
+  hu: hu,
+  it: it,
+  ja: ja,
+  ko: ko,
+  mn: mn,
+  nl: nl,
+  pl: pl,
+  pt: pt,
+  pt_BR: ptBR,
+  ro: ro,
+  ru: ru,
+  sv: sv,
+  tr: tr,
+  uk: uk,
+  vi: vi,
+  zh: zhCN,
+  zh_CN: zhCN,
+  zh_TW: zhTW,
 };
 
 export const setupI18n = (lng: string = 'en') => {

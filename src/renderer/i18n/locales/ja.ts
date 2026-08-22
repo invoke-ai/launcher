@@ -5,15 +5,24 @@ export default {
       title: '設定',
       language: '言語',
       serverMode: 'サーバーモード',
-      serverModeHelper: 'UI なしの「ヘッドレス」モードで Invoke を実行します。表示された URL から、同じネットワーク上の任意のコンピューターで Invoke にアクセスできます。',
+      serverModeHelper:
+        'UI なしの「ヘッドレス」モードで Invoke を実行します。表示された URL から、同じネットワーク上の任意のコンピューターで Invoke にアクセスできます。',
       hideLauncherAfterStartup: '起動後にランチャーを隠す',
-      hideLauncherHelper: 'Invoke が起動したら、ランチャーをシステムトレイに非表示にします。トレイアイコンをクリックすると、ログを確認するために元に戻せます。Invoke がクラッシュした場合はランチャーが再表示され、Invoke が正常に終了すると閉じます。',
+      hideLauncherHelper:
+        'Invoke が起動したら、ランチャーをシステムトレイに非表示にします。トレイアイコンをクリックすると、ログを確認するために元に戻せます。Invoke がクラッシュした場合はランチャーが再表示され、Invoke が正常に終了すると閉じます。',
       notifyForPrereleaseUpdates: 'Invoke のプレリリース通知',
-      notifyHelper: 'Invoke のプレリリース版が利用可能になったときに通知を表示します。無効にした場合でも、Invoke の更新時やインストール時にプレリリース版を選択してインストールできます。',
+      notifyHelper:
+        'Invoke のプレリリース版が利用可能になったときに通知を表示します。無効にした場合でも、Invoke の更新時やインストール時にプレリリース版を選択してインストールできます。',
       optInToLauncherPrereleases: 'ランチャーのプレリリースに参加',
-      optInHelper: '起動時にランチャーのプレリリース版を確認します。無効にした場合、ランチャーは安定版のみを確認します。',
+      optInHelper:
+        '起動時にランチャーのプレリリース版を確認します。無効にした場合、ランチャーは安定版のみを確認します。',
     },
-    firstRun: { welcome: 'Invoke へようこそ。', installOrSelect: '管理するインストールを新規にインストールするか、既存のものを選択します。', selectExisting: '既存のインストールを選択', install: 'インストール' },
+    firstRun: {
+      welcome: 'Invoke へようこそ。',
+      installOrSelect: '管理するインストールを新規にインストールするか、既存のものを選択します。',
+      selectExisting: '既存のインストールを選択',
+      install: 'インストール',
+    },
     launchFlow: {
       welcomeBack: 'おかえりなさい。',
       usingPrefix: '使用中:',
@@ -50,9 +59,28 @@ export default {
     },
     installFlow: {
       whatGpu: 'どの GPU をお持ちですか?',
-      gpu: { nvidiaOld: 'Nvidia (20xx 以下)', nvidiaNew: 'Nvidia (30xx 以上)', amd: 'AMD', intel: 'Intel Arc (XPU)', noGpu: '専用 GPU なし' },
-      gpuLabel: { nvidiaOld: 'Nvidia 20xx 以前の GPU', nvidiaNew: 'Nvidia 30xx 以降の GPU', amd: 'AMD GPU', intel: 'Intel Arc GPU', noGpu: 'GPU なし' },
-      common: { back: '戻る', next: '次へ', cancel: 'キャンセル', install: 'インストール', finish: '完了', canceling: 'キャンセル中' },
+      gpu: {
+        nvidiaOld: 'Nvidia (20xx 以下)',
+        nvidiaNew: 'Nvidia (30xx 以上)',
+        amd: 'AMD',
+        intel: 'Intel Arc (XPU)',
+        noGpu: '専用 GPU なし',
+      },
+      gpuLabel: {
+        nvidiaOld: 'Nvidia 20xx 以前の GPU',
+        nvidiaNew: 'Nvidia 30xx 以降の GPU',
+        amd: 'AMD GPU',
+        intel: 'Intel Arc GPU',
+        noGpu: 'GPU なし',
+      },
+      common: {
+        back: '戻る',
+        next: '次へ',
+        cancel: 'キャンセル',
+        install: 'インストール',
+        finish: '完了',
+        canceling: 'キャンセル中',
+      },
       location: {
         choose: 'インストール先を選択',
         dataRetainedPrefix: '再インストールまたは更新時、',
@@ -91,7 +119,8 @@ export default {
         manualPrefix: '手動で指定したバージョンをインストールします:',
         manualMiddle: ' を既存のインストールに',
         manualSuffix: '適用します。',
-        manualWarning: '手動でのバージョンインストールは問題を引き起こす可能性があります。事前にデータをバックアップしてください。',
+        manualWarning:
+          '手動でのバージョンインストールは問題を引き起こす可能性があります。事前にデータをバックアップしてください。',
       },
       version: {
         title: 'どのバージョンをインストールしますか?',
@@ -107,8 +136,17 @@ export default {
     },
     console: {
       open: 'ターミナルを開く',
-      notStarted: { start: '開発コンソールを開始', activatePrefix: '次の場所のインストールの仮想環境をアクティブ化します:', activateSuffix: '.' },
-      running: { title: '開発コンソール', kill: 'コンソールを終了', restart: 'コンソールを再起動', hide: 'コンソールを隠す' },
+      notStarted: {
+        start: '開発コンソールを開始',
+        activatePrefix: '次の場所のインストールの仮想環境をアクティブ化します:',
+        activateSuffix: '.',
+      },
+      running: {
+        title: '開発コンソール',
+        kill: 'コンソールを終了',
+        restart: 'コンソールを再起動',
+        hide: 'コンソールを隠す',
+      },
     },
     errorBoundary: { title: 'エラーが発生しました', error: 'エラー', unknownError: '不明なエラーが発生しました。' },
   },

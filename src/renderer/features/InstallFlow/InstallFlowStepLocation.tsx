@@ -41,7 +41,8 @@ export const InstallFlowStepLocation = memo(() => {
         </ButtonGroup>
         {dirDetails && dirDetails.canInstall && dirDetails.isInstalled && (
           <Text fontSize="md">
-            {t('installFlow.location.dataRetainedPrefix')} <Strong>{t('installFlow.location.dataRetainedStrong')}</Strong>
+            {t('installFlow.location.dataRetainedPrefix')}{' '}
+            <Strong>{t('installFlow.location.dataRetainedStrong')}</Strong>
           </Text>
         )}
         {dirDetails && dirDetails.canInstall && !dirDetails.isInstalled && (

@@ -5,19 +5,23 @@ export default {
       title: 'Settings',
       language: 'Language',
       serverMode: 'Server Mode',
-      serverModeHelper: "Run Invoke in \"headless\" mode with no UI. You can access Invoke on any computer on your local network at the displayed URL.",
+      serverModeHelper:
+        'Run Invoke in "headless" mode with no UI. You can access Invoke on any computer on your local network at the displayed URL.',
       hideLauncherAfterStartup: 'Hide Launcher After Startup',
-      hideLauncherHelper: 'Once Invoke has started, hide the launcher to the system tray. Click the tray icon to bring it back to view the logs. The launcher reappears if Invoke crashes and closes when Invoke shuts down normally.',
+      hideLauncherHelper:
+        'Once Invoke has started, hide the launcher to the system tray. Click the tray icon to bring it back to view the logs. The launcher reappears if Invoke crashes and closes when Invoke shuts down normally.',
       notifyForPrereleaseUpdates: 'Notify for Invoke Prereleases',
-      notifyHelper: 'Show a notification when a prerelease version of Invoke is available. Even if this is disabled, you will still be able to choose to install a prerelease version when updating or installing Invoke.',
+      notifyHelper:
+        'Show a notification when a prerelease version of Invoke is available. Even if this is disabled, you will still be able to choose to install a prerelease version when updating or installing Invoke.',
       optInToLauncherPrereleases: 'Opt-in to Launcher Prereleases',
-      optInHelper: 'Check for prerelease versions of the launcher on startup. If disabled, the launcher will only check for stable releases.'
+      optInHelper:
+        'Check for prerelease versions of the launcher on startup. If disabled, the launcher will only check for stable releases.',
     },
     firstRun: {
       welcome: 'Welcome to Invoke.',
       installOrSelect: 'Install or select an existing installation to manage.',
       selectExisting: 'Select an existing installation',
-      install: 'Install'
+      install: 'Install',
     },
     launchFlow: {
       welcomeBack: 'Welcome back.',
@@ -50,8 +54,8 @@ export default {
         starting: 'Starting',
         exiting: 'Exiting',
         exited: 'Exited',
-        windowCrashed: 'Window Crashed'
-      }
+        windowCrashed: 'Window Crashed',
+      },
     },
     installFlow: {
       whatGpu: 'What GPU do you have?',
@@ -60,14 +64,14 @@ export default {
         nvidiaNew: 'Nvidia (30xx and above)',
         amd: 'AMD',
         intel: 'Intel Arc (XPU)',
-        noGpu: 'No dedicated GPU'
+        noGpu: 'No dedicated GPU',
       },
       gpuLabel: {
         nvidiaOld: 'a Nvidia 20xx or older GPU',
         nvidiaNew: 'a Nvidia 30xx or newer GPU',
         amd: 'an AMD GPU',
         intel: 'an Intel Arc GPU',
-        noGpu: 'no GPU'
+        noGpu: 'no GPU',
       },
       location: {
         whereTitle: 'Where should we install Invoke?',
@@ -78,7 +82,7 @@ export default {
         notDirectory: 'This is not a directory.',
         invalidTitle: 'Invalid install location.',
         freshTitle: 'Fresh install.',
-        existingTitle: 'Existing Invoke {{version}} install found.'
+        existingTitle: 'Existing Invoke {{version}} install found.',
       },
       version: {
         title: 'Which version should we install?',
@@ -89,7 +93,7 @@ export default {
         prerelease: 'Prerelease ({{version}})',
         manual: 'Manual',
         enterVersion: 'Enter version',
-        invalidSpecifier: 'Invalid version specifier.'
+        invalidSpecifier: 'Invalid version specifier.',
       },
       review: {
         title: 'Review installation.',
@@ -102,7 +106,7 @@ export default {
         youHavePrefix: 'You have',
         repairModeTitle: 'Repair mode can fix installation or update issues.',
         repairModeBody: 'It reinstalls python and recreates the virtual environment.',
-        repairMode: 'Repair mode'
+        repairMode: 'Repair mode',
       },
       installType: {
         freshPrefix: 'We will install',
@@ -118,7 +122,7 @@ export default {
         manualPrefix: 'We will install the manually specified version',
         manualMiddle: ' on top of your existing',
         manualSuffix: ' install.',
-        manualWarning: 'Manual version installation can break things. Make sure to back up your data first.'
+        manualWarning: 'Manual version installation can break things. Make sure to back up your data first.',
       },
       common: {
         back: 'Back',
@@ -126,27 +130,27 @@ export default {
         cancel: 'Cancel',
         install: 'Install',
         finish: 'Finish',
-        canceling: 'Cancelling'
-      }
+        canceling: 'Cancelling',
+      },
     },
     console: {
       open: 'Open Terminal',
       notStarted: {
         start: 'Start Dev Console',
         activatePrefix: 'We will activate the virtual environment for the install at',
-        activateSuffix: '.'
+        activateSuffix: '.',
       },
       running: {
         title: 'Dev Console',
         kill: 'Kill Console',
         restart: 'Restart Console',
-        hide: 'Hide Console'
-      }
+        hide: 'Hide Console',
+      },
     },
     errorBoundary: {
       title: 'An error occurred.',
       error: 'Error',
-      unknownError: 'An unknown error occurred.'
-    }
-  }
+      unknownError: 'An unknown error occurred.',
+    },
+  },
 };

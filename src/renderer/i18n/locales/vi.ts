@@ -5,15 +5,24 @@ export default {
       title: 'Cài đặt',
       language: 'Ngôn ngữ',
       serverMode: 'Chế độ máy chủ',
-      serverModeHelper: 'Chạy Invoke ở chế độ "headless" không có UI. Bạn có thể truy cập Invoke trên mọi máy tính trong mạng nội bộ của mình tại URL được hiển thị.',
+      serverModeHelper:
+        'Chạy Invoke ở chế độ "headless" không có UI. Bạn có thể truy cập Invoke trên mọi máy tính trong mạng nội bộ của mình tại URL được hiển thị.',
       hideLauncherAfterStartup: 'Ẩn launcher sau khi khởi động',
-      hideLauncherHelper: 'Khi Invoke đã khởi động, hãy ẩn launcher vào khay hệ thống. Nhấp vào biểu tượng khay để đưa nó trở lại xem nhật ký. Launcher sẽ xuất hiện lại nếu Invoke bị treo và đóng khi Invoke tắt bình thường.',
+      hideLauncherHelper:
+        'Khi Invoke đã khởi động, hãy ẩn launcher vào khay hệ thống. Nhấp vào biểu tượng khay để đưa nó trở lại xem nhật ký. Launcher sẽ xuất hiện lại nếu Invoke bị treo và đóng khi Invoke tắt bình thường.',
       notifyForPrereleaseUpdates: 'Thông báo bản phát hành trước của Invoke',
-      notifyHelper: 'Hiển thị thông báo khi có phiên bản phát hành trước của Invoke. Ngay cả khi tùy chọn này bị tắt, bạn vẫn có thể chọn cài đặt phiên bản phát hành trước khi cập nhật hoặc cài đặt Invoke.',
+      notifyHelper:
+        'Hiển thị thông báo khi có phiên bản phát hành trước của Invoke. Ngay cả khi tùy chọn này bị tắt, bạn vẫn có thể chọn cài đặt phiên bản phát hành trước khi cập nhật hoặc cài đặt Invoke.',
       optInToLauncherPrereleases: 'Tham gia bản phát hành trước của launcher',
-      optInHelper: 'Kiểm tra các phiên bản phát hành trước của launcher khi khởi động. Nếu bị tắt, launcher sẽ chỉ kiểm tra các bản phát hành ổn định.',
+      optInHelper:
+        'Kiểm tra các phiên bản phát hành trước của launcher khi khởi động. Nếu bị tắt, launcher sẽ chỉ kiểm tra các bản phát hành ổn định.',
     },
-    firstRun: { welcome: 'Chào mừng đến với Invoke.', installOrSelect: 'Cài đặt hoặc chọn một bản cài đặt hiện có để quản lý.', selectExisting: 'Chọn bản cài đặt hiện có', install: 'Cài đặt' },
+    firstRun: {
+      welcome: 'Chào mừng đến với Invoke.',
+      installOrSelect: 'Cài đặt hoặc chọn một bản cài đặt hiện có để quản lý.',
+      selectExisting: 'Chọn bản cài đặt hiện có',
+      install: 'Cài đặt',
+    },
     launchFlow: {
       welcomeBack: 'Chào mừng trở lại.',
       usingPrefix: 'Đang dùng:',
@@ -50,9 +59,28 @@ export default {
     },
     installFlow: {
       whatGpu: 'Bạn có GPU nào?',
-      gpu: { nvidiaOld: 'Nvidia (20xx trở xuống)', nvidiaNew: 'Nvidia (30xx trở lên)', amd: 'AMD', intel: 'Intel Arc (XPU)', noGpu: 'Không có GPU chuyên dụng' },
-      gpuLabel: { nvidiaOld: 'GPU Nvidia 20xx hoặc cũ hơn', nvidiaNew: 'GPU Nvidia 30xx hoặc mới hơn', amd: 'GPU AMD', intel: 'GPU Intel Arc', noGpu: 'không có GPU' },
-      common: { back: 'Quay lại', next: 'Tiếp theo', cancel: 'Hủy', install: 'Cài đặt', finish: 'Hoàn tất', canceling: 'Đang hủy' },
+      gpu: {
+        nvidiaOld: 'Nvidia (20xx trở xuống)',
+        nvidiaNew: 'Nvidia (30xx trở lên)',
+        amd: 'AMD',
+        intel: 'Intel Arc (XPU)',
+        noGpu: 'Không có GPU chuyên dụng',
+      },
+      gpuLabel: {
+        nvidiaOld: 'GPU Nvidia 20xx hoặc cũ hơn',
+        nvidiaNew: 'GPU Nvidia 30xx hoặc mới hơn',
+        amd: 'GPU AMD',
+        intel: 'GPU Intel Arc',
+        noGpu: 'không có GPU',
+      },
+      common: {
+        back: 'Quay lại',
+        next: 'Tiếp theo',
+        cancel: 'Hủy',
+        install: 'Cài đặt',
+        finish: 'Hoàn tất',
+        canceling: 'Đang hủy',
+      },
       location: {
         choose: 'Chọn vị trí cài đặt',
         dataRetainedPrefix: 'Khi cài đặt lại hoặc cập nhật,',
@@ -107,8 +135,17 @@ export default {
     },
     console: {
       open: 'Mở Terminal',
-      notStarted: { start: 'Bắt đầu bảng điều khiển nhà phát triển', activatePrefix: 'Chúng tôi sẽ kích hoạt môi trường ảo cho bản cài đặt tại', activateSuffix: '.' },
-      running: { title: 'Bảng điều khiển nhà phát triển', kill: 'Kết thúc bảng điều khiển', restart: 'Khởi động lại bảng điều khiển', hide: 'Ẩn bảng điều khiển' },
+      notStarted: {
+        start: 'Bắt đầu bảng điều khiển nhà phát triển',
+        activatePrefix: 'Chúng tôi sẽ kích hoạt môi trường ảo cho bản cài đặt tại',
+        activateSuffix: '.',
+      },
+      running: {
+        title: 'Bảng điều khiển nhà phát triển',
+        kill: 'Kết thúc bảng điều khiển',
+        restart: 'Khởi động lại bảng điều khiển',
+        hide: 'Ẩn bảng điều khiển',
+      },
     },
     errorBoundary: { title: 'Đã xảy ra lỗi', error: 'Lỗi', unknownError: 'Đã xảy ra lỗi không xác định.' },
   },

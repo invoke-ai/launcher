@@ -40,7 +40,7 @@ export const LaunchFlowNotRunning = memo(({ installDirDetails }: Props) => {
       <BodyContent>
         <Heading>{t('launchFlow.welcomeBack')}</Heading>
         <Text fontSize="md">
-          {t('launchFlow.usingPrefix')}{' '}<Strong>Invoke {installDirDetails.version}</Strong>{' '}{t('launchFlow.usingAt')}{' '}
+          {t('launchFlow.usingPrefix')} <Strong>Invoke {installDirDetails.version}</Strong> {t('launchFlow.usingAt')}{' '}
           <Strong as={Link} onClick={openDir}>
             {installDirDetails.path}
           </Strong>

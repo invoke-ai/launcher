@@ -7,13 +7,20 @@ export default {
       serverMode: '伺服器模式',
       serverModeHelper: '以無 UI 的「無頭」模式執行 Invoke。您可以在區域網路上的任何電腦，透過顯示的 URL 存取 Invoke。',
       hideLauncherAfterStartup: '啟動後隱藏啟動器',
-      hideLauncherHelper: 'Invoke 啟動後，將啟動器隱藏到系統匣。按一下系統匣圖示即可將其帶回以檢視記錄。若 Invoke 當機，啟動器會重新出現；當 Invoke 正常關閉時，啟動器會關閉。',
+      hideLauncherHelper:
+        'Invoke 啟動後，將啟動器隱藏到系統匣。按一下系統匣圖示即可將其帶回以檢視記錄。若 Invoke 當機，啟動器會重新出現；當 Invoke 正常關閉時，啟動器會關閉。',
       notifyForPrereleaseUpdates: 'Invoke 預發行版本通知',
-      notifyHelper: '當 Invoke 的預發行版本可用時顯示通知。即使停用此選項，您在更新或安裝 Invoke 時仍可選擇安裝預發行版本。',
+      notifyHelper:
+        '當 Invoke 的預發行版本可用時顯示通知。即使停用此選項，您在更新或安裝 Invoke 時仍可選擇安裝預發行版本。',
       optInToLauncherPrereleases: '參與啟動器預發行',
       optInHelper: '在啟動時檢查啟動器的預發行版本。若停用，啟動器只會檢查穩定版本。',
     },
-    firstRun: { welcome: '歡迎使用 Invoke。', installOrSelect: '安裝或選擇要管理的現有安裝。', selectExisting: '選擇現有安裝', install: '安裝' },
+    firstRun: {
+      welcome: '歡迎使用 Invoke。',
+      installOrSelect: '安裝或選擇要管理的現有安裝。',
+      selectExisting: '選擇現有安裝',
+      install: '安裝',
+    },
     launchFlow: {
       welcomeBack: '歡迎回來。',
       usingPrefix: '使用中：',
@@ -50,8 +57,20 @@ export default {
     },
     installFlow: {
       whatGpu: '您使用哪種 GPU？',
-      gpu: { nvidiaOld: 'Nvidia (20xx 及以下)', nvidiaNew: 'Nvidia (30xx 及以上)', amd: 'AMD', intel: 'Intel Arc (XPU)', noGpu: '無獨立 GPU' },
-      gpuLabel: { nvidiaOld: 'Nvidia 20xx 或更舊的 GPU', nvidiaNew: 'Nvidia 30xx 或更新的 GPU', amd: 'AMD GPU', intel: 'Intel Arc GPU', noGpu: '無 GPU' },
+      gpu: {
+        nvidiaOld: 'Nvidia (20xx 及以下)',
+        nvidiaNew: 'Nvidia (30xx 及以上)',
+        amd: 'AMD',
+        intel: 'Intel Arc (XPU)',
+        noGpu: '無獨立 GPU',
+      },
+      gpuLabel: {
+        nvidiaOld: 'Nvidia 20xx 或更舊的 GPU',
+        nvidiaNew: 'Nvidia 30xx 或更新的 GPU',
+        amd: 'AMD GPU',
+        intel: 'Intel Arc GPU',
+        noGpu: '無 GPU',
+      },
       common: { back: '返回', next: '下一步', cancel: '取消', install: '安裝', finish: '完成', canceling: '正在取消' },
       location: {
         choose: '選擇安裝位置',
@@ -107,7 +126,11 @@ export default {
     },
     console: {
       open: '開啟終端機',
-      notStarted: { start: '啟動開發主控台', activatePrefix: '我們將啟用位於以下位置的安裝的虛擬環境：', activateSuffix: '。' },
+      notStarted: {
+        start: '啟動開發主控台',
+        activatePrefix: '我們將啟用位於以下位置的安裝的虛擬環境：',
+        activateSuffix: '。',
+      },
       running: { title: '開發主控台', kill: '終止主控台', restart: '重新啟動主控台', hide: '隱藏主控台' },
     },
     errorBoundary: { title: '發生錯誤', error: '錯誤', unknownError: '發生未知錯誤。' },

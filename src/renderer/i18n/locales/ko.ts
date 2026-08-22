@@ -5,15 +5,23 @@ export default {
       title: '설정',
       language: '언어',
       serverMode: '서버 모드',
-      serverModeHelper: 'UI 없이 「헤드리스」 모드로 Invoke를 실행합니다. 표시된 URL을 통해 로컬 네트워크의 모든 컴퓨터에서 Invoke에 액세스할 수 있습니다.',
+      serverModeHelper:
+        'UI 없이 「헤드리스」 모드로 Invoke를 실행합니다. 표시된 URL을 통해 로컬 네트워크의 모든 컴퓨터에서 Invoke에 액세스할 수 있습니다.',
       hideLauncherAfterStartup: '시작 후 런처 숨기기',
-      hideLauncherHelper: 'Invoke가 시작되면 런처를 시스템 트레이로 숨깁니다. 트레이 아이콘을 클릭하면 로그를 보기 위해 다시 표시할 수 있습니다. Invoke가 충돌하면 런처가 다시 나타나고, Invoke가 정상 종료되면 닫힙니다.',
+      hideLauncherHelper:
+        'Invoke가 시작되면 런처를 시스템 트레이로 숨깁니다. 트레이 아이콘을 클릭하면 로그를 보기 위해 다시 표시할 수 있습니다. Invoke가 충돌하면 런처가 다시 나타나고, Invoke가 정상 종료되면 닫힙니다.',
       notifyForPrereleaseUpdates: 'Invoke 프리릴리스 알림',
-      notifyHelper: 'Invoke의 프리릴리스 버전이 제공되면 알림을 표시합니다. 비활성화해도 Invoke를 업데이트하거나 설치할 때 프리릴리스 버전을 선택해 설치할 수 있습니다.',
+      notifyHelper:
+        'Invoke의 프리릴리스 버전이 제공되면 알림을 표시합니다. 비활성화해도 Invoke를 업데이트하거나 설치할 때 프리릴리스 버전을 선택해 설치할 수 있습니다.',
       optInToLauncherPrereleases: '런처 프리릴리스 참여',
       optInHelper: '시작 시 런처의 프리릴리스 버전을 확인합니다. 비활성화하면 런처는 안정 버전만 확인합니다.',
     },
-    firstRun: { welcome: 'Invoke에 오신 것을 환영합니다.', installOrSelect: '관리할 설치를 새로 설치하거나 기존 설치를 선택하세요.', selectExisting: '기존 설치 선택', install: '설치' },
+    firstRun: {
+      welcome: 'Invoke에 오신 것을 환영합니다.',
+      installOrSelect: '관리할 설치를 새로 설치하거나 기존 설치를 선택하세요.',
+      selectExisting: '기존 설치 선택',
+      install: '설치',
+    },
     launchFlow: {
       welcomeBack: '다시 오신 것을 환영합니다.',
       usingPrefix: '사용 중:',
@@ -50,8 +58,20 @@ export default {
     },
     installFlow: {
       whatGpu: '어떤 GPU를 가지고 있나요?',
-      gpu: { nvidiaOld: 'Nvidia (20xx 이하)', nvidiaNew: 'Nvidia (30xx 이상)', amd: 'AMD', intel: 'Intel Arc (XPU)', noGpu: '전용 GPU 없음' },
-      gpuLabel: { nvidiaOld: 'Nvidia 20xx 이하 GPU', nvidiaNew: 'Nvidia 30xx 이상 GPU', amd: 'AMD GPU', intel: 'Intel Arc GPU', noGpu: 'GPU 없음' },
+      gpu: {
+        nvidiaOld: 'Nvidia (20xx 이하)',
+        nvidiaNew: 'Nvidia (30xx 이상)',
+        amd: 'AMD',
+        intel: 'Intel Arc (XPU)',
+        noGpu: '전용 GPU 없음',
+      },
+      gpuLabel: {
+        nvidiaOld: 'Nvidia 20xx 이하 GPU',
+        nvidiaNew: 'Nvidia 30xx 이상 GPU',
+        amd: 'AMD GPU',
+        intel: 'Intel Arc GPU',
+        noGpu: 'GPU 없음',
+      },
       common: { back: '뒤로', next: '다음', cancel: '취소', install: '설치', finish: '완료', canceling: '취소 중' },
       location: {
         choose: '설치 위치 선택',
@@ -107,7 +127,11 @@ export default {
     },
     console: {
       open: '터미널 열기',
-      notStarted: { start: '개발 콘솔 시작', activatePrefix: '다음 위치의 설치에 대한 가상 환경을 활성화합니다:', activateSuffix: '.' },
+      notStarted: {
+        start: '개발 콘솔 시작',
+        activatePrefix: '다음 위치의 설치에 대한 가상 환경을 활성화합니다:',
+        activateSuffix: '.',
+      },
       running: { title: '개발 콘솔', kill: '콘솔 종료', restart: '콘솔 다시 시작', hide: '콘솔 숨기기' },
     },
     errorBoundary: { title: '오류가 발생했습니다', error: '오류', unknownError: '알 수 없는 오류가 발생했습니다.' },

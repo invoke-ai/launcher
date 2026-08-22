@@ -22,7 +22,7 @@ export const InstallFlowLogs = memo(() => {
         top={2}
         right={2}
       >
-        {t('installFlow.status.' + installProcessStatus.type)}
+        {t(`installFlow.status.${installProcessStatus.type}`)}
       </XTermLogViewerStatusIndicator>
     </XTermLogViewer>
   );

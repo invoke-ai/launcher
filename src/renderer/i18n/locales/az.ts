@@ -7,13 +7,17 @@ export default {
       title: 'Parametrlər',
       language: 'Dil',
       serverMode: 'Server rejimi',
-      serverModeHelper: 'Invoke-i interfeyssiz (headless) rejimdə işlədin. Göstərilən URL üzərindən yerli şəbəkənizdəki istənilən kompüterdən Invoke-ə daxil ola bilərsiniz.',
+      serverModeHelper:
+        'Invoke-i interfeyssiz (headless) rejimdə işlədin. Göstərilən URL üzərindən yerli şəbəkənizdəki istənilən kompüterdən Invoke-ə daxil ola bilərsiniz.',
       hideLauncherAfterStartup: 'Başladıqdan sonra başladıcını gizlə',
-      hideLauncherHelper: 'Invoke işə düşdükdən sonra başladıcını sistem tepsisinə gizlə. Qaytarmaq üçün tepsidəki ikona kliklə və loglara bax. Invoke çökərsə başladıcı yenidən görünür və Invoke normal bağlananda bağlanır.',
+      hideLauncherHelper:
+        'Invoke işə düşdükdən sonra başladıcını sistem tepsisinə gizlə. Qaytarmaq üçün tepsidəki ikona kliklə və loglara bax. Invoke çökərsə başladıcı yenidən görünür və Invoke normal bağlananda bağlanır.',
       notifyForPrereleaseUpdates: 'Invoke ön buraxılışları haqqında mənə bildir',
-      notifyHelper: 'Invoke-un ön buraxılış versiyası mövcud olduqda bildiriş göstər. Bu deaktiv edilsə belə, Invoke-u yeniləyərkən və ya quraşdırarkən hələ də ön buraxılış versiyasını seçə bilərsiniz.',
+      notifyHelper:
+        'Invoke-un ön buraxılış versiyası mövcud olduqda bildiriş göstər. Bu deaktiv edilsə belə, Invoke-u yeniləyərkən və ya quraşdırarkən hələ də ön buraxılış versiyasını seçə bilərsiniz.',
       optInToLauncherPrereleases: 'Başladıcının ön buraxılışlarına qoşul',
-      optInHelper: 'Başlanğıcda başladıcının ön buraxılış versiyalarını yoxla. Deaktiv edilərsə, başladıcı yalnız sabit buraxılışları yoxlayacaq.',
+      optInHelper:
+        'Başlanğıcda başladıcının ön buraxılış versiyalarını yoxla. Deaktiv edilərsə, başladıcı yalnız sabit buraxılışları yoxlayacaq.',
     },
     firstRun: {
       welcome: 'Invoke-ə xoş gəlmisiniz.',
@@ -117,11 +121,13 @@ export default {
         manualPrefix: 'Əl ilə təyin edilmiş versiyanı quraşdıracağıq',
         manualMiddle: ' sizin mövcud',
         manualSuffix: ' quraşdırmanızın üzərinə.',
-        manualWarning: 'Əl ilə versiya quraşdırma hər şeyi poza bilər. Əvvəlcə məlumatlarınızın ehtiyat nüsxəsini çıxardığınızdan əmin olun.',
+        manualWarning:
+          'Əl ilə versiya quraşdırma hər şeyi poza bilər. Əvvəlcə məlumatlarınızın ehtiyat nüsxəsini çıxardığınızdan əmin olun.',
       },
       version: {
         title: 'Hansı versiyanı quraşdırmalıyıq?',
-        releasesError: 'GitHub-dan mövcud buraxılışları əldə etmək mümkün deyil. Yenidən cəhd etmək üçün buraya kliklə.',
+        releasesError:
+          'GitHub-dan mövcud buraxılışları əldə etmək mümkün deyil. Yenidən cəhd etmək üçün buraya kliklə.',
         loading: 'Buraxılışlar yüklənir',
         releaseNotes: 'Buraxılış qeydləri',
         stable: 'Sabit ({{version}})',

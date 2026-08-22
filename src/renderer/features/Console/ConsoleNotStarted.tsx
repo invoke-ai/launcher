@@ -18,7 +18,8 @@ export const ConsoleNotRunning = memo(() => {
       </Button>
       {installDir?.isInstalled && (
         <Text fontSize="md">
-          {t('console.notStarted.activatePrefix')}{' '}<Strong>{installDir.path}</Strong>{t('console.notStarted.activateSuffix')}
+          {t('console.notStarted.activatePrefix')} <Strong>{installDir.path}</Strong>
+          {t('console.notStarted.activateSuffix')}
         </Text>
       )}
     </Flex>

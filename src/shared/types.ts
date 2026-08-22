@@ -45,7 +45,34 @@ export type WindowProps = {
 /**
  * Data stored in the electron store.
  */
-export type LanguageCode = 'en'|'zh_CN'|'zh_TW'|'ja'|'ko'|'de'|'es'|'fr'|'it'|'ru'|'pt'|'pl'|'vi'|'tr'|'uk'|'nl'|'sv'|'ar'|'az'|'bg'|'fi'|'he'|'hu'|'mn'|'ro'|'en_GB'|'pt_BR';
+export type LanguageCode =
+  | 'en'
+  | 'zh_CN'
+  | 'zh_TW'
+  | 'ja'
+  | 'ko'
+  | 'de'
+  | 'es'
+  | 'fr'
+  | 'it'
+  | 'ru'
+  | 'pt'
+  | 'pl'
+  | 'vi'
+  | 'tr'
+  | 'uk'
+  | 'nl'
+  | 'sv'
+  | 'ar'
+  | 'az'
+  | 'bg'
+  | 'fi'
+  | 'he'
+  | 'hu'
+  | 'mn'
+  | 'ro'
+  | 'en_GB'
+  | 'pt_BR';
 
 export type StoreData = {
   language: LanguageCode;
@@ -93,7 +120,35 @@ const winSizePropsSchema = {
 export const schema: Schema<StoreData> = {
   language: {
     type: 'string',
-    enum: ['en', 'zh_CN', 'zh_TW', 'ja', 'ko', 'de', 'es', 'fr', 'it', 'ru', 'pt', 'pl', 'vi', 'tr', 'uk', 'nl', 'sv', 'ar', 'az', 'bg', 'fi', 'he', 'hu', 'mn', 'ro', 'en_GB', 'pt_BR'],
+    enum: [
+      'en',
+      'zh_CN',
+      'zh_TW',
+      'ja',
+      'ko',
+      'de',
+      'es',
+      'fr',
+      'it',
+      'ru',
+      'pt',
+      'pl',
+      'vi',
+      'tr',
+      'uk',
+      'nl',
+      'sv',
+      'ar',
+      'az',
+      'bg',
+      'fi',
+      'he',
+      'hu',
+      'mn',
+      'ro',
+      'en_GB',
+      'pt_BR',
+    ],
     default: 'en',
   },
   installDir: {

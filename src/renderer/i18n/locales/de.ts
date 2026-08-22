@@ -5,13 +5,17 @@ export default {
       title: 'Einstellungen',
       language: 'Sprache',
       serverMode: 'Servermodus',
-      serverModeHelper: 'Führe Invoke im "Headless"-Modus ohne Benutzeroberfläche aus. Du kannst von jedem Computer in deinem lokalen Netzwerk über die angezeigte URL auf Invoke zugreifen.',
+      serverModeHelper:
+        'Führe Invoke im "Headless"-Modus ohne Benutzeroberfläche aus. Du kannst von jedem Computer in deinem lokalen Netzwerk über die angezeigte URL auf Invoke zugreifen.',
       hideLauncherAfterStartup: 'Launcher nach dem Start verbergen',
-      hideLauncherHelper: 'Sobald Invoke gestartet ist, wird der Launcher in der Systemablage ausgeblendet. Klicke auf das Tray-Symbol, um ihn wieder anzuzeigen und die Logs einzusehen. Der Launcher erscheint wieder, wenn Invoke abstürzt, und schließt sich, wenn Invoke normal beendet wird.',
+      hideLauncherHelper:
+        'Sobald Invoke gestartet ist, wird der Launcher in der Systemablage ausgeblendet. Klicke auf das Tray-Symbol, um ihn wieder anzuzeigen und die Logs einzusehen. Der Launcher erscheint wieder, wenn Invoke abstürzt, und schließt sich, wenn Invoke normal beendet wird.',
       notifyForPrereleaseUpdates: 'Über Invoke-Vorabversionen benachrichtigen',
-      notifyHelper: 'Zeige eine Benachrichtigung an, wenn eine Vorabversion von Invoke verfügbar ist. Auch wenn dies deaktiviert ist, kannst du beim Aktualisieren oder Installieren von Invoke weiterhin die Installation einer Vorabversion wählen.',
+      notifyHelper:
+        'Zeige eine Benachrichtigung an, wenn eine Vorabversion von Invoke verfügbar ist. Auch wenn dies deaktiviert ist, kannst du beim Aktualisieren oder Installieren von Invoke weiterhin die Installation einer Vorabversion wählen.',
       optInToLauncherPrereleases: 'Launcher-Vorabversionen aktivieren',
-      optInHelper: 'Suche beim Start nach Vorabversionen des Launchers. Wenn deaktiviert, sucht der Launcher nur nach stabilen Versionen.',
+      optInHelper:
+        'Suche beim Start nach Vorabversionen des Launchers. Wenn deaktiviert, sucht der Launcher nur nach stabilen Versionen.',
     },
     firstRun: {
       welcome: 'Willkommen bei Invoke.',
@@ -27,7 +31,8 @@ export default {
       manage: 'Verwalten',
       launch: 'Starten',
       windowCrashed: 'Fenster abgestürzt',
-      windowCrashedHelper: 'Das Fenster der Invoke-Oberfläche wurde unerwartet geschlossen, aber der Server läuft weiter.',
+      windowCrashedHelper:
+        'Das Fenster der Invoke-Oberfläche wurde unerwartet geschlossen, aber der Server läuft weiter.',
       windowCrashedAction: 'Du kannst das Fenster erneut öffnen oder den Server beenden.',
       back: 'Zurück',
       restarting: 'Wird neu gestartet',
@@ -115,11 +120,13 @@ export default {
         manualPrefix: 'Wir werden die manuell angegebene Version',
         manualMiddle: ' über deiner vorhandenen',
         manualSuffix: ' Installation installieren.',
-        manualWarning: 'Die manuelle Versionsinstallation kann Probleme verursachen. Stelle sicher, dass du vorher deine Daten sicherst.',
+        manualWarning:
+          'Die manuelle Versionsinstallation kann Probleme verursachen. Stelle sicher, dass du vorher deine Daten sicherst.',
       },
       version: {
         title: 'Welche Version soll installiert werden?',
-        releasesError: 'Verfügbare Versionen konnten nicht von GitHub abgerufen werden. Klicke hier, um es erneut zu versuchen.',
+        releasesError:
+          'Verfügbare Versionen konnten nicht von GitHub abgerufen werden. Klicke hier, um es erneut zu versuchen.',
         loading: 'Versionen werden geladen',
         releaseNotes: 'Versionshinweise',
         stable: 'Stabil ({{version}})',

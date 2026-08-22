@@ -5,13 +5,17 @@ export default {
       title: 'Paramètres',
       language: 'Langue',
       serverMode: 'Mode serveur',
-      serverModeHelper: 'Exécutez Invoke en mode « headless » sans interface. Vous pouvez accéder à Invoke depuis n’importe quel ordinateur de votre réseau local à l’adresse affichée.',
+      serverModeHelper:
+        'Exécutez Invoke en mode « headless » sans interface. Vous pouvez accéder à Invoke depuis n’importe quel ordinateur de votre réseau local à l’adresse affichée.',
       hideLauncherAfterStartup: 'Masquer le lanceur au démarrage',
-      hideLauncherHelper: 'Une fois Invoke démarré, masquez le lanceur dans la barre d’état système. Cliquez sur l’icône de la barre d’état pour le réafficher et consulter les journaux. Le lanceur réapparaît si Invoke plante et se ferme lorsqu’Invoke s’arrête normalement.',
+      hideLauncherHelper:
+        'Une fois Invoke démarré, masquez le lanceur dans la barre d’état système. Cliquez sur l’icône de la barre d’état pour le réafficher et consulter les journaux. Le lanceur réapparaît si Invoke plante et se ferme lorsqu’Invoke s’arrête normalement.',
       notifyForPrereleaseUpdates: 'Notifier les préversions d’Invoke',
-      notifyHelper: 'Affichez une notification lorsqu’une version préliminaire d’Invoke est disponible. Même si cette option est désactivée, vous pourrez toujours choisir d’installer une version préliminaire lors de la mise à jour ou de l’installation d’Invoke.',
+      notifyHelper:
+        'Affichez une notification lorsqu’une version préliminaire d’Invoke est disponible. Même si cette option est désactivée, vous pourrez toujours choisir d’installer une version préliminaire lors de la mise à jour ou de l’installation d’Invoke.',
       optInToLauncherPrereleases: 'Participer aux préversions du lanceur',
-      optInHelper: 'Recherchez les versions préliminaires du lanceur au démarrage. Si elle est désactivée, le lanceur ne recherchera que les versions stables.',
+      optInHelper:
+        'Recherchez les versions préliminaires du lanceur au démarrage. Si elle est désactivée, le lanceur ne recherchera que les versions stables.',
     },
     firstRun: {
       welcome: 'Bienvenue sur Invoke.',
@@ -27,7 +31,8 @@ export default {
       manage: 'Gérer',
       launch: 'Lancer',
       windowCrashed: 'La fenêtre a planté',
-      windowCrashedHelper: 'La fenêtre de l’interface Invoke s’est fermée de manière inattendue, mais le serveur fonctionne toujours.',
+      windowCrashedHelper:
+        'La fenêtre de l’interface Invoke s’est fermée de manière inattendue, mais le serveur fonctionne toujours.',
       windowCrashedAction: 'Vous pouvez rouvrir la fenêtre ou arrêter le serveur.',
       back: 'Retour',
       restarting: 'Redémarrage',
@@ -115,7 +120,8 @@ export default {
         manualPrefix: 'Nous allons installer la version spécifiée manuellement',
         manualMiddle: ' par-dessus votre',
         manualSuffix: ' installation.',
-        manualWarning: 'L’installation manuelle d’une version peut casser des choses. Assurez-vous de sauvegarder vos données au préalable.',
+        manualWarning:
+          'L’installation manuelle d’une version peut casser des choses. Assurez-vous de sauvegarder vos données au préalable.',
       },
       version: {
         title: 'Quelle version devons-nous installer ?',

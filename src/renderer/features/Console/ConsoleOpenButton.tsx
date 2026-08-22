@@ -4,8 +4,8 @@ import { IconButton } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { PiTerminalBold } from 'react-icons/pi';
 import { useTranslation } from 'react-i18next';
+import { PiTerminalBold } from 'react-icons/pi';
 
 import { $isConsoleOpen, $terminalHasNewOutput } from '@/renderer/features/Console/state';
 

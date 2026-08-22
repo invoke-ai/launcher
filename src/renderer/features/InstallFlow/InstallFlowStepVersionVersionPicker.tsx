@@ -63,7 +63,9 @@ VersionPicker.displayName = 'VersionPicker';
 
 const GHVersionLink = memo(({ release }: { release: GHReleaseData }) => {
   const { t } = useTranslation();
-  return <ExternalLink fontSize="md" color="base.300" href={release.url} label={t('installFlow.version.releaseNotes')} />;
+  return (
+    <ExternalLink fontSize="md" color="base.300" href={release.url} label={t('installFlow.version.releaseNotes')} />
+  );
 });
 GHVersionLink.displayName = 'GHVersionLink';
 

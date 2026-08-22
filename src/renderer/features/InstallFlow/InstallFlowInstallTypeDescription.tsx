@@ -15,28 +15,34 @@ export const InstallFlowInstallTypeDescription = memo(({ installType }: Props) =
   if (installType.type === 'fresh') {
     return (
       <Text fontSize="md">
-        {t('installFlow.installType.freshPrefix')} <Strong>Invoke {installType.newVersion}</Strong>{t('installFlow.installType.freshSuffix')}
+        {t('installFlow.installType.freshPrefix')} <Strong>Invoke {installType.newVersion}</Strong>
+        {t('installFlow.installType.freshSuffix')}
       </Text>
     );
   }
   if (installType.type === 'reinstall') {
     return (
       <Text fontSize="md">
-        {t('installFlow.installType.reinstallPrefix')} <Strong>Invoke {installType.installedVersion}</Strong>{t('installFlow.installType.reinstallSuffix')}
+        {t('installFlow.installType.reinstallPrefix')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.reinstallSuffix')}
       </Text>
     );
   }
   if (installType.type === 'upgrade') {
     return (
       <Text fontSize="md">
-        {t('installFlow.installType.upgradePrefix')} <Strong>Invoke {installType.installedVersion}</Strong>{t('installFlow.installType.upgradeMiddle')} <Strong>{installType.newVersion}</Strong>{t('installFlow.installType.upgradeSuffix')}
+        {t('installFlow.installType.upgradePrefix')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.upgradeMiddle')} <Strong>{installType.newVersion}</Strong>
+        {t('installFlow.installType.upgradeSuffix')}
       </Text>
     );
   }
   if (installType.type === 'downgrade') {
     return (
       <Text fontSize="md">
-        {t('installFlow.installType.downgradePrefix')} <Strong>Invoke {installType.installedVersion}</Strong>{t('installFlow.installType.downgradeMiddle')} <Strong>{installType.newVersion}</Strong>{t('installFlow.installType.downgradeSuffix')}
+        {t('installFlow.installType.downgradePrefix')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.downgradeMiddle')} <Strong>{installType.newVersion}</Strong>
+        {t('installFlow.installType.downgradeSuffix')}
       </Text>
     );
   }
@@ -49,7 +55,9 @@ export const InstallFlowInstallTypeDescription = memo(({ installType }: Props) =
 
     return (
       <Text fontSize="md">
-        {t('installFlow.installType.manualPrefix')} <Strong>{installType.newVersion}</Strong>{t('installFlow.installType.manualMiddle')} <Strong>Invoke {installType.installedVersion}</Strong>{t('installFlow.installType.manualSuffix')}
+        {t('installFlow.installType.manualPrefix')} <Strong>{installType.newVersion}</Strong>
+        {t('installFlow.installType.manualMiddle')} <Strong>Invoke {installType.installedVersion}</Strong>
+        {t('installFlow.installType.manualSuffix')}
       </Text>
     );
   }

@@ -1,6 +1,6 @@
+import { useStore } from '@nanostores/react';
 import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { useStore } from '@nanostores/react';
 import { I18nextProvider } from 'react-i18next';
 
 import { App } from '@/renderer/app/App';

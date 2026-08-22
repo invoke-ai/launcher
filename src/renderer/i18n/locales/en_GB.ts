@@ -1,0 +1,152 @@
+export default {
+  translation: {
+    common: { reset: 'Reset' },
+    settings: {
+      title: 'Settings',
+      language: 'Language',
+      serverMode: 'Server Mode',
+      serverModeHelper: "Run Invoke in \"headless\" mode with no UI. You can access Invoke on any computer on your local network at the displayed URL.",
+      hideLauncherAfterStartup: 'Hide Launcher After Startup',
+      hideLauncherHelper: 'Once Invoke has started, hide the launcher to the system tray. Click the tray icon to bring it back to view the logs. The launcher reappears if Invoke crashes and closes when Invoke shuts down normally.',
+      notifyForPrereleaseUpdates: 'Notify for Invoke Prereleases',
+      notifyHelper: 'Show a notification when a prerelease version of Invoke is available. Even if this is disabled, you will still be able to choose to install a prerelease version when updating or installing Invoke.',
+      optInToLauncherPrereleases: 'Opt-in to Launcher Prereleases',
+      optInHelper: 'Check for prerelease versions of the launcher on startup. If disabled, the launcher will only check for stable releases.'
+    },
+    firstRun: {
+      welcome: 'Welcome to Invoke.',
+      installOrSelect: 'Install or select an existing installation to manage.',
+      selectExisting: 'Select an existing installation',
+      install: 'Install'
+    },
+    launchFlow: {
+      welcomeBack: 'Welcome back.',
+      usingPrefix: 'Using',
+      usingAt: 'installation at',
+      switchInstallation: 'Switch installation',
+      manage: 'Manage',
+      launch: 'Launch',
+      windowCrashed: 'Window Crashed',
+      windowCrashedHelper: 'The Invoke UI window closed unexpectedly, but the server is still running.',
+      windowCrashedAction: 'You can reopen the window or shutdown the server.',
+      back: 'Back',
+      restarting: 'Restarting',
+      restartWindow: 'Restart Window',
+      shutdown: 'Shutdown',
+      shuttingDown: 'Shutting down',
+      reopenWindow: 'Reopen Window',
+      shutdownServer: 'Shutdown Server',
+      cannotFindInstall: 'Cannot find installation.',
+      noInstallFoundAt: 'No Invoke installation found at',
+      install: 'Install',
+      runningAt: 'Running at {{loopbackUrl}}',
+      unableToCheckForUpdates: 'Unable to check for updates.',
+      checkingForUpdates: 'Checking for updates',
+      updateAvailablePrefix: 'Invoke',
+      updateAvailableSuffix: 'is available! Click here to update.',
+      upToDate: 'Up to date.',
+      status: {
+        uninitialized: 'Uninitialized',
+        starting: 'Starting',
+        exiting: 'Exiting',
+        exited: 'Exited',
+        windowCrashed: 'Window Crashed'
+      }
+    },
+    installFlow: {
+      whatGpu: 'What GPU do you have?',
+      gpu: {
+        nvidiaOld: 'Nvidia (20xx and below)',
+        nvidiaNew: 'Nvidia (30xx and above)',
+        amd: 'AMD',
+        intel: 'Intel Arc (XPU)',
+        noGpu: 'No dedicated GPU'
+      },
+      gpuLabel: {
+        nvidiaOld: 'a Nvidia 20xx or older GPU',
+        nvidiaNew: 'a Nvidia 30xx or newer GPU',
+        amd: 'an AMD GPU',
+        intel: 'an Intel Arc GPU',
+        noGpu: 'no GPU'
+      },
+      location: {
+        whereTitle: 'Where should we install Invoke?',
+        choose: 'Choose install location',
+        dataRetainedPrefix: 'When reinstalling or updating,',
+        dataRetainedStrong: 'your data will be retained.',
+        brokenInstall: 'If there is a broken install at this location, we will reinstall it.',
+        notDirectory: 'This is not a directory.',
+        invalidTitle: 'Invalid install location.',
+        freshTitle: 'Fresh install.',
+        existingTitle: 'Existing Invoke {{version}} install found.'
+      },
+      version: {
+        title: 'Which version should we install?',
+        releasesError: 'Unable to get available releases from GitHub. Click here to retry.',
+        loading: 'Loading releases',
+        releaseNotes: 'Release Notes',
+        stable: 'Stable ({{version}})',
+        prerelease: 'Prerelease ({{version}})',
+        manual: 'Manual',
+        enterVersion: 'Enter version',
+        invalidSpecifier: 'Invalid version specifier.'
+      },
+      review: {
+        title: 'Review installation.',
+        prereleasePrefix: 'This is a',
+        prereleaseStrong: 'prerelease',
+        prereleaseSuffix: ' of Invoke. Thanks for helping us test it!',
+        stablePrefix: 'This is a',
+        stableStrong: 'stable',
+        stableSuffix: ' release of Invoke.',
+        youHavePrefix: 'You have',
+        repairModeTitle: 'Repair mode can fix installation or update issues.',
+        repairModeBody: 'It reinstalls python and recreates the virtual environment.',
+        repairMode: 'Repair mode'
+      },
+      installType: {
+        freshPrefix: 'We will install',
+        freshSuffix: '.',
+        reinstallPrefix: 'We will reinstall your existing',
+        reinstallSuffix: ' install.',
+        upgradePrefix: 'We will upgrade your existing',
+        upgradeMiddle: ' install to',
+        upgradeSuffix: '.',
+        downgradePrefix: 'We will downgrade your existing',
+        downgradeMiddle: ' install to',
+        downgradeSuffix: '.',
+        manualPrefix: 'We will install the manually specified version',
+        manualMiddle: ' on top of your existing',
+        manualSuffix: ' install.',
+        manualWarning: 'Manual version installation can break things. Make sure to back up your data first.'
+      },
+      common: {
+        back: 'Back',
+        next: 'Next',
+        cancel: 'Cancel',
+        install: 'Install',
+        finish: 'Finish',
+        canceling: 'Cancelling'
+      }
+    },
+    console: {
+      open: 'Open Terminal',
+      notStarted: {
+        start: 'Start Dev Console',
+        activatePrefix: 'We will activate the virtual environment for the install at',
+        activateSuffix: '.'
+      },
+      running: {
+        title: 'Dev Console',
+        kill: 'Kill Console',
+        restart: 'Restart Console',
+        hide: 'Hide Console'
+      }
+    },
+    errorBoundary: {
+      title: 'An error occurred.',
+      error: 'Error',
+      unknownError: 'An unknown error occurred.'
+    }
+  }
+};

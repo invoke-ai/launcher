@@ -1,5 +1,6 @@
 import { Button, Divider, Heading, Link, Text } from '@invoke-ai/ui-library';
 import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
 import { Strong } from '@/renderer/common/Strong';
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export const LaunchFlowNotRunning = memo(({ installDirDetails }: Props) => {
+  const { t } = useTranslation();
   const launch = useCallback(() => {
     if (!installDirDetails || !installDirDetails.isInstalled) {
       return;
@@ -36,9 +38,9 @@ export const LaunchFlowNotRunning = memo(({ installDirDetails }: Props) => {
         <LaunchFlowUpdateCheckerNotification installDirDetails={installDirDetails} />
       </BodyHeader>
       <BodyContent>
-        <Heading>Welcome back.</Heading>
+        <Heading>{t('launchFlow.welcomeBack')}</Heading>
         <Text fontSize="md">
-          Using <Strong>Invoke {installDirDetails.version}</Strong> installation at{' '}
+          {t('launchFlow.usingPrefix')}{' '}<Strong>Invoke {installDirDetails.version}</Strong>{' '}{t('launchFlow.usingAt')}{' '}
           <Strong as={Link} onClick={openDir}>
             {installDirDetails.path}
           </Strong>
@@ -47,15 +49,15 @@ export const LaunchFlowNotRunning = memo(({ installDirDetails }: Props) => {
       </BodyContent>
       <BodyFooter>
         <Button onClick={selectInstallDir} variant="link">
-          Switch installation
+          {t('launchFlow.switchInstallation')}
         </Button>
         <Divider orientation="vertical" />
         <Button onClick={install} variant="link">
-          Manage
+          {t('launchFlow.manage')}
         </Button>
         <Divider orientation="vertical" />
         <Button onClick={launch} colorScheme="invokeYellow">
-          Launch
+          {t('launchFlow.launch')}
         </Button>
       </BodyFooter>
     </BodyContainer>

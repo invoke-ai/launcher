@@ -3,17 +3,19 @@ import { IconButton } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
 import { PiGearFill } from 'react-icons/pi';
+import { useTranslation } from 'react-i18next';
 
 import { $isSettingsOpen } from '@/renderer/features/SettingsModal/state';
 
 export const SettingsModalOpenButton = memo((props: Omit<IconButtonProps, 'aria-label'>) => {
+  const { t } = useTranslation();
   const isOpen = useStore($isSettingsOpen);
   const onClick = useCallback(() => {
     $isSettingsOpen.set(true);
   }, []);
   return (
     <IconButton
-      aria-label="Settings"
+      aria-label={t('settings.title')}
       variant="link"
       minW={10}
       minH={10}

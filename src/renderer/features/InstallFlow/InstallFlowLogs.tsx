@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react';
-import { startCase } from 'es-toolkit/compat';
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   $installProcessStatus,
@@ -11,6 +11,7 @@ import { XTermLogViewer } from '@/renderer/features/XTermLogViewer/XTermLogViewe
 import { XTermLogViewerStatusIndicator } from '@/renderer/features/XTermLogViewer/XTermLogViewerStatusIndicator';
 
 export const InstallFlowLogs = memo(() => {
+  const { t } = useTranslation();
   const installProcessStatus = useStore($installProcessStatus);
 
   return (
@@ -21,7 +22,7 @@ export const InstallFlowLogs = memo(() => {
         top={2}
         right={2}
       >
-        {startCase(installProcessStatus.type)}
+        {t('installFlow.status.' + installProcessStatus.type)}
       </XTermLogViewerStatusIndicator>
     </XTermLogViewer>
   );

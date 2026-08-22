@@ -1,0 +1,68 @@
+export default {
+  translation: {
+    common: { reset: 'Zresetuj' },
+    settings: {
+      title: 'Ustawienia', language: 'Język', serverMode: 'Tryb serwera',
+      serverModeHelper: 'Uruchom Invoke w trybie "headless" bez interfejsu użytkownika. Możesz uzyskać dostęp do Invoke z dowolnego komputera w sieci lokalnej pod wyświetlonym adresem URL.',
+      hideLauncherAfterStartup: 'Ukryj launcher po uruchomieniu',
+      hideLauncherHelper: 'Po uruchomieniu Invoke ukryj launcher w zasobniku systemowym. Kliknij ikonę w zasobniku, aby przywrócić go do widoku dzienników. Launcher pojawi się ponownie, jeśli Invoke ulegnie awarii, i zamknie się po normalnym zamknięciu Invoke.',
+      notifyForPrereleaseUpdates: 'Powiadamiaj o wersjach prerelease Invoke',
+      notifyHelper: 'Pokaż powiadomienie, gdy dostępna jest wersja prerelease Invoke. Nawet jeśli ta opcja jest wyłączona, nadal możesz wybrać instalację wersji prerelease podczas aktualizacji lub instalacji Invoke.',
+      optInToLauncherPrereleases: 'Dołącz do prerelease launchera',
+      optInHelper: 'Sprawdzaj dostępność wersji prerelease launchera przy uruchomieniu. Jeśli wyłączone, launcher będzie sprawdzał tylko stabilne wersje.',
+    },
+    firstRun: {
+      welcome: 'Witamy w Invoke.', installOrSelect: 'Zainstaluj lub wybierz istniejącą instalację do zarządzania.', selectExisting: 'Wybierz istniejącą instalację.', install: 'Zainstaluj.',
+    },
+    launchFlow: {
+      welcomeBack: 'Witaj ponownie.', usingPrefix: 'Używana', usingAt: 'instalacja w', switchInstallation: 'Zmień instalację', manage: 'Zarządzaj', launch: 'Uruchom',
+      windowCrashed: 'Okno uległo awarii', windowCrashedHelper: 'Okno interfejsu Invoke zamknęło się nieoczekiwanie, ale serwer nadal działa.', windowCrashedAction: 'Możesz ponownie otworzyć okno lub zamknąć serwer.',
+      back: 'Wstecz', restarting: 'Ponowne uruchamianie', restartWindow: 'Uruchom ponownie okno', shutdown: 'Zamknij', shuttingDown: 'Zamykanie', reopenWindow: 'Otwórz ponownie okno', shutdownServer: 'Zamknij serwer',
+      cannotFindInstall: 'Nie można znaleźć instalacji', noInstallFoundAt: 'Nie znaleziono instalacji Invoke w', install: 'Zainstaluj', runningAt: 'Działa na {{loopbackUrl}}',
+      unableToCheckForUpdates: 'Nie można sprawdzić aktualizacji.', checkingForUpdates: 'Sprawdzanie aktualizacji', updateAvailablePrefix: 'Invoke', updateAvailableSuffix: 'jest dostępny! Kliknij tutaj, aby zaktualizować.', upToDate: 'Aktualna wersja',
+      status: { uninitialized: 'Niezainicjowane', starting: 'Uruchamianie', exiting: 'Zamykanie', exited: 'Zakończono', windowCrashed: 'Okno uległo awarii' },
+    },
+    installFlow: {
+      whatGpu: 'Jaką masz kartę graficzną?',
+      gpu: { nvidiaOld: 'Nvidia (20xx i starsze)', nvidiaNew: 'Nvidia (30xx i nowsze)', amd: 'AMD', intel: 'Intel Arc (XPU)', noGpu: 'Brak dedykowanej GPU' },
+      gpuLabel: { nvidiaOld: 'karta graficzna Nvidia 20xx lub starsza', nvidiaNew: 'karta graficzna Nvidia 30xx lub nowsza', amd: 'karta graficzna AMD', intel: 'karta graficzna Intel Arc', noGpu: 'brak GPU' },
+      common: { back: 'Wstecz', next: 'Dalej', cancel: 'Anuluj', install: 'Zainstaluj', finish: 'Zakończ', canceling: 'Anulowanie' },
+      location: {
+        choose: 'Wybierz lokalizację instalacji.',
+        dataRetainedPrefix: 'Podczas ponownej instalacji lub aktualizacji,', dataRetainedStrong: 'Twoje dane zostaną zachowane.',
+        brokenInstall: 'Jeśli w tym miejscu znajduje się uszkodzona instalacja, zainstalujemy ją ponownie.',
+        notDirectory: 'To nie jest katalog.',
+        whereTitle: 'Gdzie zainstalować Invoke?', invalidTitle: 'Nieprawidłowa lokalizacja instalacji.', freshTitle: 'Nowa instalacja.', existingTitle: 'Znaleziono istniejącą instalację Invoke {{version}}.',
+      },
+      review: {
+        title: 'Przejrzyj instalację',
+        prereleasePrefix: 'To jest', prereleaseStrong: 'wersja przedpremierowa', prereleaseSuffix: 'Invoke. Dziękujemy za pomoc w testowaniu!',
+        stablePrefix: 'To jest', stableStrong: 'stabilne', stableSuffix: 'wydanie Invoke.', youHavePrefix: 'Masz',
+        repairModeTitle: 'Tryb naprawczy może naprawić problemy z instalacją lub aktualizacją.',
+        repairModeBody: 'Ponownie instaluje pythona i odtwarza wirtualne środowisko.',
+        repairMode: 'Tryb naprawczy',
+      },
+      installType: {
+        freshPrefix: 'Zainstalujemy', freshSuffix: '.',
+        reinstallPrefix: 'Ponownie zainstalujemy istniejącą', reinstallSuffix: 'instalację.',
+        upgradePrefix: 'Zaktualizujemy istniejącą', upgradeMiddle: 'instalację do', upgradeSuffix: '.',
+        downgradePrefix: 'Obniżymy wersję istniejącej', downgradeMiddle: 'instalacji do', downgradeSuffix: '.',
+        manualPrefix: 'Zainstalujemy ręcznie podaną wersję', manualMiddle: 'na istniejącej', manualSuffix: 'instalacji.',
+        manualWarning: 'Ręczna instalacja wersji może zepsuć system. Upewnij się, że najpierw utworzysz kopię zapasową danych.',
+      },
+      version: {
+        title: 'Jaką wersję zainstalować?',
+        releasesError: 'Nie udało się pobrać dostępnych wersji z GitHub. Kliknij tutaj, aby spróbować ponownie.',
+        loading: 'Ładowanie wydań', releaseNotes: 'Notatki do wydania',
+        stable: 'Stabilna ({{version}})', prerelease: 'Prerelease ({{version}})', manual: 'Ręcznie',
+        enterVersion: 'Wpisz wersję', invalidSpecifier: 'Nieprawidłowy specyfikator wersji.',
+      },
+    },
+    console: {
+      open: 'Otwórz terminal',
+      notStarted: { start: 'Uruchom konsolę dewelopera.', activatePrefix: 'Aktywujemy wirtualne środowisko dla instalacji w', activateSuffix: '.' },
+      running: { title: 'Konsola dewelopera', kill: 'Zabij konsolę', restart: 'Uruchom ponownie konsolę', hide: 'Ukryj konsolę' },
+    },
+    errorBoundary: { title: 'Wystąpił błąd.', error: 'Błąd', unknownError: 'Wystąpił nieznany błąd.' },
+  },
+};

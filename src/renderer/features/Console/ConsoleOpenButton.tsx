@@ -5,6 +5,7 @@ import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { PiTerminalBold } from 'react-icons/pi';
+import { useTranslation } from 'react-i18next';
 
 import { $isConsoleOpen, $terminalHasNewOutput } from '@/renderer/features/Console/state';
 
@@ -32,6 +33,7 @@ const hotkeyOptions = {
 };
 
 export const ConsoleOpenButton = memo((props: Props) => {
+  const { t } = useTranslation();
   const isOpen = useStore($isConsoleOpen);
   const consolHasNewOutput = useStore($terminalHasNewOutput);
   const openConsole = useCallback(() => {
@@ -49,7 +51,7 @@ export const ConsoleOpenButton = memo((props: Props) => {
       minW={10}
       minH={10}
       colorScheme={consolHasNewOutput ? 'invokeYellow' : 'base'}
-      aria-label="Open Terminal"
+      aria-label={t('console.open')}
       onClick={openConsole}
       icon={<PiTerminalBold />}
       data-alert={consolHasNewOutput}

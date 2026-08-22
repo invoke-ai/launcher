@@ -1,11 +1,13 @@
 import { Button, Divider, Heading, Text } from '@invoke-ai/ui-library';
 import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
 import { installFlowApi } from '@/renderer/features/InstallFlow/state';
 import { selectInstallDir } from '@/renderer/services/store';
 
 export const FirstRun = memo(() => {
+  const { t } = useTranslation();
   const install = useCallback(() => {
     installFlowApi.beginFlow();
   }, []);
@@ -14,16 +16,16 @@ export const FirstRun = memo(() => {
     <BodyContainer>
       <BodyHeader />
       <BodyContent>
-        <Heading>Welcome to Invoke.</Heading>
-        <Text fontSize="md">Install or select an existing installation to manage.</Text>
+        <Heading>{t('firstRun.welcome')}</Heading>
+        <Text fontSize="md">{t('firstRun.installOrSelect')}</Text>
       </BodyContent>
       <BodyFooter>
         <Button onClick={selectInstallDir} variant="link">
-          Select an existing installation
+          {t('firstRun.selectExisting')}
         </Button>
         <Divider orientation="vertical" />
         <Button onClick={install} colorScheme="invokeYellow">
-          Install
+          {t('firstRun.install')}
         </Button>
       </BodyFooter>
     </BodyContainer>

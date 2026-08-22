@@ -11,11 +11,13 @@ import {
 } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PiExclamationMarkBold } from 'react-icons/pi';
 
 import { $installProcessStatus, installFlowApi } from '@/renderer/features/InstallFlow/state';
 
 export const InstallFlowStepper = memo(() => {
+  const { t } = useTranslation();
   const activeStep = useStore(installFlowApi.$activeStep);
   const isFinished = useStore(installFlowApi.$isFinished);
   const installProcessStatus = useStore($installProcessStatus);
@@ -32,7 +34,7 @@ export const InstallFlowStepper = memo(() => {
             <StepIndicator borderRadius="base">
               <StepStatus complete={complete} incomplete={<StepNumber />} active={<StepNumber />} />
             </StepIndicator>
-            <StepTitle color={activeStep >= index ? undefined : 'base.300'}>{step}</StepTitle>
+            <StepTitle color={activeStep >= index ? undefined : 'base.300'}>{t('installFlow.steps.' + step.toLowerCase())}</StepTitle>
             <StepSeparator />
           </Step>
         );

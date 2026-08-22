@@ -3,10 +3,12 @@ import { useStore } from '@nanostores/react';
 import type { ChangeEvent } from 'react';
 import { memo, useCallback } from 'react';
 import { PiFlaskFill } from 'react-icons/pi';
+import { useTranslation } from 'react-i18next';
 
 import { persistedStoreApi } from '@/renderer/services/store';
 
 export const SettingsModalOptInToLauncherPrereleases = memo(() => {
+  const { t } = useTranslation();
   const { optInToLauncherPrereleases } = useStore(persistedStoreApi.$atom);
   const onChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     persistedStoreApi.setKey('optInToLauncherPrereleases', e.target.checked);
@@ -17,14 +19,11 @@ export const SettingsModalOptInToLauncherPrereleases = memo(() => {
       <Flex w="full" alignItems="center" justifyContent="space-between">
         <FormLabel display="flex" alignItems="center" gap={2}>
           <Icon as={PiFlaskFill} color="invokeYellow.300" />
-          Opt-in to Launcher Prereleases
+          {t('settings.optInToLauncherPrereleases')}
         </FormLabel>
         <Checkbox isChecked={optInToLauncherPrereleases} onChange={onChange} />
       </Flex>
-      <FormHelperText>
-        Check for prerelease versions of the launcher on startup. If disabled, the launcher will only check for stable
-        releases.
-      </FormHelperText>
+      <FormHelperText>{t('settings.optInHelper')}</FormHelperText>
     </FormControl>
   );
 });

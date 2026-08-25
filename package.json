@@ -1,7 +1,7 @@
 {
   "name": "invoke-community-edition",
   "productName": "Invoke Community Edition",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "description": "Invoke Community Edition",
   "main": "out/main/index.js",
   "engines": {

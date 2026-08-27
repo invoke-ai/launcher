@@ -1,6 +1,7 @@
 import { Button } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
 import { InstallFlowLogs } from '@/renderer/features/InstallFlow/InstallFlowLogs';
@@ -12,6 +13,7 @@ import {
 } from '@/renderer/features/InstallFlow/state';
 
 export const InstallFlowStepInstall = memo(() => {
+  const { t } = useTranslation();
   const installProcessStatus = useStore($installProcessStatus);
   const isFinished = useStore(installFlowApi.$isFinished);
 
@@ -31,14 +33,14 @@ export const InstallFlowStepInstall = memo(() => {
             onClick={installFlowApi.cancelInstall}
             isLoading={installProcessStatus.type === 'canceling'}
             colorScheme="error"
-            loadingText="Canceling"
+            loadingText={t('installFlow.common.canceling')}
           >
-            Cancel
+            {t('installFlow.common.cancel')}
           </Button>
         )}
         {!isActive && isFinished && (
           <Button colorScheme="invokeYellow" onClick={installFlowApi.finalizeInstall}>
-            Finish
+            {t('installFlow.common.finish')}
           </Button>
         )}
       </BodyFooter>

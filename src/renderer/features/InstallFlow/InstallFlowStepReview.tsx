@@ -15,6 +15,7 @@ import {
 import { useStore } from '@nanostores/react';
 import type { ChangeEvent } from 'react';
 import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { assert } from 'tsafe';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
@@ -28,13 +29,14 @@ import { installFlowApi } from '@/renderer/features/InstallFlow/state';
 import type { GpuType } from '@/shared/types';
 
 const GPU_LABEL_MAP: Record<GpuType, string> = {
-  'nvidia<30xx': 'a Nvidia 20xx or older GPU',
-  'nvidia>=30xx': 'a Nvidia 30xx or newer GPU',
-  amd: 'an AMD GPU',
-  nogpu: 'no GPU',
+  'nvidia<30xx': 'installFlow.gpuLabel.nvidiaOld',
+  'nvidia>=30xx': 'installFlow.gpuLabel.nvidiaNew',
+  amd: 'installFlow.gpuLabel.amd',
+  nogpu: 'installFlow.gpuLabel.noGpu',
 };
 
 export const InstallFlowStepReview = memo(() => {
+  const { t } = useTranslation();
   const { dirDetails, gpuType, release, repairMode } = useStore(installFlowApi.$choices);
   const installType = useStore(installFlowApi.$installType);
 
@@ -53,7 +55,7 @@ export const InstallFlowStepReview = memo(() => {
         <InstallFlowStepper />
       </BodyHeader>
       <BodyContent>
-        <Heading>Review installation.</Heading>
+        <Heading>{t('installFlow.review.title')}</Heading>
         <UnorderedList styleType="'-'">
           <ListItem>
             <InstallFlowInstallTypeDescription installType={installType} />
@@ -61,14 +63,16 @@ export const InstallFlowStepReview = memo(() => {
           {release.type === 'gh' && release.isPrerelease && (
             <ListItem>
               <Text fontSize="md">
-                This is a <Strong>prerelease</Strong> of Invoke. Thanks for helping us test it!
+                {t('installFlow.review.prereleasePrefix')} <Strong>{t('installFlow.review.prereleaseStrong')}</Strong>
+                {t('installFlow.review.prereleaseSuffix')}
               </Text>
             </ListItem>
           )}
           {release.type === 'gh' && !release.isPrerelease && (
             <ListItem>
               <Text fontSize="md">
-                This is a <Strong>stable</Strong> release of Invoke.
+                {t('installFlow.review.stablePrefix')} <Strong>{t('installFlow.review.stableStrong')}</Strong>
+                {t('installFlow.review.stableSuffix')}
               </Text>
             </ListItem>
           )}
@@ -79,7 +83,7 @@ export const InstallFlowStepReview = memo(() => {
           )}
           <ListItem>
             <Text fontSize="md">
-              You have <Strong>{GPU_LABEL_MAP[gpuType]}.</Strong>
+              {t('installFlow.review.youHavePrefix')} <Strong>{t(GPU_LABEL_MAP[gpuType])}.</Strong>
             </Text>
           </ListItem>
         </UnorderedList>
@@ -89,25 +93,25 @@ export const InstallFlowStepReview = memo(() => {
         <Tooltip
           label={
             <Flex flexDir="column" gap={1}>
-              <Text fontWeight="semibold">Repair mode can fix installation or update issues.</Text>
-              <Text>It reinstalls python and recreates the virtual environment.</Text>
+              <Text fontWeight="semibold">{t('installFlow.review.repairModeTitle')}</Text>
+              <Text>{t('installFlow.review.repairModeBody')}</Text>
             </Flex>
           }
         >
           <FormControl w="min-content">
             <FormLabel m={0} fontWeight="normal" fontSize="md">
-              Repair mode
+              {t('installFlow.review.repairMode')}
             </FormLabel>
             <Checkbox isChecked={repairMode} onChange={onChangeRepairMode} />
           </FormControl>
         </Tooltip>
         <Divider orientation="vertical" />
         <Button onClick={installFlowApi.prevStep} variant="link">
-          Back
+          {t('installFlow.common.back')}
         </Button>
         <Divider orientation="vertical" />
         <Button w={24} onClick={installFlowApi.startInstall} colorScheme="invokeYellow">
-          Install
+          {t('installFlow.common.install')}
         </Button>
       </BodyFooter>
     </BodyContainer>

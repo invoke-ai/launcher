@@ -1,5 +1,6 @@
 import { Button, Divider, Heading, Text } from '@invoke-ai/ui-library';
 import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { BodyContainer, BodyContent, BodyFooter, BodyHeader } from '@/renderer/common/layout';
 import { Strong } from '@/renderer/common/Strong';
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export const LaunchFlowInvalidInstall = memo(({ installDirDetails }: Props) => {
+  const { t } = useTranslation();
   const install = useCallback(() => {
     installFlowApi.beginFlow(installDirDetails);
   }, [installDirDetails]);
@@ -20,18 +22,18 @@ export const LaunchFlowInvalidInstall = memo(({ installDirDetails }: Props) => {
     <BodyContainer>
       <BodyHeader />
       <BodyContent>
-        <Heading>Cannot find installation.</Heading>
+        <Heading>{t('launchFlow.cannotFindInstall')}</Heading>
         <Text fontSize="md">
-          No Invoke installation found at <Strong>{installDirDetails.path}</Strong>.
+          {t('launchFlow.noInstallFoundAt')} <Strong>{installDirDetails.path}</Strong>.
         </Text>
       </BodyContent>
       <BodyFooter>
         <Button onClick={selectInstallDir} variant="link">
-          Switch installation
+          {t('launchFlow.switchInstallation')}
         </Button>
         <Divider orientation="vertical" />
         <Button onClick={install} colorScheme="invokeYellow">
-          Install
+          {t('launchFlow.install')}
         </Button>
       </BodyFooter>
     </BodyContainer>

@@ -1,6 +1,7 @@
 import { Button, Heading, Text, VStack } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo, useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { BodyContainer, BodyContent, BodyFooter } from '@/renderer/common/layout';
 import { LaunchFlowLogViewer } from '@/renderer/features/LaunchFlow/LaunchFlowLogViewer';
@@ -31,6 +32,7 @@ const restartWindow = async () => {
 };
 
 export const LaunchFlowRunning = memo(() => {
+  const { t } = useTranslation();
   const invokeProcessStatus = useStore($invokeProcessStatus);
   const isInvokeProcessPendingDismissal = useStore($isInvokeProcessPendingDismissal);
   const { serverMode } = useStore(persistedStoreApi.$atom);
@@ -51,9 +53,9 @@ export const LaunchFlowRunning = memo(() => {
       <BodyContent>
         {invokeProcessStatus.type === 'window-crashed' && (
           <VStack gap={4} alignItems="center" justifyContent="center" h="full">
-            <Heading size="lg">Window Crashed</Heading>
-            <Text color="base.300">The Invoke UI window closed unexpectedly, but the server is still running.</Text>
-            <Text color="base.300">You can reopen the window or shutdown the server.</Text>
+            <Heading size="lg">{t('launchFlow.windowCrashed')}</Heading>
+            <Text color="base.300">{t('launchFlow.windowCrashedHelper')}</Text>
+            <Text color="base.300">{t('launchFlow.windowCrashedAction')}</Text>
           </VStack>
         )}
         <LaunchFlowLogViewer />
@@ -61,7 +63,7 @@ export const LaunchFlowRunning = memo(() => {
       <BodyFooter>
         {isInvokeProcessPendingDismissal && (
           <Button variant="ghost" onClick={dismissPostInvoke}>
-            Back
+            {t('launchFlow.back')}
           </Button>
         )}
         {!isInvokeProcessPendingDismissal && canRestartWindow && (
@@ -69,14 +71,14 @@ export const LaunchFlowRunning = memo(() => {
             <Button
               onClick={restart}
               isLoading={isRestartingWindow}
-              loadingText="Restarting"
+              loadingText={t('launchFlow.restarting')}
               isDisabled={isRestartingWindow}
               colorScheme="invokeGreen"
             >
-              Restart Window
+              {t('launchFlow.restartWindow')}
             </Button>
             <Button onClick={quit} isDisabled={isRestartingWindow} colorScheme="error">
-              Shutdown
+              {t('launchFlow.shutdown')}
             </Button>
           </>
         )}
@@ -84,20 +86,20 @@ export const LaunchFlowRunning = memo(() => {
           <Button
             onClick={quit}
             isLoading={invokeProcessStatus.type === 'exiting'}
-            loadingText="Shutting down"
+            loadingText={t('launchFlow.shuttingDown')}
             colorScheme="error"
           >
-            Shutdown
+            {t('launchFlow.shutdown')}
           </Button>
         )}
         {!isInvokeProcessPendingDismissal && invokeProcessStatus.type === 'window-crashed' && (
           <Button onClick={reopenWindow} colorScheme="invokeGreen">
-            Reopen Window
+            {t('launchFlow.reopenWindow')}
           </Button>
         )}
         {!isInvokeProcessPendingDismissal && invokeProcessStatus.type === 'window-crashed' && (
           <Button onClick={quit} colorScheme="error">
-            Shutdown Server
+            {t('launchFlow.shutdownServer')}
           </Button>
         )}
       </BodyFooter>

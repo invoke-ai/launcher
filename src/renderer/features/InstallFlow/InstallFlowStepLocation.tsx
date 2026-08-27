@@ -1,6 +1,7 @@
 import { Button, ButtonGroup, Divider, Heading, Text } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PiFolderOpenBold } from 'react-icons/pi';
 import type { Equals } from 'tsafe';
 import { assert } from 'tsafe';
@@ -23,6 +24,7 @@ const selectInstallDir = async () => {
 };
 
 export const InstallFlowStepLocation = memo(() => {
+  const { t } = useTranslation();
   const { dirDetails } = useStore(installFlowApi.$choices);
 
   return (
@@ -34,24 +36,25 @@ export const InstallFlowStepLocation = memo(() => {
         <StepHeading />
         <ButtonGroup isAttached={false}>
           <ButtonWithTruncatedLabel variant="ghost" onClick={selectInstallDir} rightIcon={<PiFolderOpenBold />}>
-            {dirDetails?.path ?? 'Choose install location'}
+            {dirDetails?.path ?? t('installFlow.location.choose')}
           </ButtonWithTruncatedLabel>
         </ButtonGroup>
         {dirDetails && dirDetails.canInstall && dirDetails.isInstalled && (
           <Text fontSize="md">
-            When reinstalling or updating, <Strong>your data will be retained.</Strong>
+            {t('installFlow.location.dataRetainedPrefix')}{' '}
+            <Strong>{t('installFlow.location.dataRetainedStrong')}</Strong>
           </Text>
         )}
         {dirDetails && dirDetails.canInstall && !dirDetails.isInstalled && (
-          <Text fontSize="md">If there is a broken install at this location, we will reinstall it.</Text>
+          <Text fontSize="md">{t('installFlow.location.brokenInstall')}</Text>
         )}
         {dirDetails && !dirDetails.canInstall && !dirDetails.isDirectory && (
-          <Text fontSize="md">This isn&apos;t a directory.</Text>
+          <Text fontSize="md">{t('installFlow.location.notDirectory')}</Text>
         )}
       </BodyContent>
       <BodyFooter>
         <Button onClick={installFlowApi.cancelFlow} variant="link">
-          Cancel
+          {t('installFlow.common.cancel')}
         </Button>
         <Divider orientation="vertical" />
         <Button
@@ -59,7 +62,7 @@ export const InstallFlowStepLocation = memo(() => {
           isDisabled={!dirDetails || !dirDetails.canInstall}
           colorScheme="invokeYellow"
         >
-          Next
+          {t('installFlow.common.next')}
         </Button>
       </BodyFooter>
     </BodyContainer>
@@ -68,19 +71,20 @@ export const InstallFlowStepLocation = memo(() => {
 InstallFlowStepLocation.displayName = 'InstallFlowStepLocation';
 
 const StepHeading = memo(() => {
+  const { t } = useTranslation();
   const { dirDetails } = useStore(installFlowApi.$choices);
 
   if (!dirDetails) {
-    return <Heading>Where should we install Invoke?</Heading>;
+    return <Heading>{t('installFlow.location.whereTitle')}</Heading>;
   }
   if (!dirDetails.canInstall) {
-    return <Heading>Invalid install location.</Heading>;
+    return <Heading>{t('installFlow.location.invalidTitle')}</Heading>;
   }
   if (dirDetails.canInstall && !dirDetails.isInstalled) {
-    return <Heading>Fresh install.</Heading>;
+    return <Heading>{t('installFlow.location.freshTitle')}</Heading>;
   }
   if (dirDetails.canInstall && dirDetails.isInstalled) {
-    return <Heading>Existing Invoke {dirDetails.version} install found.</Heading>;
+    return <Heading>{t('installFlow.location.existingTitle', { version: dirDetails.version })}</Heading>;
   }
   assert<Equals<typeof dirDetails, never>>(dirDetails, 'This should never happen');
 });

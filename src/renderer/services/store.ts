@@ -5,6 +5,7 @@ import { emitter, ipc } from '@/renderer/services/ipc';
 import type { DirDetails, OperatingSystem, StoreData } from '@/shared/types';
 
 const getDefaults = (): StoreData => ({
+  language: 'en',
   serverMode: false,
   notifyForPrereleaseUpdates: true,
   optInToLauncherPrereleases: false,

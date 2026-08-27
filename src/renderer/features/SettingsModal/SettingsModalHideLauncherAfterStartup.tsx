@@ -1,10 +1,12 @@
 import { Checkbox, Flex, FormControl, FormHelperText, FormLabel } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { persistedStoreApi } from '@/renderer/services/store';
 
 export const SettingsModalHideLauncherAfterStartup = memo(() => {
+  const { t } = useTranslation();
   const { hideLauncherAfterStartup } = useStore(persistedStoreApi.$atom);
   const onChange = useCallback(() => {
     persistedStoreApi.setKey('hideLauncherAfterStartup', !persistedStoreApi.$atom.get().hideLauncherAfterStartup);
@@ -13,14 +15,10 @@ export const SettingsModalHideLauncherAfterStartup = memo(() => {
   return (
     <FormControl orientation="vertical">
       <Flex w="full" alignItems="center" justifyContent="space-between">
-        <FormLabel>Hide Launcher After Startup</FormLabel>
+        <FormLabel>{t('settings.hideLauncherAfterStartup')}</FormLabel>
         <Checkbox isChecked={hideLauncherAfterStartup} onChange={onChange} />
       </Flex>
-      <FormHelperText>
-        Once Invoke has started, hide the launcher to the system tray. Click the tray icon to bring it back to view the
-        logs. The launcher reappears if Invoke crashes and closes when Invoke shuts down normally. On systems without a
-        system tray, the launcher is minimized instead and these automatic behaviors are skipped.
-      </FormHelperText>
+      <FormHelperText>{t('settings.hideLauncherHelper')}</FormHelperText>
     </FormControl>
   );
 });

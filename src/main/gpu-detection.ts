@@ -236,6 +236,7 @@ async function probeKfdTopology(): Promise<{ exists: boolean; gfxTargets: string
 /** PCI vendor ids as sysfs reports them. */
 const PCI_VENDOR_AMD = '0x1002';
 const PCI_VENDOR_INTEL = '0x8086';
+const PCI_VENDOR_NVIDIA = '0x10de';
 
 type DrmDevice = {
   /** PCI vendor id, e.g. `0x8086`. */
@@ -268,7 +269,10 @@ async function probeDrmDevices(): Promise<DrmDevice[]> {
   );
 }
 
-async function hasNvidiaGpu(): Promise<BackendProbe> {
+async function hasNvidiaGpu(
+  drmDevices: Promise<DrmDevice[]>,
+  windowsAdapters: Promise<string[]>
+): Promise<BackendProbe> {
   const nvidiaSmi = await runProbe('nvidia-smi', ['-L']);
 
   if (nvidiaSmi.ok && nvidiaSmi.stdout.includes('GPU')) {
@@ -280,6 +284,25 @@ async function hasNvidiaGpu(): Promise<BackendProbe> {
   const nvidiaProcGpus = await listDir('/proc/driver/nvidia/gpus');
   if (nvidiaProcGpus.length > 0 || (await fileExists('/dev/nvidia0'))) {
     return { detected: true, confidence: 'medium', reason: 'NVIDIA Linux device files exist' };
+  }
+
+  // The bus knows about the card even when `nvidia-smi` is missing or wedged - which is the normal state on a machine
+  // that has not installed the driver yet. Without this, a Core Ultra laptop with a discrete NVIDIA card falls through
+  // to the Intel probe and the user is asked to confirm an Arc GPU. These signals are already collected for the AMD
+  // and Intel probes, so consulting them here costs nothing.
+  const nvidiaAdapters = (await windowsAdapters).filter((adapter) =>
+    /\b(nvidia|geforce|quadro|tesla|rtx)\b/i.test(adapter)
+  );
+  if (nvidiaAdapters.length > 0) {
+    return {
+      detected: true,
+      confidence: 'medium',
+      reason: `Windows reported an NVIDIA display adapter (${nvidiaAdapters[0]})`,
+    };
+  }
+
+  if ((await drmDevices).some((device) => device.vendor === PCI_VENDOR_NVIDIA)) {
+    return { detected: true, confidence: 'medium', reason: 'An NVIDIA GPU is present on the PCI bus' };
   }
 
   return { detected: false, confidence: 'none', reason: 'No NVIDIA evidence found' };
@@ -307,7 +330,16 @@ async function hasRocmGpu(drmDevices: Promise<DrmDevice[]>): Promise<BackendProb
   const rocminfoGfxTargets = rocminfo.ok
     ? [...rocminfo.stdout.matchAll(/Name:\s+(gfx[0-9a-f]+(?::[\w+-]+)*)/gi)].map((match) => match[1] ?? '')
     : [];
-  const gfxTargets = [...rocminfoGfxTargets, ...kfdTopology.gfxTargets].filter(Boolean);
+  // `rocminfo` and the KFD topology report the same card, so dedupe before these end up in a user-facing heading -
+  // otherwise a single gfx1100 reads as "(gfx1100, gfx1100)". Keyed on the normalized target so `gfx90a` and
+  // `gfx90a:sramecc+:xnack-` count as one card, keeping the first spelling seen.
+  const gfxTargets = [
+    ...new Map(
+      [...rocminfoGfxTargets, ...kfdTopology.gfxTargets]
+        .filter(Boolean)
+        .map((target) => [normalizeGfxTarget(target), target])
+    ).values(),
+  ];
   const supportedGfxTargets = gfxTargets.filter(isRocmSupportedGfxTarget);
 
   if (supportedGfxTargets.length > 0) {
@@ -512,7 +544,7 @@ async function detect(): Promise<GpuDetectionResult> {
   const windowsAdapters = probeWindowsDisplayAdapters();
 
   const [nvidia, rocm, intel, mac, windowsAmd] = await Promise.all([
-    hasNvidiaGpu(),
+    hasNvidiaGpu(drmDevices, windowsAdapters),
     hasRocmGpu(drmDevices),
     hasIntelXpuGpu(drmDevices, windowsAdapters),
     hasMacGpuCapabilities(),

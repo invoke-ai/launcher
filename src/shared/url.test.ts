@@ -79,6 +79,16 @@ describe('splitIndexUrlCredentials', () => {
     });
   });
 
+  it('still strips userinfo that cannot be percent-decoded', () => {
+    // `new URL()` accepts `p%ss`, but `decodeURIComponent` throws on it. A decode failure must not abort the split and
+    // hand the credential-bearing URL back to the caller, which would put the secret into argv.
+    expect(splitIndexUrlCredentials('https://user:p%ss@nexus.corp/simple')).toEqual({
+      url: 'https://nexus.corp/simple',
+      username: 'user',
+      password: 'p%ss',
+    });
+  });
+
   it('returns the URL untouched when there are no credentials', () => {
     expect(splitIndexUrlCredentials('https://download.pytorch.org/whl/cu126')).toEqual({
       url: 'https://download.pytorch.org/whl/cu126',

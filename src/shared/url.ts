@@ -66,6 +66,22 @@ type IndexUrlCredentials = {
  * Only meaningful for values that have already passed {@link isCustomTorchIndexUrlInvalid}; anything the URL parser
  * rejects is returned unchanged.
  */
+/**
+ * Percent-decode a userinfo component, falling back to the raw value.
+ *
+ * `new URL()` accepts userinfo that `decodeURIComponent` rejects - a lone `%`, as in `user:p%ss@host`. Letting that
+ * throw would abort the whole split and hand the credential-bearing URL back unchanged, which puts the secret straight
+ * into argv while looking like it was handled. Passing the raw value through is the lesser evil: uv receives what the
+ * URL form would have carried, and the credentials still stay off the command line.
+ */
+const decodeUserinfo = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
 export const splitIndexUrlCredentials = (value: string): IndexUrlCredentials => {
   try {
     const url = new URL(value);
@@ -73,8 +89,9 @@ export const splitIndexUrlCredentials = (value: string): IndexUrlCredentials => 
       return { url: value };
     }
     // Userinfo is percent-encoded in the URL; uv expects the decoded values in the environment.
-    const username = url.username ? decodeURIComponent(url.username) : undefined;
-    const password = url.password ? decodeURIComponent(url.password) : undefined;
+    const username = url.username ? decodeUserinfo(url.username) : undefined;
+    const password = url.password ? decodeUserinfo(url.password) : undefined;
+    // Strip the userinfo whether or not decoding worked - that is the part that must never reach argv.
     url.username = '';
     url.password = '';
     return { url: url.toString(), username, password };

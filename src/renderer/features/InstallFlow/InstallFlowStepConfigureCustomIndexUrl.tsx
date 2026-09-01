@@ -28,7 +28,12 @@ export const InstallFlowStepConfigureCustomIndexUrl = memo(() => {
             </Text>
             <Text>
               The index must carry the exact torch versions Invoke&apos;s lockfile pins, only built differently. If it
-              doesn&apos;t, the install fails rather than quietly falling back.
+              doesn&apos;t, the install fails rather than quietly falling back. That rules out older ROCm channels,
+              which lag the version Invoke pins.
+            </Text>
+            <Text>
+              On Invoke releases older than 6.14 the whole dependency graph is resolved in one step, so this index takes
+              priority for every package it happens to carry - not just torch.
             </Text>
             <Text>
               Note: on 20xx-series cards the xformers package is still built against Invoke&apos;s default CUDA build,

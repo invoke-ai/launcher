@@ -28,6 +28,12 @@ import type {
 import { hasInsecureCredentials, isCustomTorchIndexUrlInvalid, redactUrlCredentials } from '@/shared/url';
 
 const BOOTSTRAP_PROJECT_DIR_NAME = '.launcher-bootstrap';
+
+/**
+ * The packages a custom index is expected to serve on the legacy (pre-bootstrap) install path. That path resolves the
+ * whole graph from package metadata rather than a lockfile, so there is nothing to read the torch family out of.
+ */
+const LEGACY_TORCH_PACKAGE_NAMES = ['torch', 'torchvision'];
 const MIN_BOOTSTRAP_INSTALL_VERSION = '6.14.0rc1';
 
 const shouldUseBootstrapInstall = (version: string): boolean => {
@@ -111,6 +117,51 @@ export class InstallManager {
     });
     this.isCancellationRequested = false;
   }
+
+  /**
+   * Verify that a user-provided index actually serves the packages we are about to request from it.
+   *
+   * Returns false when the install must stop - the status has already been set in that case.
+   */
+  private verifyCustomTorchIndex = async (indexUrl: string, packageNames: string[]): Promise<boolean> => {
+    this.log.info(c.cyan('Checking the custom PyTorch index...\r\n'));
+    const checks = await checkIndexServesPackages(indexUrl, packageNames);
+
+    if (this.isCancellationRequested) {
+      this.log.warn(c.yellow('Installation canceled\r\n'));
+      this.updateStatus({ type: 'canceled' });
+      return false;
+    }
+
+    // Only an outright "I do not have that project" is fatal. uv reads a 404/403 as "not published here", quietly
+    // resolves the package from PyPI and installs the default build, so without this a typo'd index URL finishes with
+    // a green success screen and the wrong torch.
+    const notServed = checks.filter((check) => check.verdict === 'not-served');
+    if (notServed.length > 0) {
+      const message = `The custom PyTorch index does not serve ${notServed.map(({ name }) => name).join(', ')}.`;
+      this.log.error(c.red(`${message}\r\n`));
+      for (const { name, detail } of notServed) {
+        this.log.error(c.red(`- ${name}: ${detail}\r\n`));
+      }
+      this.log.error(
+        c.red(
+          'Check the index URL. uv would otherwise fall back to PyPI for these packages and install the default ' +
+            'torch build without an error.\r\n'
+        )
+      );
+      this.updateStatus({ type: 'error', error: { message } });
+      return false;
+    }
+
+    // Everything else only means *we* could not confirm it: this check sees neither `.netrc`/keyring credentials nor
+    // the proxy configuration uv honours, so an unanswerable request says nothing about the index. uv is loud about
+    // all of those cases on its own, so warn and carry on rather than blocking a working setup.
+    for (const { name, detail } of checks.filter((check) => check.verdict === 'unknown')) {
+      this.log.warn(c.yellow(`Could not verify that the custom index serves ${name}: ${detail}\r\n`));
+    }
+
+    return true;
+  };
 
   logRepairModeMessages = (): void => {
     this.log.info('Try installing again with Repair mode enabled to fix this.\r\n');
@@ -615,33 +666,12 @@ export class InstallManager {
           return;
         }
 
-        this.log.info(c.cyan('Checking the custom torch index...\r\n'));
-        const indexChecks = await checkIndexServesPackages(torchIndexOverride, torchPackages);
-
-        // Only an actual "no" from the index is fatal. uv reads a 404/403 for a project as "not published here",
-        // quietly resolves it from PyPI and installs the default build, so without this a typo'd index URL finishes
-        // with a green success screen and the wrong torch.
-        const notServed = indexChecks.filter((check) => !check.ok && check.status !== null);
-        if (notServed.length > 0) {
-          const message = `The custom PyTorch index does not serve ${notServed.map(({ name }) => name).join(', ')}.`;
-          this.log.error(c.red(`${message}\r\n`));
-          for (const { name, detail } of notServed) {
-            this.log.error(c.red(`- ${name}: ${detail}\r\n`));
-          }
-          this.log.error(
-            c.red(
-              'Check the index URL. uv would otherwise fall back to PyPI for these packages and install the default ' +
-                'torch build without an error.\r\n'
-            )
-          );
-          this.updateStatus({ type: 'error', error: { message } });
+        const indexIsUsable = await this.verifyCustomTorchIndex(
+          torchIndexOverride,
+          torchPackages.map(({ name }) => name)
+        );
+        if (!indexIsUsable) {
           return;
-        }
-
-        // Not being able to reach the index at all is a different thing, and not one to block on: this check does not
-        // go through uv's proxy handling, and an index that is genuinely unreachable fails the install loudly anyway.
-        for (const { name, detail } of indexChecks.filter((check) => check.status === null)) {
-          this.log.warn(c.yellow(`Could not verify that the custom index serves ${name}: ${detail}\r\n`));
         }
       }
 
@@ -798,8 +828,12 @@ export class InstallManager {
       const torchIndexUrl = pins.torchIndexUrl[systemPlatform][torchPlatform];
 
       // These releases predate the `xpu` extra and their pins.json has no xpu index, so an Intel install here would
-      // resolve the plain PyPI torch and still report success. Same for any accelerator the release has no index for -
-      // legacy win32 pins, for instance, only ever carried `cuda`.
+      // resolve the plain PyPI torch and still report success. Same shape for any accelerator this release has no
+      // index for on this OS.
+      //
+      // This only ever fires for a combination that *could* work on a newer release, so the advice is actionable:
+      // combinations that can never work here (AMD on Windows) already resolved to `cpu` in `getTorchPlatform`, and
+      // install the CPU build deliberately rather than dying on a missing ROCm index no release has ever shipped.
       if (torchPlatform !== 'cpu' && !torchIndexUrl) {
         const message = `Invoke ${version} has no ${torchPlatform.toUpperCase()} PyTorch index for ${systemPlatform}, so it cannot be installed for this GPU type.`;
         this.log.error(c.red(`${message}\r\n`));
@@ -817,10 +851,20 @@ export class InstallManager {
       // way to scope a CLI index to one package, so the override is genuinely index-wide on this path; the tooltip
       // says so.
       if (torchIndexOverride) {
+        // There is no lockfile on this path, so probe the torch family by name. These are the packages the override
+        // exists to redirect, and an index that serves neither is not the index the user thinks it is.
+        const indexIsUsable = await this.verifyCustomTorchIndex(torchIndexOverride, LEGACY_TORCH_PACKAGE_NAMES);
+        if (!indexIsUsable) {
+          return;
+        }
+
         const { arg, env } = buildCustomIndexArg(torchIndexOverride);
         // Credentials go in the environment, not argv - the bootstrap path has always done this, and a token is just
         // as readable from `ps auxww` during a legacy install.
         installInvokeArgs.push(arg);
+        // Same reason as the bootstrap path: an ambient `unsafe-best-match` would let uv mix indexes per version and
+        // quietly serve torch from the pinned index when the override does not have the requested one.
+        installInvokeArgs.push('--index-strategy', 'first-index');
         installInvokeEnv = env;
         this.log.warn(
           c.yellow(

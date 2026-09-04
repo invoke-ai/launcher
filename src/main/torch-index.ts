@@ -53,29 +53,43 @@ const normalizePackageName = (name: string): string => name.toLowerCase().replac
 
 type IndexPackageCheck = {
   name: string;
-  ok: boolean;
-  /** The status the index answered with, or `null` if the request never completed. */
-  status: number | null;
+  /**
+   * - `served` - the index answered 2xx.
+   * - `not-served` - the index answered that it does not have this project. This is the only verdict worth blocking
+   *   on, because it is the one uv reads as "not published here" and quietly resolves from PyPI instead.
+   * - `unknown` - we did not get an answer we are entitled to act on.
+   */
+  verdict: 'served' | 'not-served' | 'unknown';
   detail: string;
 };
 
 /**
- * Ask the custom index whether it actually serves each torch package, before anything is downloaded.
+ * Statuses that mean "this index does not carry that project", as opposed to "you did not ask correctly".
+ *
+ * Deliberately narrow. This check sees less than uv does: it knows only about credentials embedded in the URL, while
+ * uv also reads `.netrc` and the system keyring, and it goes through Node's `fetch`, which ignores the `HTTP(S)_PROXY`
+ * variables uv honours. So a 401 or a 407 says nothing about whether the package is there - only that *we* could not
+ * see it - and blocking on those would lock every `.netrc` and behind-a-proxy user out of the feature with an error
+ * message that is simply false. Anything uncertain degrades to a warning; uv is loud about all of it anyway.
+ */
+const NOT_SERVED_STATUSES = new Set([403, 404, 410]);
+
+/**
+ * Ask the custom index whether it actually serves each package, before anything is downloaded.
  *
  * `--index-strategy first-index` pins resolution to the custom index only for package *names* that index carries. When
  * it answers 404 or 403 for a project - a typo in the path, a mirror that proxies only part of PyPI - uv reads that as
  * "not published here", falls through to PyPI and installs the default build. Exit code 0, no warning, and the user is
  * told the install succeeded from their index while the venv holds the PyPI wheel.
  *
- * The other failure modes are already loud (connection refused, 401, and an index that has the name but not the
- * pinned version all abort the install), so this closes the last silent path.
+ * The other failure modes are already loud (connection refused, and an index that has the name but not the pinned
+ * version both abort the install), so this closes the last silent path.
  */
 export const checkIndexServesPackages = async (
   indexUrl: string,
-  packages: LockedPackage[]
+  packageNames: string[]
 ): Promise<IndexPackageCheck[]> => {
   const { url, username, password } = splitIndexUrlCredentials(indexUrl);
-  const base = url.endsWith('/') ? url : `${url}/`;
 
   const headers: Record<string, string> = {};
   if (username !== undefined || password !== undefined) {
@@ -84,19 +98,27 @@ export const checkIndexServesPackages = async (
   }
 
   return await Promise.all(
-    packages.map(async ({ name }): Promise<IndexPackageCheck> => {
-      const projectUrl = new URL(`${normalizePackageName(name)}/`, base).toString();
+    packageNames.map(async (name): Promise<IndexPackageCheck> => {
+      // Extend the *path*, keeping any query or fragment. Resolving `torch/` as a relative URL would drop a
+      // `?token=…` the index needs, and appending a slash to the whole URL would put it after the query string.
+      const projectUrl = new URL(url);
+      const basePath = projectUrl.pathname.endsWith('/') ? projectUrl.pathname : `${projectUrl.pathname}/`;
+      projectUrl.pathname = `${basePath}${normalizePackageName(name)}/`;
+
       try {
-        const response = await fetch(projectUrl, { headers, signal: AbortSignal.timeout(15000) });
-        return { name, ok: response.ok, status: response.status, detail: `HTTP ${response.status}` };
-      } catch (error) {
-        // `status: null` marks "we could not ask", which is deliberately not the same as "the index said no". Node's
-        // fetch ignores the proxy environment variables uv honours, so a corporate-proxy user can fail here on an
-        // index uv reaches fine - and an index that is genuinely unreachable already fails the install loudly.
+        const response = await fetch(projectUrl.toString(), { headers, signal: AbortSignal.timeout(15000) });
+        if (response.ok) {
+          return { name, verdict: 'served', detail: `HTTP ${response.status}` };
+        }
         return {
           name,
-          ok: false,
-          status: null,
+          verdict: NOT_SERVED_STATUSES.has(response.status) ? 'not-served' : 'unknown',
+          detail: `HTTP ${response.status}`,
+        };
+      } catch (error) {
+        return {
+          name,
+          verdict: 'unknown',
           detail: `could not reach the index (${error instanceof Error ? error.message : String(error)})`,
         };
       }

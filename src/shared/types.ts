@@ -139,7 +139,7 @@ export type GpuBackend = 'cuda' | 'rocm' | 'xpu' | 'metal' | 'cpu';
  * vendor can be identified even when the usable backend is `cpu` - e.g. a discrete AMD GPU on Windows, where ROCm is
  * not supported, or Intel graphics too old for PyTorch's XPU build.
  */
-type GpuVendor = 'nvidia' | 'amd' | 'intel' | 'apple' | 'cpu';
+export type GpuVendor = 'nvidia' | 'amd' | 'intel' | 'apple' | 'cpu';
 
 /**
  * How much the detection result should be trusted. `weak-signal` means hardware was seen but the usable backend could

@@ -57,16 +57,6 @@ type IndexUrlCredentials = {
 };
 
 /**
- * Split any embedded credentials out of an index URL.
- *
- * Command-line arguments are world-readable while the process runs (`ps auxww`, `/proc/<pid>/cmdline`, Task Manager),
- * and a torch download is a multi-GB, multi-minute process. uv can take index credentials from the environment
- * instead (`UV_INDEX_<NAME>_USERNAME` / `_PASSWORD`), so we strip them from the URL and pass them that way.
- *
- * Only meaningful for values that have already passed {@link isCustomTorchIndexUrlInvalid}; anything the URL parser
- * rejects is returned unchanged.
- */
-/**
  * Percent-decode a userinfo component, falling back to the raw value.
  *
  * `new URL()` accepts userinfo that `decodeURIComponent` rejects - a lone `%`, as in `user:p%ss@host`. Letting that
@@ -82,6 +72,16 @@ const decodeUserinfo = (value: string): string => {
   }
 };
 
+/**
+ * Split any embedded credentials out of an index URL.
+ *
+ * Command-line arguments are world-readable while the process runs (`ps auxww`, `/proc/<pid>/cmdline`, Task Manager),
+ * and a torch download is a multi-GB, multi-minute process. uv can take index credentials from the environment
+ * instead (`UV_INDEX_<NAME>_USERNAME` / `_PASSWORD`), so we strip them from the URL and pass them that way.
+ *
+ * Only meaningful for values that have already passed {@link isCustomTorchIndexUrlInvalid}; anything the URL parser
+ * rejects is returned unchanged.
+ */
 export const splitIndexUrlCredentials = (value: string): IndexUrlCredentials => {
   try {
     const url = new URL(value);

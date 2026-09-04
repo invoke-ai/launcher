@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { GpuConfidence, GpuDetectionResult } from '@/shared/types';
+import type { GpuBackend, GpuConfidence, GpuDetectionResult, GpuVendor } from '@/shared/types';
 
 /**
  * Best-effort hardware probe for the compute backend (CUDA / ROCm / Metal / CPU). This is advisory only: the install
@@ -35,6 +35,14 @@ type BackendProbe = {
   detected: boolean;
   confidence: GpuConfidence;
   reason: string;
+};
+
+/** For picking between probes that all detected something. Higher wins. */
+const CONFIDENCE_RANK: Record<GpuConfidence, number> = {
+  high: 3,
+  medium: 2,
+  'weak-signal': 1,
+  none: 0,
 };
 
 const CPU_FALLBACK: GpuDetectionResult = {
@@ -238,39 +246,56 @@ const PCI_VENDOR_AMD = '0x1002';
 const PCI_VENDOR_INTEL = '0x8086';
 const PCI_VENDOR_NVIDIA = '0x10de';
 
-type DrmDevice = {
+type PciDisplayDevice = {
   /** PCI vendor id, e.g. `0x8086`. */
   vendor: string;
   /** PCI device id, e.g. `0x56a0`. */
   device: string;
-  /** Kernel driver bound to the device, e.g. `i915`, `xe`, `amdgpu`. Empty when it cannot be read. */
+  /** Kernel driver bound to the device, e.g. `i915`, `xe`, `amdgpu`. Empty when nothing is bound, or on failure. */
   driver: string;
 };
 
-/**
- * Enumerate the render nodes under `/sys/class/drm`, with the PCI ids and kernel driver of each. One pass serves both
- * the AMD and the Intel probes.
- */
-async function probeDrmDevices(): Promise<DrmDevice[]> {
-  const drmPath = '/sys/class/drm';
-  const entries = (await listDir(drmPath)).filter((name) => name.startsWith('renderD'));
+/** PCI base class 0x03 - display controllers. The full class reads like `0x030000` (VGA) or `0x030200` (3D). */
+const PCI_CLASS_DISPLAY_PREFIX = '0x03';
 
-  return Promise.all(
+/**
+ * Enumerate the display controllers on the PCI bus, with the ids and bound kernel driver of each. One pass serves the
+ * NVIDIA, AMD and Intel probes.
+ *
+ * Deliberately walks `/sys/bus/pci/devices` rather than `/sys/class/drm`: a DRM render node only exists once a driver
+ * has bound to the card, so a machine that has not installed a GPU driver yet - the case where `nvidia-smi` is missing
+ * and this fallback matters most - has no render node at all. The PCI bus lists the hardware either way.
+ */
+async function probePciDisplayDevices(): Promise<PciDisplayDevice[]> {
+  const pciPath = '/sys/bus/pci/devices';
+  const entries = await listDir(pciPath);
+
+  const devices = await Promise.all(
     entries.map(async (entry) => {
-      const devicePath = path.join(drmPath, entry, 'device');
-      const [vendor, device, driver] = await Promise.all([
+      const devicePath = path.join(pciPath, entry);
+      const [vendor, device, deviceClass, driver] = await Promise.all([
         readFile(path.join(devicePath, 'vendor')),
         readFile(path.join(devicePath, 'device')),
-        // `device/driver` is a symlink into /sys/bus/pci/drivers/<name>; the basename is the driver.
+        readFile(path.join(devicePath, 'class')),
+        // `driver` is a symlink into /sys/bus/pci/drivers/<name>, and is absent when no driver is bound.
         readLink(path.join(devicePath, 'driver')),
       ]);
-      return { vendor: vendor.toLowerCase(), device: device.toLowerCase(), driver: path.basename(driver) };
+      return {
+        vendor: vendor.toLowerCase(),
+        device: device.toLowerCase(),
+        deviceClass: deviceClass.toLowerCase(),
+        driver: path.basename(driver),
+      };
     })
   );
+
+  return devices
+    .filter(({ deviceClass }) => deviceClass.startsWith(PCI_CLASS_DISPLAY_PREFIX))
+    .map(({ vendor, device, driver }) => ({ vendor, device, driver }));
 }
 
 async function hasNvidiaGpu(
-  drmDevices: Promise<DrmDevice[]>,
+  pciDisplayDevices: Promise<PciDisplayDevice[]>,
   windowsAdapters: Promise<string[]>
 ): Promise<BackendProbe> {
   const nvidiaSmi = await runProbe('nvidia-smi', ['-L']);
@@ -290,6 +315,9 @@ async function hasNvidiaGpu(
   // that has not installed the driver yet. Without this, a Core Ultra laptop with a discrete NVIDIA card falls through
   // to the Intel probe and the user is asked to confirm an Arc GPU. These signals are already collected for the AMD
   // and Intel probes, so consulting them here costs nothing.
+  //
+  // Only a `medium`: the card being present says nothing about whether it is usable. `detect()` ranks by confidence,
+  // so this cannot outrank a positively confirmed ROCm or Arc GPU in the same machine.
   const nvidiaAdapters = (await windowsAdapters).filter((adapter) =>
     /\b(nvidia|geforce|quadro|tesla|rtx)\b/i.test(adapter)
   );
@@ -301,15 +329,15 @@ async function hasNvidiaGpu(
     };
   }
 
-  if ((await drmDevices).some((device) => device.vendor === PCI_VENDOR_NVIDIA)) {
+  if ((await pciDisplayDevices).some((device) => device.vendor === PCI_VENDOR_NVIDIA)) {
     return { detected: true, confidence: 'medium', reason: 'An NVIDIA GPU is present on the PCI bus' };
   }
 
   return { detected: false, confidence: 'none', reason: 'No NVIDIA evidence found' };
 }
 
-async function hasRocmGpu(drmDevices: Promise<DrmDevice[]>): Promise<BackendProbe> {
-  // Every probe below is Linux-only (ROCm tools, `/sys/class/kfd`, `/sys/class/drm`). Without this guard an `amd-smi`
+async function hasRocmGpu(pciDisplayDevices: Promise<PciDisplayDevice[]>): Promise<BackendProbe> {
+  // Every probe below is Linux-only (ROCm tools, `/sys/class/kfd`, `/sys/bus/pci`). Without this guard an `amd-smi`
   // that happens to be on a Windows PATH would route the user to `pins.torchIndexUrl.win32.rocm`, which does not
   // exist - the exact outcome the Windows AMD probe below exists to prevent.
   if (process.platform !== 'linux') {
@@ -374,7 +402,7 @@ async function hasRocmGpu(drmDevices: Promise<DrmDevice[]>): Promise<BackendProb
     return { detected: true, confidence: 'medium', reason: '`rocm-smi --showproductname` reported a GPU' };
   }
 
-  const hasAmdRenderDevice = (await drmDevices).some((device) => device.vendor === PCI_VENDOR_AMD);
+  const hasAmdRenderDevice = (await pciDisplayDevices).some((device) => device.vendor === PCI_VENDOR_AMD);
   if ((await fileExists('/dev/kfd')) || hasAmdRenderDevice || kfdTopology.exists) {
     return {
       detected: false,
@@ -481,7 +509,7 @@ const XPU_CAPABLE_DRIVERS = ['xe'];
  * macOS an Intel iGPU means Metal or CPU, never XPU.
  */
 async function hasIntelXpuGpu(
-  drmDevices: Promise<DrmDevice[]>,
+  pciDisplayDevices: Promise<PciDisplayDevice[]>,
   windowsAdapters: Promise<string[]>
 ): Promise<BackendProbe> {
   if (process.platform === 'win32') {
@@ -510,7 +538,7 @@ async function hasIntelXpuGpu(
     return { detected: false, confidence: 'none', reason: 'PyTorch publishes no XPU wheels for this platform' };
   }
 
-  const intelDevices = (await drmDevices).filter((device) => device.vendor === PCI_VENDOR_INTEL);
+  const intelDevices = (await pciDisplayDevices).filter((device) => device.vendor === PCI_VENDOR_INTEL);
 
   if (intelDevices.length === 0) {
     return { detected: false, confidence: 'none', reason: 'No Intel evidence found' };
@@ -540,32 +568,46 @@ async function hasIntelXpuGpu(
 async function detect(): Promise<GpuDetectionResult> {
   // Started, not awaited: several probes consume these and would otherwise either run the query twice or serialise
   // behind each other. Every probe still runs concurrently below.
-  const drmDevices = probeDrmDevices();
+  const pciDisplayDevices = probePciDisplayDevices();
   const windowsAdapters = probeWindowsDisplayAdapters();
 
   const [nvidia, rocm, intel, mac, windowsAmd] = await Promise.all([
-    hasNvidiaGpu(drmDevices, windowsAdapters),
-    hasRocmGpu(drmDevices),
-    hasIntelXpuGpu(drmDevices, windowsAdapters),
+    hasNvidiaGpu(pciDisplayDevices, windowsAdapters),
+    hasRocmGpu(pciDisplayDevices),
+    hasIntelXpuGpu(pciDisplayDevices, windowsAdapters),
     hasMacGpuCapabilities(),
     hasWindowsAmdGpu(windowsAdapters),
   ]);
 
-  if (nvidia.detected) {
-    return { backend: 'cuda', vendor: 'nvidia', confidence: nvidia.confidence, decision: nvidia.reason };
+  // Rank by how sure each probe is, and only then by this order. Order alone would let a bare "an NVIDIA GPU is on the
+  // PCI bus" outrank a Radeon that `rocminfo` positively confirmed, and hand a multi-GB CUDA torch to a machine where
+  // ROCm is the backend that actually works. The order below is the tie-break, for the common case of a discrete card
+  // alongside an integrated one: a machine with an NVIDIA card and an Intel iGPU should install CUDA.
+  const candidates = [
+    { probe: nvidia, backend: 'cuda', vendor: 'nvidia' },
+    { probe: rocm, backend: 'rocm', vendor: 'amd' },
+    { probe: intel, backend: 'xpu', vendor: 'intel' },
+    { probe: mac, backend: 'metal', vendor: 'apple' },
+  ] as const satisfies readonly { probe: BackendProbe; backend: GpuBackend; vendor: GpuVendor }[];
+
+  let best: (typeof candidates)[number] | undefined;
+  for (const candidate of candidates) {
+    if (!candidate.probe.detected) {
+      continue;
+    }
+    // Strictly greater, so equal confidence keeps the earlier candidate.
+    if (!best || CONFIDENCE_RANK[candidate.probe.confidence] > CONFIDENCE_RANK[best.probe.confidence]) {
+      best = candidate;
+    }
   }
 
-  if (rocm.detected) {
-    return { backend: 'rocm', vendor: 'amd', confidence: rocm.confidence, decision: rocm.reason };
-  }
-
-  // After the discrete-GPU backends: a machine with an NVIDIA card and an Intel iGPU should install CUDA.
-  if (intel.detected) {
-    return { backend: 'xpu', vendor: 'intel', confidence: intel.confidence, decision: intel.reason };
-  }
-
-  if (mac.detected) {
-    return { backend: 'metal', vendor: 'apple', confidence: mac.confidence, decision: mac.reason };
+  if (best) {
+    return {
+      backend: best.backend,
+      vendor: best.vendor,
+      confidence: best.probe.confidence,
+      decision: best.probe.reason,
+    };
   }
 
   if (windowsAmd.detected) {

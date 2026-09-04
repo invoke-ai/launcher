@@ -68,10 +68,7 @@ describe('checkIndexServesPackages', () => {
     const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await checkIndexServesPackages('https://download.pytorch.org/whl/cu126', [
-      { name: 'torch', version: '2.7.1' },
-      { name: 'triton_rocm', version: '3.6.0' },
-    ]);
+    await checkIndexServesPackages('https://download.pytorch.org/whl/cu126', ['torch', 'triton_rocm']);
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       'https://download.pytorch.org/whl/cu126/torch/',
@@ -87,14 +84,11 @@ describe('checkIndexServesPackages', () => {
       vi.fn((url: string, _init?: RequestInit) => new Response('', { status: url.endsWith('/torch/') ? 404 : 200 }))
     );
 
-    const checks = await checkIndexServesPackages('https://download.pytorch.org/whl/cu1266', [
-      { name: 'torch', version: '2.7.1' },
-      { name: 'torchvision', version: '0.22.1' },
-    ]);
+    const checks = await checkIndexServesPackages('https://download.pytorch.org/whl/cu1266', ['torch', 'torchvision']);
 
     expect(checks).toEqual([
-      { name: 'torch', ok: false, status: 404, detail: 'HTTP 404' },
-      { name: 'torchvision', ok: true, status: 200, detail: 'HTTP 200' },
+      { name: 'torch', verdict: 'not-served', detail: 'HTTP 404' },
+      { name: 'torchvision', verdict: 'served', detail: 'HTTP 200' },
     ]);
   });
 
@@ -104,11 +98,10 @@ describe('checkIndexServesPackages', () => {
       vi.fn((_url: string, _init?: RequestInit) => Promise.reject(new Error('getaddrinfo ENOTFOUND nexus.corp')))
     );
 
-    const [check] = await checkIndexServesPackages('https://nexus.corp/simple', [{ name: 'torch', version: '2.7.1' }]);
+    const [check] = await checkIndexServesPackages('https://nexus.corp/simple', ['torch']);
 
-    expect(check?.ok).toBe(false);
-    // `status: null` is what keeps the install manager from treating an unreachable index as a refusal.
-    expect(check?.status).toBeNull();
+    // 'unknown' is what keeps the install manager from treating an unreachable index as a refusal.
+    expect(check?.verdict).toBe('unknown');
     expect(check?.detail).toContain('could not reach the index');
   });
 
@@ -116,7 +109,7 @@ describe('checkIndexServesPackages', () => {
     const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await checkIndexServesPackages('https://myuser:ghp_TOKEN@nexus.corp/simple', [{ name: 'torch', version: '2.7.1' }]);
+    await checkIndexServesPackages('https://myuser:ghp_TOKEN@nexus.corp/simple', ['torch']);
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://nexus.corp/simple/torch/');
     const init = fetchMock.mock.calls[0]?.[1] as unknown as { headers: Record<string, string> };
@@ -127,8 +120,52 @@ describe('checkIndexServesPackages', () => {
     const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await checkIndexServesPackages('https://nexus.corp/repository/pypi/simple', [{ name: 'torch', version: '2.7.1' }]);
+    await checkIndexServesPackages('https://nexus.corp/repository/pypi/simple', ['torch']);
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://nexus.corp/repository/pypi/simple/torch/');
+  });
+});
+
+describe('checkIndexServesPackages verdicts', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const checkWithStatus = async (status: number) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, _init?: RequestInit) => new Response('', { status }))
+    );
+    const [check] = await checkIndexServesPackages('https://nexus.corp/simple', ['torch']);
+    return check?.verdict;
+  };
+
+  it('treats "the index does not have this project" as not-served', async () => {
+    await expect(checkWithStatus(404)).resolves.toBe('not-served');
+    await expect(checkWithStatus(403)).resolves.toBe('not-served');
+    await expect(checkWithStatus(410)).resolves.toBe('not-served');
+  });
+
+  it('does not treat an auth challenge as proof the package is missing', async () => {
+    // uv also reads `.netrc` and the system keyring, so it can authenticate where this check cannot. Blocking on a 401
+    // would lock those users out of the feature with an error message that is simply untrue.
+    await expect(checkWithStatus(401)).resolves.toBe('unknown');
+    // 407 is the proxy talking, not the index - and Node's fetch ignores the proxy variables uv honours.
+    await expect(checkWithStatus(407)).resolves.toBe('unknown');
+  });
+
+  it('does not block on a server-side failure', async () => {
+    await expect(checkWithStatus(500)).resolves.toBe('unknown');
+    await expect(checkWithStatus(429)).resolves.toBe('unknown');
+  });
+
+  it('keeps a query string on the index URL', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await checkIndexServesPackages('https://nexus.corp/simple?token=abc', ['torch']);
+
+    // Resolving `torch/` as a relative URL would drop the token and hit `/torch/` at the host root.
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://nexus.corp/simple/torch/?token=abc');
   });
 });

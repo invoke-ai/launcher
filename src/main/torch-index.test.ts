@@ -59,9 +59,12 @@ describe('buildCustomTorchInstallCommand', () => {
   });
 });
 
+const probe = (indexUrl: string, requirements: string[], baseEnv: Record<string, string> = {}, useUvConfig = false) =>
+  buildCustomIndexProbeCommand({ pythonTarget: VENV, indexUrl, requirements, baseEnv, useUvConfig });
+
 describe('buildCustomIndexProbeCommand', () => {
   it('resolves without installing anything', () => {
-    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch==2.7.1']);
+    const { args } = probe('https://download.pytorch.org/whl/cu126', ['torch==2.7.1']);
     expect(args.slice(0, 2)).toEqual(['pip', 'install']);
     expect(args).toContain('--dry-run');
     expect(args).toContain('--no-deps');
@@ -73,22 +76,19 @@ describe('buildCustomIndexProbeCommand', () => {
     // torch's CUDA runtime still comes from PyPI - uv skips an index that rejects a request and resolves from the next
     // one, silently and with exit code 0. Measured on the bundled uv against `whl/cu1266` (a one-character typo that
     // answers 403): alongside PyPI it yields the PyPI torch, alongside a pinned index it yields that index's build.
-    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch==2.7.1']);
+    const { args } = probe('https://download.pytorch.org/whl/cu126', ['torch==2.7.1']);
     expect(args).toContain(`--default-index=${CUSTOM_TORCH_INDEX_NAME}=https://download.pytorch.org/whl/cu126`);
     expect(args.some((arg) => arg.startsWith('--index='))).toBe(false);
     expect(args).not.toContain('--index');
   });
 
   it('asks for exactly the requirements it is given', () => {
-    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', [
-      'torch==2.7.1',
-      'torchvision==0.22.1',
-    ]);
+    const { args } = probe('https://download.pytorch.org/whl/cu126', ['torch==2.7.1', 'torchvision==0.22.1']);
     expect(args.slice(-2)).toEqual(['torch==2.7.1', 'torchvision==0.22.1']);
   });
 
   it('passes index credentials via the environment, never in argv', () => {
-    const { args, env } = buildCustomIndexProbeCommand(VENV, 'https://myuser:ghp_TOKEN@nexus.corp/simple', ['torch']);
+    const { args, env } = probe('https://myuser:ghp_TOKEN@nexus.corp/simple', ['torch']);
     expect(args).toContain(`--default-index=${CUSTOM_TORCH_INDEX_NAME}=https://nexus.corp/simple`);
     expect(args.join(' ')).not.toContain('ghp_TOKEN');
     expect(env).toEqual({
@@ -97,8 +97,8 @@ describe('buildCustomIndexProbeCommand', () => {
     });
   });
 
-  it('adds no environment for a credential-free index', () => {
-    const { env } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch']);
+  it('adds no credential environment for a credential-free index', () => {
+    const { env } = probe('https://download.pytorch.org/whl/cu126', ['torch']);
     expect(env).toEqual({});
   });
 });
@@ -107,7 +107,40 @@ describe('buildCustomIndexProbeCommand isolation', () => {
   it('ignores uv config, which would otherwise answer for the index under test', () => {
     // Measured against the bundled uv: an `[[index]]` in the user's uv.toml outranks `--default-index`, so without
     // this the probe resolves torch from that index and passes for any URL at all, typo included.
-    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch']);
+    const { args } = probe('https://download.pytorch.org/whl/cu126', ['torch']);
     expect(args).toContain('--no-config');
+  });
+
+  it('can be asked to apply uv config, for the retry that rules out a credentials-only failure', () => {
+    const { args } = probe('https://download.pytorch.org/whl/cu126', ['torch'], {}, true);
+    expect(args).not.toContain('--no-config');
+  });
+
+  it('removes every ambient index setting from the environment', () => {
+    // `--no-config` closes the config file route but not this one, and the install manager builds its environment from
+    // the user's login shell. `UV_INDEX` exported from a .bashrc adds an index that outranks `--default-index`, so a
+    // typo'd custom index resolves from that instead and the probe passes - the same rubber stamp, another door.
+    const { env } = probe('https://download.pytorch.org/whl/cu126', ['torch'], {
+      PATH: '/usr/bin',
+      UV_INDEX: 'https://download.pytorch.org/whl/cu128',
+      UV_EXTRA_INDEX_URL: 'https://download.pytorch.org/whl/cu128',
+      UV_FIND_LINKS: 'https://download.pytorch.org/whl/cu128/torch/',
+      UV_DEFAULT_INDEX: 'https://download.pytorch.org/whl/cu128',
+      UV_INDEX_URL: 'https://download.pytorch.org/whl/cu128',
+    });
+    expect(env).toEqual({ PATH: '/usr/bin' });
+  });
+
+  it('keeps the rest of the environment, which carries the proxy and TLS settings uv needs', () => {
+    const { env } = probe('https://download.pytorch.org/whl/cu126', ['torch'], {
+      HTTPS_PROXY: 'http://proxy.corp:3128',
+      SSL_CERT_FILE: '/etc/ssl/corp.pem',
+      NETRC: '/home/user/.netrc',
+    });
+    expect(env).toEqual({
+      HTTPS_PROXY: 'http://proxy.corp:3128',
+      SSL_CERT_FILE: '/etc/ssl/corp.pem',
+      NETRC: '/home/user/.netrc',
+    });
   });
 });

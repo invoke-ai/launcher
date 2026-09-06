@@ -194,6 +194,12 @@ const ROCM_SUPPORTED_GFX_TARGETS = new Set([
   'gfx1201',
 ]);
 
+/**
+ * ROCm-supported targets that are integrated rather than add-in cards - today only Strix Halo. Used purely to rank a
+ * detection against a competing one; see `integrated` on BackendProbe.
+ */
+const ROCM_INTEGRATED_GFX_TARGETS = new Set(['gfx1151']);
+
 /** Normalize a gfx target - `rocminfo` reports feature suffixes, e.g. `gfx90a:sramecc+:xnack-`. */
 function normalizeGfxTarget(name: string): string {
   return name.trim().toLowerCase().split(':')[0] ?? '';
@@ -382,6 +388,7 @@ async function hasRocmGpu(pciDisplayDevices: Promise<PciDisplayDevice[]>): Promi
     return {
       detected: true,
       confidence: 'high',
+      integrated: supportedGfxTargets.every((target) => ROCM_INTEGRATED_GFX_TARGETS.has(normalizeGfxTarget(target))),
       reason: `Found an AMD GPU with a ROCm-supported target (${supportedGfxTargets.join(', ')})`,
     };
   }
@@ -528,9 +535,10 @@ async function hasIntelXpuGpu(
     const arcAdapters = intelAdapters.filter((adapter) => /\barc\b/i.test(adapter));
 
     if (arcAdapters.length > 0) {
-      // The discrete cards carry a model number ("Intel(R) Arc(TM) A770 Graphics", "... B580 ..."); the Core Ultra
-      // integrated GPU is just "Intel(R) Arc(TM) Graphics". See `integrated` on BackendProbe for why this matters.
-      const discreteArc = arcAdapters.find((adapter) => /\b[AB]\d{3}\b/.test(adapter));
+      // The discrete cards carry an A/B model number - "A770", "B580", the mobile "A370M", the workstation "Pro A60".
+      // The integrated ones do not: Core Ultra reports "Intel(R) Arc(TM) Graphics" or "Intel(R) Arc(TM) 140V GPU",
+      // whose digits are not preceded by an A or a B. See `integrated` on BackendProbe for why this matters.
+      const discreteArc = arcAdapters.find((adapter) => /\b[AB]\d{2,3}[A-Z]?\b/i.test(adapter));
       return {
         detected: true,
         confidence: 'high',

@@ -27,13 +27,7 @@ type CustomIndexArg = {
   env: Record<string, string>;
 };
 
-/**
- * Register a user-provided index with uv under {@link CUSTOM_TORCH_INDEX_NAME}, passing any credentials through the
- * environment rather than argv - the command line is world-readable (`ps auxww`, `/proc/<pid>/cmdline`, Task Manager)
- * for the life of a multi-GB download.
- *
- * Shared by both install paths so neither can forget it.
- */
+/** uv reads an index's credentials from env vars named after the index, which keeps them out of argv. */
 const buildCredentialEnv = (username?: string, password?: string): Record<string, string> => {
   const env: Record<string, string> = {};
   if (username !== undefined) {
@@ -45,6 +39,13 @@ const buildCredentialEnv = (username?: string, password?: string): Record<string
   return env;
 };
 
+/**
+ * Register a user-provided index with uv under {@link CUSTOM_TORCH_INDEX_NAME}, passing any credentials through the
+ * environment rather than argv - the command line is world-readable (`ps auxww`, `/proc/<pid>/cmdline`, Task Manager)
+ * for the life of a multi-GB download.
+ *
+ * Shared by both install paths so neither can forget it.
+ */
 export const buildCustomIndexArg = (indexUrl: string): CustomIndexArg => {
   const { url, username, password } = splitIndexUrlCredentials(indexUrl);
   return { arg: `--index=${CUSTOM_TORCH_INDEX_NAME}=${url}`, env: buildCredentialEnv(username, password) };
@@ -52,9 +53,22 @@ export const buildCustomIndexArg = (indexUrl: string): CustomIndexArg => {
 
 type CustomIndexProbeCommand = {
   args: string[];
-  /** Extra environment for the command. Carries index credentials, which must never appear in argv. */
+  /** The complete environment for the command - not overrides. Ambient index settings are removed from it. */
   env: Record<string, string>;
 };
+
+/**
+ * uv environment variables that add or replace indexes.
+ *
+ * `--no-config` closes the config-file route into the probe, but not these. `UV_INDEX`, `UV_EXTRA_INDEX_URL` and
+ * `UV_FIND_LINKS` all add a source that outranks or augments `--default-index`, so any one of them turns the probe
+ * into a rubber stamp: with `UV_INDEX` exported from a shell profile, a typo'd custom index resolves from *that* and
+ * the probe passes. `UV_DEFAULT_INDEX` and `UV_INDEX_URL` are correctly overridden by the flag, but they are removed
+ * too - the probe should depend on exactly one index, and not on which slot a variable happens to occupy.
+ *
+ * The install manager builds its environment from the user's login shell, so these genuinely reach uv.
+ */
+const AMBIENT_INDEX_ENV_VARS = ['UV_INDEX', 'UV_EXTRA_INDEX_URL', 'UV_FIND_LINKS', 'UV_DEFAULT_INDEX', 'UV_INDEX_URL'];
 
 /**
  * Build a resolution-only `uv pip install --dry-run` that asks whether the custom index can satisfy the torch
@@ -71,36 +85,46 @@ type CustomIndexProbeCommand = {
  * reaching an index: `.netrc` and system-keyring credentials, and the proxy configuration. A private index that
  * answers 403 or 401 to anonymous requests but authenticates for uv resolves here exactly as it will during the
  * install, instead of being reported as an index that does not carry torch.
+ *
+ * `useUvConfig` exists for the second attempt the install manager makes when the isolated probe fails: uv config can
+ * carry credentials for the index under test, not just substitute indexes, so a failure with config suppressed is not
+ * yet proof that the index is wrong.
  */
-export const buildCustomIndexProbeCommand = (
-  pythonTarget: string,
-  indexUrl: string,
-  requirements: string[]
-): CustomIndexProbeCommand => {
-  const { url, username, password } = splitIndexUrlCredentials(indexUrl);
+export const buildCustomIndexProbeCommand = (arg: {
+  pythonTarget: string;
+  indexUrl: string;
+  requirements: string[];
+  /** The environment the real install would use. Returned with the ambient index settings stripped out. */
+  baseEnv: Record<string, string>;
+  useUvConfig?: boolean;
+}): CustomIndexProbeCommand => {
+  const { url, username, password } = splitIndexUrlCredentials(arg.indexUrl);
+
+  const env = { ...arg.baseEnv, ...buildCredentialEnv(username, password) };
+  for (const name of AMBIENT_INDEX_ENV_VARS) {
+    delete env[name];
+  }
 
   return {
     args: [
       'pip',
       'install',
       '--python',
-      pythonTarget,
+      arg.pythonTarget,
       '--python-preference',
       'only-managed',
       `--default-index=${CUSTOM_TORCH_INDEX_NAME}=${url}`,
-      // Without this the probe is a rubber stamp for anyone with a `uv.toml`: an `[[index]]` declared in config
-      // outranks `--default-index` (measured - `UV_INDEX_URL` does not, only the config file), so that index answers
-      // for torch and the typo'd URL resolves happily. Config is the only ambient source that has to go; `.netrc`,
-      // the proxy environment and `SSL_CERT_FILE` are unaffected, so a private index still authenticates here exactly
-      // as it will during the install.
-      '--no-config',
+      // An `[[index]]` declared in a `uv.toml` outranks `--default-index` (measured), so that index would answer for
+      // torch and the typo'd URL would resolve happily. Config also carries credentials, `keyring-provider` and TLS
+      // settings the real install honours, which is why the caller retries with config once this attempt fails.
+      ...(arg.useUvConfig ? [] : ['--no-config']),
       // Resolve and report; touch nothing.
       '--dry-run',
       // Dependencies are the real install's business, and they come from PyPI - not from this index.
       '--no-deps',
-      ...requirements,
+      ...arg.requirements,
     ],
-    env: buildCredentialEnv(username, password),
+    env,
   };
 };
 

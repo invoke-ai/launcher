@@ -132,41 +132,91 @@ export class InstallManager {
     cwd: string;
     redactForLog: (text: string) => string;
   }): Promise<boolean> => {
-    const { args, env } = buildCustomIndexProbeCommand(arg.pythonTarget, arg.indexUrl, arg.requirements);
+    /** Runs one attempt. `'unavailable'` means uv could not carry the check out, which is not evidence either way. */
+    const attempt = async (useUvConfig: boolean): Promise<'ok' | 'unresolvable' | 'unavailable' | 'canceled'> => {
+      const { args, env } = buildCustomIndexProbeCommand({
+        pythonTarget: arg.pythonTarget,
+        indexUrl: arg.indexUrl,
+        requirements: arg.requirements,
+        baseEnv: arg.runProcessOptions.env,
+        useUvConfig,
+      });
+
+      this.log.info(arg.redactForLog(`> ${arg.uvPath} ${args.join(' ')}\r\n`));
+
+      const result = await withResultAsync(() => this.runCommand(arg.uvPath, args, { env, cwd: arg.cwd }));
+
+      if (result.isOk()) {
+        return result.value === 'canceled' ? 'canceled' : 'ok';
+      }
+
+      // uv exits 1 when the resolution itself failed, and 2 for everything operational - connection refused, DNS
+      // failure, a 5xx from the index. Only the former says anything about what this index carries; the latter used
+      // to be a warning and should stay one, or a transient blip during a one-second probe kills the whole install.
+      const exitCode = (result.error as { exitCode?: number }).exitCode;
+      return exitCode === 1 ? 'unresolvable' : 'unavailable';
+    };
 
     this.log.info(c.cyan('Checking the custom PyTorch index...\r\n'));
-    this.log.info(arg.redactForLog(`> ${arg.uvPath} ${args.join(' ')}\r\n`));
 
-    const result = await withResultAsync(() =>
-      this.runCommand(arg.uvPath, args, {
-        ...arg.runProcessOptions,
-        env: { ...arg.runProcessOptions.env, ...env },
-        cwd: arg.cwd,
-      })
-    );
+    const isolated = await attempt(false);
 
-    if (result.isErr()) {
-      // uv resolved against this index alone, so a failure here means it cannot supply what the install will ask it
-      // for. Letting it through would install the default build from another index and still report success.
-      const message = 'The custom PyTorch index cannot supply the required torch packages.';
-      this.log.error(c.red(`${message}\r\n`));
-      this.log.error(
-        c.red(
-          'Check the index URL and that it carries these exact versions. See the resolver output above for what ' +
-            'was missing.\r\n'
-        )
-      );
-      this.updateStatus({ type: 'error', error: { message, context: serializeError(result.error) } });
-      return false;
-    }
-
-    if (result.value === 'canceled') {
+    if (isolated === 'canceled') {
       this.log.warn(c.yellow('Installation canceled\r\n'));
       this.updateStatus({ type: 'canceled' });
       return false;
     }
 
-    return true;
+    if (isolated === 'ok') {
+      return true;
+    }
+
+    if (isolated === 'unavailable') {
+      this.log.warn(
+        c.yellow('Could not check the custom PyTorch index - continuing. Watch the install output for errors.\r\n')
+      );
+      return true;
+    }
+
+    // The isolated attempt suppressed uv's config so that a configured index could not answer in place of the one
+    // under test. But config also carries credentials, `keyring-provider` and TLS settings that the real install does
+    // use, so this failure is not yet proof the index is wrong. Ask again with config applied.
+    const withConfig = await attempt(true);
+
+    if (withConfig === 'canceled') {
+      this.log.warn(c.yellow('Installation canceled\r\n'));
+      this.updateStatus({ type: 'canceled' });
+      return false;
+    }
+
+    if (withConfig === 'unavailable') {
+      this.log.warn(
+        c.yellow('Could not check the custom PyTorch index - continuing. Watch the install output for errors.\r\n')
+      );
+      return true;
+    }
+
+    if (withConfig === 'ok') {
+      // Resolvable only with the uv config applied. That is either credentials for this index or a different index
+      // standing in for it, and we cannot tell which - so warn rather than block or wave it through silently.
+      this.log.warn(
+        c.yellow(
+          'The custom PyTorch index resolved only with your uv configuration applied, so it could not be verified ' +
+            'on its own. If your uv config points at another index, torch may come from there instead.\r\n'
+        )
+      );
+      return true;
+    }
+
+    // Neither attempt could resolve the requirements from this index. Letting it through would install the default
+    // build from another index and still report success.
+    const message = 'The custom PyTorch index cannot supply the required torch packages.';
+    this.log.error(c.red(`${message}\r\n`));
+    this.log.error(
+      c.red('Check the index URL and that it carries these exact versions. See the resolver output above.\r\n')
+    );
+    this.updateStatus({ type: 'error', error: { message } });
+    return false;
   };
 
   logRepairModeMessages = (): void => {
@@ -215,7 +265,9 @@ export class InstallManager {
       if (result.exitCode === 0) {
         return 'success';
       } else {
-        throw new Error(`Process exited with code ${result.exitCode}`);
+        // Carry the code on the error: uv distinguishes "the resolution failed" (1) from "something went wrong while
+        // running" (2 - connection refused, DNS, 5xx), and the custom-index check needs to tell those apart.
+        throw Object.assign(new Error(`Process exited with code ${result.exitCode}`), { exitCode: result.exitCode });
       }
     } catch (error) {
       if (this.isCancellationRequested) {

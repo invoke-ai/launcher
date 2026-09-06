@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_ENV } from '@/lib/pty-utils';
+
 import { buildCustomIndexProbeCommand, buildCustomTorchInstallCommand, CUSTOM_TORCH_INDEX_NAME } from './torch-index';
 
 const VENV = '/home/user/invokeai/.venv';
@@ -91,7 +93,7 @@ describe('buildCustomIndexProbeCommand', () => {
     const { args, env } = probe('https://myuser:ghp_TOKEN@nexus.corp/simple', ['torch']);
     expect(args).toContain(`--default-index=${CUSTOM_TORCH_INDEX_NAME}=https://nexus.corp/simple`);
     expect(args.join(' ')).not.toContain('ghp_TOKEN');
-    expect(env).toEqual({
+    expect(env).toMatchObject({
       UV_INDEX_INVOKE_CUSTOM_TORCH_USERNAME: 'myuser',
       UV_INDEX_INVOKE_CUSTOM_TORCH_PASSWORD: 'ghp_TOKEN',
     });
@@ -99,7 +101,7 @@ describe('buildCustomIndexProbeCommand', () => {
 
   it('adds no credential environment for a credential-free index', () => {
     const { env } = probe('https://download.pytorch.org/whl/cu126', ['torch']);
-    expect(env).toEqual({});
+    expect(Object.keys(env).filter((name) => name.startsWith('UV_INDEX_INVOKE_CUSTOM_TORCH'))).toEqual([]);
   });
 });
 
@@ -116,19 +118,31 @@ describe('buildCustomIndexProbeCommand isolation', () => {
     expect(args).not.toContain('--no-config');
   });
 
-  it('removes every ambient index setting from the environment', () => {
+  it('neutralizes every ambient index setting in the environment uv is actually spawned with', () => {
     // `--no-config` closes the config file route but not this one, and the install manager builds its environment from
     // the user's login shell. `UV_INDEX` exported from a .bashrc adds an index that outranks `--default-index`, so a
     // typo'd custom index resolves from that instead and the probe passes - the same rubber stamp, another door.
-    const { env } = probe('https://download.pytorch.org/whl/cu126', ['torch'], {
-      PATH: '/usr/bin',
+    //
+    // Asserted through the spawn-time merge on purpose. What we return is layered *over* `process.env`
+    // (`createPtyProcess`: `{ ...process.env, ...DEFAULT_ENV, ...options.env }`), so deleting a key here would leave
+    // it in place for any variable the launcher was itself started with - a Windows user-level variable, a Linux
+    // session variable, or any launch from a terminal. Only an empty value survives that merge, and uv reads these as
+    // unset. Asserting on the returned object alone would pass either way.
+    const ambient = {
       UV_INDEX: 'https://download.pytorch.org/whl/cu128',
       UV_EXTRA_INDEX_URL: 'https://download.pytorch.org/whl/cu128',
       UV_FIND_LINKS: 'https://download.pytorch.org/whl/cu128/torch/',
       UV_DEFAULT_INDEX: 'https://download.pytorch.org/whl/cu128',
       UV_INDEX_URL: 'https://download.pytorch.org/whl/cu128',
-    });
-    expect(env).toEqual({ PATH: '/usr/bin' });
+    };
+
+    const { env } = probe('https://download.pytorch.org/whl/cu126', ['torch'], { PATH: '/usr/bin', ...ambient });
+
+    // `ambient` stands in for a `process.env` that already carries them.
+    const asSpawned: Record<string, string> = { ...ambient, ...DEFAULT_ENV, ...env };
+    for (const name of Object.keys(ambient)) {
+      expect(asSpawned[name]).toBe('');
+    }
   });
 
   it('keeps the rest of the environment, which carries the proxy and TLS settings uv needs', () => {
@@ -137,7 +151,7 @@ describe('buildCustomIndexProbeCommand isolation', () => {
       SSL_CERT_FILE: '/etc/ssl/corp.pem',
       NETRC: '/home/user/.netrc',
     });
-    expect(env).toEqual({
+    expect(env).toMatchObject({
       HTTPS_PROXY: 'http://proxy.corp:3128',
       SSL_CERT_FILE: '/etc/ssl/corp.pem',
       NETRC: '/home/user/.netrc',

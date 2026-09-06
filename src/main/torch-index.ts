@@ -53,7 +53,7 @@ export const buildCustomIndexArg = (indexUrl: string): CustomIndexArg => {
 
 type CustomIndexProbeCommand = {
   args: string[];
-  /** The complete environment for the command - not overrides. Ambient index settings are removed from it. */
+  /** The complete environment for the command - not overrides. Ambient index settings are neutralized in it. */
   env: Record<string, string>;
 };
 
@@ -67,6 +67,14 @@ type CustomIndexProbeCommand = {
  * too - the probe should depend on exactly one index, and not on which slot a variable happens to occupy.
  *
  * The install manager builds its environment from the user's login shell, so these genuinely reach uv.
+ *
+ * They are set to the empty string rather than deleted. The env we return is merged over `process.env` when the
+ * command is spawned (`createPtyProcess`: `{ ...process.env, ...DEFAULT_ENV, ...options.env }`), so deleting a key
+ * only removes it if it arrived via `shellEnvSync()` and is absent from the launcher's own environment - which is the
+ * exception, not the rule: a Windows user-level variable, a Linux session variable, or any launch from a terminal all
+ * put it in `process.env`, where a deletion cannot reach it. An empty value can, and uv reads these as unset
+ * (measured against the bundled 0.11.28: with each of the three set to `''`, a typo'd index is rejected as it should
+ * be, and a real one still resolves).
  */
 const AMBIENT_INDEX_ENV_VARS = ['UV_INDEX', 'UV_EXTRA_INDEX_URL', 'UV_FIND_LINKS', 'UV_DEFAULT_INDEX', 'UV_INDEX_URL'];
 
@@ -94,7 +102,7 @@ export const buildCustomIndexProbeCommand = (arg: {
   pythonTarget: string;
   indexUrl: string;
   requirements: string[];
-  /** The environment the real install would use. Returned with the ambient index settings stripped out. */
+  /** The environment the real install would use. Returned with the ambient index settings neutralized. */
   baseEnv: Record<string, string>;
   useUvConfig?: boolean;
 }): CustomIndexProbeCommand => {
@@ -102,7 +110,7 @@ export const buildCustomIndexProbeCommand = (arg: {
 
   const env = { ...arg.baseEnv, ...buildCredentialEnv(username, password) };
   for (const name of AMBIENT_INDEX_ENV_VARS) {
-    delete env[name];
+    env[name] = '';
   }
 
   return {

@@ -35,6 +35,13 @@ type BackendProbe = {
   detected: boolean;
   confidence: GpuConfidence;
   reason: string;
+  /**
+   * Whether the detected GPU is integrated rather than an add-in card. Only meaningful when `detected`; defaults to
+   * discrete, which is what NVIDIA and AMD hardware reaching this point overwhelmingly is.
+   *
+   * Used only to rank competing detections - see `detect()`.
+   */
+  integrated?: boolean;
 };
 
 /** For picking between probes that all detected something. Higher wins. */
@@ -316,8 +323,9 @@ async function hasNvidiaGpu(
   // to the Intel probe and the user is asked to confirm an Arc GPU. These signals are already collected for the AMD
   // and Intel probes, so consulting them here costs nothing.
   //
-  // Only a `medium`: the card being present says nothing about whether it is usable. `detect()` ranks by confidence,
-  // so this cannot outrank a positively confirmed ROCm or Arc GPU in the same machine.
+  // Only a `medium`: the card being present says nothing about whether it is usable. `detect()` ranks discrete over
+  // integrated first and confidence second, so this still wins over an Arc iGPU in the same laptop - the case above -
+  // but loses to a discrete Radeon that `rocminfo` positively confirmed.
   const nvidiaAdapters = (await windowsAdapters).filter((adapter) =>
     /\b(nvidia|geforce|quadro|tesla|rtx)\b/i.test(adapter)
   );
@@ -520,7 +528,15 @@ async function hasIntelXpuGpu(
     const arcAdapters = intelAdapters.filter((adapter) => /\barc\b/i.test(adapter));
 
     if (arcAdapters.length > 0) {
-      return { detected: true, confidence: 'high', reason: `Windows reported an Intel Arc GPU (${arcAdapters[0]})` };
+      // The discrete cards carry a model number ("Intel(R) Arc(TM) A770 Graphics", "... B580 ..."); the Core Ultra
+      // integrated GPU is just "Intel(R) Arc(TM) Graphics". See `integrated` on BackendProbe for why this matters.
+      const discreteArc = arcAdapters.find((adapter) => /\b[AB]\d{3}\b/.test(adapter));
+      return {
+        detected: true,
+        confidence: 'high',
+        integrated: discreteArc === undefined,
+        reason: `Windows reported an Intel Arc GPU (${discreteArc ?? arcAdapters[0]})`,
+      };
     }
 
     if (intelAdapters.length > 0) {
@@ -544,16 +560,19 @@ async function hasIntelXpuGpu(
     return { detected: false, confidence: 'none', reason: 'No Intel evidence found' };
   }
 
-  const supported = intelDevices.filter(
-    (device) =>
-      XPU_CAPABLE_DRIVERS.includes(device.driver) ||
-      XPU_SUPPORTED_PCI_DEVICE_PREFIXES.some((prefix) => device.device.startsWith(prefix))
+  // A device id in the discrete list is an add-in card; one that qualifies only through its Xe-architecture driver is
+  // an integrated GPU (Lunar Lake and friends). See `integrated` on BackendProbe for why the distinction matters.
+  const discrete = intelDevices.filter((device) =>
+    XPU_SUPPORTED_PCI_DEVICE_PREFIXES.some((prefix) => device.device.startsWith(prefix))
   );
+  const supported =
+    discrete.length > 0 ? discrete : intelDevices.filter((device) => XPU_CAPABLE_DRIVERS.includes(device.driver));
 
   if (supported.length > 0) {
     return {
       detected: true,
       confidence: 'high',
+      integrated: discrete.length === 0,
       reason: `Found an Intel GPU with XPU support (PCI ${supported[0]?.device}, ${supported[0]?.driver} driver)`,
     };
   }
@@ -579,10 +598,15 @@ async function detect(): Promise<GpuDetectionResult> {
     hasWindowsAmdGpu(windowsAdapters),
   ]);
 
-  // Rank by how sure each probe is, and only then by this order. Order alone would let a bare "an NVIDIA GPU is on the
-  // PCI bus" outrank a Radeon that `rocminfo` positively confirmed, and hand a multi-GB CUDA torch to a machine where
-  // ROCm is the backend that actually works. The order below is the tie-break, for the common case of a discrete card
-  // alongside an integrated one: a machine with an NVIDIA card and an Intel iGPU should install CUDA.
+  // Rank a discrete GPU above an integrated one first, then by how sure the probe is, and only then by this order.
+  //
+  // Confidence alone is the wrong key, because it answers "is this hardware really there", not "which backend should
+  // this machine use". On a Core Ultra laptop with a discrete NVIDIA card we are *more* sure about the Arc iGPU (a
+  // named adapter) than about the RTX whose driver is not installed yet (only seen on the PCI bus) - and CUDA is still
+  // the right default. Within one class the question genuinely is which detection to trust, which is what confidence
+  // measures: a Radeon `rocminfo` positively confirmed beats an NVIDIA card we only saw on the bus.
+  //
+  // The declaration order is the final tie-break.
   const candidates = [
     { probe: nvidia, backend: 'cuda', vendor: 'nvidia' },
     { probe: rocm, backend: 'rocm', vendor: 'amd' },
@@ -590,13 +614,16 @@ async function detect(): Promise<GpuDetectionResult> {
     { probe: mac, backend: 'metal', vendor: 'apple' },
   ] as const satisfies readonly { probe: BackendProbe; backend: GpuBackend; vendor: GpuVendor }[];
 
+  const rank = ({ probe }: (typeof candidates)[number]): number =>
+    (probe.integrated ? 0 : 1) * 10 + CONFIDENCE_RANK[probe.confidence];
+
   let best: (typeof candidates)[number] | undefined;
   for (const candidate of candidates) {
     if (!candidate.probe.detected) {
       continue;
     }
-    // Strictly greater, so equal confidence keeps the earlier candidate.
-    if (!best || CONFIDENCE_RANK[candidate.probe.confidence] > CONFIDENCE_RANK[best.probe.confidence]) {
+    // Strictly greater, so an equal rank keeps the earlier candidate.
+    if (!best || rank(candidate) > rank(best)) {
       best = candidate;
     }
   }

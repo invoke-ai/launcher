@@ -34,9 +34,7 @@ type CustomIndexArg = {
  *
  * Shared by both install paths so neither can forget it.
  */
-export const buildCustomIndexArg = (indexUrl: string): CustomIndexArg => {
-  const { url, username, password } = splitIndexUrlCredentials(indexUrl);
-
+const buildCredentialEnv = (username?: string, password?: string): Record<string, string> => {
   const env: Record<string, string> = {};
   if (username !== undefined) {
     env[`${CUSTOM_TORCH_INDEX_ENV_PREFIX}_USERNAME`] = username;
@@ -44,86 +42,66 @@ export const buildCustomIndexArg = (indexUrl: string): CustomIndexArg => {
   if (password !== undefined) {
     env[`${CUSTOM_TORCH_INDEX_ENV_PREFIX}_PASSWORD`] = password;
   }
-
-  return { arg: `--index=${CUSTOM_TORCH_INDEX_NAME}=${url}`, env };
+  return env;
 };
 
-/** PEP 503 normalized project name - the path a simple index serves a package under. */
-const normalizePackageName = (name: string): string => name.toLowerCase().replace(/[-_.]+/g, '-');
+export const buildCustomIndexArg = (indexUrl: string): CustomIndexArg => {
+  const { url, username, password } = splitIndexUrlCredentials(indexUrl);
+  return { arg: `--index=${CUSTOM_TORCH_INDEX_NAME}=${url}`, env: buildCredentialEnv(username, password) };
+};
 
-type IndexPackageCheck = {
-  name: string;
-  /**
-   * - `served` - the index answered 2xx.
-   * - `not-served` - the index answered that it does not have this project. This is the only verdict worth blocking
-   *   on, because it is the one uv reads as "not published here" and quietly resolves from PyPI instead.
-   * - `unknown` - we did not get an answer we are entitled to act on.
-   */
-  verdict: 'served' | 'not-served' | 'unknown';
-  detail: string;
+type CustomIndexProbeCommand = {
+  args: string[];
+  /** Extra environment for the command. Carries index credentials, which must never appear in argv. */
+  env: Record<string, string>;
 };
 
 /**
- * Statuses that mean "this index does not carry that project", as opposed to "you did not ask correctly".
+ * Build a resolution-only `uv pip install --dry-run` that asks whether the custom index can satisfy the torch
+ * requirements, before anything is downloaded.
  *
- * Deliberately narrow. This check sees less than uv does: it knows only about credentials embedded in the URL, while
- * uv also reads `.netrc` and the system keyring, and it goes through Node's `fetch`, which ignores the `HTTP(S)_PROXY`
- * variables uv honours. So a 401 or a 407 says nothing about whether the package is there - only that *we* could not
- * see it - and blocking on those would lock every `.netrc` and behind-a-proxy user out of the feature with an error
- * message that is simply false. Anything uncertain degrades to a warning; uv is loud about all of it anyway.
+ * The point is the `--default-index`: it makes the override the *only* index for this one command. Merely registering
+ * it alongside the others - which is what the real install has to do, so that torch's CUDA runtime can still come from
+ * PyPI - lets uv skip an index that rejects a request and resolve from the next one instead, silently and with exit
+ * code 0. Measured against the bundled uv 0.11.28 and a one-character typo of a real index (`whl/cu1266`, which
+ * answers 403): registered alongside PyPI it installs the PyPI `torch==2.7.1`, and alongside a pinned index it
+ * installs that index's `+cu128` build. With no other index to fall back to, the same URL is a loud resolution error.
+ *
+ * Asking uv rather than fetching the project page ourselves also means the check inherits everything uv knows about
+ * reaching an index: `.netrc` and system-keyring credentials, and the proxy configuration. A private index that
+ * answers 403 or 401 to anonymous requests but authenticates for uv resolves here exactly as it will during the
+ * install, instead of being reported as an index that does not carry torch.
  */
-const NOT_SERVED_STATUSES = new Set([403, 404, 410]);
-
-/**
- * Ask the custom index whether it actually serves each package, before anything is downloaded.
- *
- * `--index-strategy first-index` pins resolution to the custom index only for package *names* that index carries. When
- * it answers 404 or 403 for a project - a typo in the path, a mirror that proxies only part of PyPI - uv reads that as
- * "not published here", falls through to PyPI and installs the default build. Exit code 0, no warning, and the user is
- * told the install succeeded from their index while the venv holds the PyPI wheel.
- *
- * The other failure modes are already loud (connection refused, and an index that has the name but not the pinned
- * version both abort the install), so this closes the last silent path.
- */
-export const checkIndexServesPackages = async (
+export const buildCustomIndexProbeCommand = (
+  pythonTarget: string,
   indexUrl: string,
-  packageNames: string[]
-): Promise<IndexPackageCheck[]> => {
+  requirements: string[]
+): CustomIndexProbeCommand => {
   const { url, username, password } = splitIndexUrlCredentials(indexUrl);
 
-  const headers: Record<string, string> = {};
-  if (username !== undefined || password !== undefined) {
-    const basic = Buffer.from(`${username ?? ''}:${password ?? ''}`).toString('base64');
-    headers.Authorization = `Basic ${basic}`;
-  }
-
-  return await Promise.all(
-    packageNames.map(async (name): Promise<IndexPackageCheck> => {
-      // Extend the *path*, keeping any query or fragment. Resolving `torch/` as a relative URL would drop a
-      // `?token=…` the index needs, and appending a slash to the whole URL would put it after the query string.
-      const projectUrl = new URL(url);
-      const basePath = projectUrl.pathname.endsWith('/') ? projectUrl.pathname : `${projectUrl.pathname}/`;
-      projectUrl.pathname = `${basePath}${normalizePackageName(name)}/`;
-
-      try {
-        const response = await fetch(projectUrl.toString(), { headers, signal: AbortSignal.timeout(15000) });
-        if (response.ok) {
-          return { name, verdict: 'served', detail: `HTTP ${response.status}` };
-        }
-        return {
-          name,
-          verdict: NOT_SERVED_STATUSES.has(response.status) ? 'not-served' : 'unknown',
-          detail: `HTTP ${response.status}`,
-        };
-      } catch (error) {
-        return {
-          name,
-          verdict: 'unknown',
-          detail: `could not reach the index (${error instanceof Error ? error.message : String(error)})`,
-        };
-      }
-    })
-  );
+  return {
+    args: [
+      'pip',
+      'install',
+      '--python',
+      pythonTarget,
+      '--python-preference',
+      'only-managed',
+      `--default-index=${CUSTOM_TORCH_INDEX_NAME}=${url}`,
+      // Without this the probe is a rubber stamp for anyone with a `uv.toml`: an `[[index]]` declared in config
+      // outranks `--default-index` (measured - `UV_INDEX_URL` does not, only the config file), so that index answers
+      // for torch and the typo'd URL resolves happily. Config is the only ambient source that has to go; `.netrc`,
+      // the proxy environment and `SSL_CERT_FILE` are unaffected, so a private index still authenticates here exactly
+      // as it will during the install.
+      '--no-config',
+      // Resolve and report; touch nothing.
+      '--dry-run',
+      // Dependencies are the real install's business, and they come from PyPI - not from this index.
+      '--no-deps',
+      ...requirements,
+    ],
+    env: buildCredentialEnv(username, password),
+  };
 };
 
 export const buildCustomTorchInstallCommand = (

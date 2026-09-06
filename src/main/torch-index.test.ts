@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { buildCustomTorchInstallCommand, checkIndexServesPackages, CUSTOM_TORCH_INDEX_NAME } from './torch-index';
+import { buildCustomIndexProbeCommand, buildCustomTorchInstallCommand, CUSTOM_TORCH_INDEX_NAME } from './torch-index';
 
 const VENV = '/home/user/invokeai/.venv';
 const PACKAGES = [
@@ -59,113 +59,55 @@ describe('buildCustomTorchInstallCommand', () => {
   });
 });
 
-describe('checkIndexServesPackages', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe('buildCustomIndexProbeCommand', () => {
+  it('resolves without installing anything', () => {
+    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch==2.7.1']);
+    expect(args.slice(0, 2)).toEqual(['pip', 'install']);
+    expect(args).toContain('--dry-run');
+    expect(args).toContain('--no-deps');
+    expect(args[args.indexOf('--python') + 1]).toBe(VENV);
   });
 
-  it('asks the index for each package under its PEP 503 normalized name', async () => {
-    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+  it('makes the custom index the only index, so uv cannot fall back to another one', () => {
+    // This is the whole point of the probe. Registered *alongside* other indexes - which the real install has to do so
+    // torch's CUDA runtime still comes from PyPI - uv skips an index that rejects a request and resolves from the next
+    // one, silently and with exit code 0. Measured on the bundled uv against `whl/cu1266` (a one-character typo that
+    // answers 403): alongside PyPI it yields the PyPI torch, alongside a pinned index it yields that index's build.
+    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch==2.7.1']);
+    expect(args).toContain(`--default-index=${CUSTOM_TORCH_INDEX_NAME}=https://download.pytorch.org/whl/cu126`);
+    expect(args.some((arg) => arg.startsWith('--index='))).toBe(false);
+    expect(args).not.toContain('--index');
+  });
 
-    await checkIndexServesPackages('https://download.pytorch.org/whl/cu126', ['torch', 'triton_rocm']);
-
-    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
-      'https://download.pytorch.org/whl/cu126/torch/',
-      'https://download.pytorch.org/whl/cu126/triton-rocm/',
+  it('asks for exactly the requirements it is given', () => {
+    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', [
+      'torch==2.7.1',
+      'torchvision==0.22.1',
     ]);
+    expect(args.slice(-2)).toEqual(['torch==2.7.1', 'torchvision==0.22.1']);
   });
 
-  it('reports a package the index does not serve', async () => {
-    // uv reads a 404 as "not published on this index", falls through to PyPI and installs the default build without
-    // an error - the one silent path `--index-strategy first-index` does not cover.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((url: string, _init?: RequestInit) => new Response('', { status: url.endsWith('/torch/') ? 404 : 200 }))
-    );
-
-    const checks = await checkIndexServesPackages('https://download.pytorch.org/whl/cu1266', ['torch', 'torchvision']);
-
-    expect(checks).toEqual([
-      { name: 'torch', verdict: 'not-served', detail: 'HTTP 404' },
-      { name: 'torchvision', verdict: 'served', detail: 'HTTP 200' },
-    ]);
+  it('passes index credentials via the environment, never in argv', () => {
+    const { args, env } = buildCustomIndexProbeCommand(VENV, 'https://myuser:ghp_TOKEN@nexus.corp/simple', ['torch']);
+    expect(args).toContain(`--default-index=${CUSTOM_TORCH_INDEX_NAME}=https://nexus.corp/simple`);
+    expect(args.join(' ')).not.toContain('ghp_TOKEN');
+    expect(env).toEqual({
+      UV_INDEX_INVOKE_CUSTOM_TORCH_USERNAME: 'myuser',
+      UV_INDEX_INVOKE_CUSTOM_TORCH_PASSWORD: 'ghp_TOKEN',
+    });
   });
 
-  it('distinguishes an unreachable index from one that does not serve the package', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((_url: string, _init?: RequestInit) => Promise.reject(new Error('getaddrinfo ENOTFOUND nexus.corp')))
-    );
-
-    const [check] = await checkIndexServesPackages('https://nexus.corp/simple', ['torch']);
-
-    // 'unknown' is what keeps the install manager from treating an unreachable index as a refusal.
-    expect(check?.verdict).toBe('unknown');
-    expect(check?.detail).toContain('could not reach the index');
-  });
-
-  it('authenticates with the credentials embedded in the index URL', async () => {
-    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await checkIndexServesPackages('https://myuser:ghp_TOKEN@nexus.corp/simple', ['torch']);
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://nexus.corp/simple/torch/');
-    const init = fetchMock.mock.calls[0]?.[1] as unknown as { headers: Record<string, string> };
-    expect(init.headers.Authorization).toBe(`Basic ${Buffer.from('myuser:ghp_TOKEN').toString('base64')}`);
-  });
-
-  it('keeps a path-style index URL intact when it has no trailing slash', async () => {
-    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await checkIndexServesPackages('https://nexus.corp/repository/pypi/simple', ['torch']);
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://nexus.corp/repository/pypi/simple/torch/');
+  it('adds no environment for a credential-free index', () => {
+    const { env } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch']);
+    expect(env).toEqual({});
   });
 });
 
-describe('checkIndexServesPackages verdicts', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  const checkWithStatus = async (status: number) => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((_url: string, _init?: RequestInit) => new Response('', { status }))
-    );
-    const [check] = await checkIndexServesPackages('https://nexus.corp/simple', ['torch']);
-    return check?.verdict;
-  };
-
-  it('treats "the index does not have this project" as not-served', async () => {
-    await expect(checkWithStatus(404)).resolves.toBe('not-served');
-    await expect(checkWithStatus(403)).resolves.toBe('not-served');
-    await expect(checkWithStatus(410)).resolves.toBe('not-served');
-  });
-
-  it('does not treat an auth challenge as proof the package is missing', async () => {
-    // uv also reads `.netrc` and the system keyring, so it can authenticate where this check cannot. Blocking on a 401
-    // would lock those users out of the feature with an error message that is simply untrue.
-    await expect(checkWithStatus(401)).resolves.toBe('unknown');
-    // 407 is the proxy talking, not the index - and Node's fetch ignores the proxy variables uv honours.
-    await expect(checkWithStatus(407)).resolves.toBe('unknown');
-  });
-
-  it('does not block on a server-side failure', async () => {
-    await expect(checkWithStatus(500)).resolves.toBe('unknown');
-    await expect(checkWithStatus(429)).resolves.toBe('unknown');
-  });
-
-  it('keeps a query string on the index URL', async () => {
-    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => new Response('', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await checkIndexServesPackages('https://nexus.corp/simple?token=abc', ['torch']);
-
-    // Resolving `torch/` as a relative URL would drop the token and hit `/torch/` at the host root.
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://nexus.corp/simple/torch/?token=abc');
+describe('buildCustomIndexProbeCommand isolation', () => {
+  it('ignores uv config, which would otherwise answer for the index under test', () => {
+    // Measured against the bundled uv: an `[[index]]` in the user's uv.toml outranks `--default-index`, so without
+    // this the probe resolves torch from that index and passes for any URL at all, typo included.
+    const { args } = buildCustomIndexProbeCommand(VENV, 'https://download.pytorch.org/whl/cu126', ['torch']);
+    expect(args).toContain('--no-config');
   });
 });

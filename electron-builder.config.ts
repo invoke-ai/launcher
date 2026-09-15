@@ -37,6 +37,12 @@ export default {
   ],
   win: {
     target: ['nsis'],
+    // electron-builder names a single-arch NSIS installer without the architecture, so an arm64 build would
+    // collide with the x64 one on a release. The arm64 CI job sets LAUNCHER_ARTIFACT_SUFFIX=-arm64; the x64
+    // build keeps its historical name (the README's "latest" link and the signing pipeline depend on it).
+    ...(process.env.LAUNCHER_ARTIFACT_SUFFIX
+      ? { artifactName: `\${productName} Setup \${version}${process.env.LAUNCHER_ARTIFACT_SUFFIX}.\${ext}` }
+      : {}),
     ...getWindowsSigningOptions(),
   },
   linux: {

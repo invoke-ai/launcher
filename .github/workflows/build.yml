@@ -295,6 +295,8 @@ jobs:
           Remove-Item -Force -ErrorAction SilentlyContinue "${{ github.workspace }}/dist/offered-for-signing.txt"
           npm run package -- --arm64
         env:
+          # Distinct installer name: "Invoke Community Edition Setup <version>-arm64.exe" (and its "latest-arm64" copy).
+          LAUNCHER_ARTIFACT_SUFFIX: '-arm64'
           ENABLE_SIGNING: 'true'
           SIGNING_DRY_RUN: ${{ github.workspace }}/dist/offered-for-signing.txt
 
@@ -302,7 +304,7 @@ jobs:
       # invisible until a user with Smart App Control hits it. That is how #148 shipped an unsigned
       # winpty-agent.exe.
       - name: Verify Windows signing coverage
-        run: node scripts/checkWindowsSigningCoverage.js dist/win-unpacked "${{ github.workspace }}/dist/offered-for-signing.txt"
+        run: node scripts/checkWindowsSigningCoverage.js dist/win-arm64-unpacked "${{ github.workspace }}/dist/offered-for-signing.txt"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

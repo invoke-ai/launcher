@@ -60,7 +60,8 @@ type TorchPlatform = 'cuda' | 'rocm' | 'xpu' | 'cpu';
  * inline tables (which are indented) - otherwise every package that depends on torch would match.
  */
 const TORCH_INDEX_SOURCE_PATTERN: Record<TorchPlatform, RegExp> = {
-  cuda: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cu\d+[^}]*\}/m,
+  // NVIDIA's out-of-tree index is the CUDA torch for Windows on ARM64 (Invoke locks torch from it there).
+  cuda: /^source\s*=\s*\{[^}]*(?:\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cu\d+|\bpypi\.nvidia\.com\/nvtorch_oot)[^}]*\}/m,
   rocm: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?rocm[^}]*\}/m,
   xpu: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?xpu\b[^}]*\}/m,
   cpu: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cpu\b[^}]*\}/m,

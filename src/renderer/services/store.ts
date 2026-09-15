@@ -2,7 +2,7 @@ import type { ReadableAtom } from 'nanostores';
 import { atom } from 'nanostores';
 
 import { emitter, ipc } from '@/renderer/services/ipc';
-import type { DirDetails, OperatingSystem, StoreData } from '@/shared/types';
+import type { DirDetails, OperatingSystem, StoreData, SystemArch } from '@/shared/types';
 
 const getDefaults = (): StoreData => ({
   serverMode: false,
@@ -128,6 +128,13 @@ export const $operatingSystem = atom<OperatingSystem | undefined>(undefined);
 
 // Fetch the operating system from the main process and set it in the store when the app starts
 emitter.invoke('util:get-os').then($operatingSystem.set);
+
+/**
+ * An atom that holds the machine's CPU architecture. Fetched from the main process when the app starts.
+ */
+export const $systemArch = atom<SystemArch | undefined>(undefined);
+
+emitter.invoke('util:get-arch').then($systemArch.set);
 
 // Sync the store with the main process when the app starts
 persistedStoreApi.sync();

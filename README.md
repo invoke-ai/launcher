@@ -9,6 +9,7 @@ It can install, update, reinstall and run Invoke Community Edition. It is self-c
 Click the link for your system to download the latest version of the launcher.
 
 - [Download for Windows](https://github.com/invoke-ai/launcher/releases/latest/download/Invoke.Community.Edition.Setup.latest.exe)
+- [Download for Windows on ARM64](https://github.com/invoke-ai/launcher/releases/latest/download/Invoke.Community.Edition.Setup.latest-arm64.exe) (NVIDIA RTX Spark)
 - [Download for macOS](https://github.com/invoke-ai/launcher/releases/latest/download/Invoke.Community.Edition-latest-arm64.dmg)
 - [Download for Linux](https://github.com/invoke-ai/launcher/releases/latest/download/Invoke.Community.Edition-latest.AppImage)
 

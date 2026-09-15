@@ -166,6 +166,12 @@ export type GpuDetectionResult = {
 export type OperatingSystem = 'Windows' | 'macOS' | 'Linux';
 
 /**
+ * The machine's CPU architecture. On Windows this is the machine's, not the launcher binary's: an x64 launcher
+ * running under Windows-on-ARM emulation reports `arm64` here.
+ */
+export type SystemArch = 'x64' | 'arm64' | 'other';
+
+/**
  * A utility type that prefixes all keys in an object with a string using the specified separator.
  */
 type Namespaced<Prefix extends string, T, Sep extends string = ':'> = {
@@ -185,6 +191,8 @@ export type DirDetails =
       isFirstRun: boolean;
       version: string;
       pythonVersion: string;
+      /** `platform.machine()` of the venv's interpreter, e.g. `AMD64` or `ARM64` on Windows. */
+      pythonMachine?: string;
       pythonPath: string;
       invokeExecPath: string;
       activateVenvPath: string;
@@ -392,6 +400,7 @@ type UtilIpcEvents = Namespaced<
     'get-is-file': (path: string) => boolean;
     'get-path-exists': (path: string) => boolean;
     'get-os': () => OperatingSystem;
+    'get-arch': () => SystemArch;
     'get-dir-details': (path: string) => DirDetails;
     'get-default-install-dir': () => string;
     'open-directory': (path: string) => string;

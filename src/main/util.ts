@@ -7,7 +7,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { withResultAsync } from '@/lib/result';
-import type { DirDetails, GpuType, OperatingSystem, WindowProps } from '@/shared/types';
+import type { DirDetails, GpuType, OperatingSystem, SystemArch, WindowProps } from '@/shared/types';
 
 const execAsync = promisify(exec);
 
@@ -21,6 +21,47 @@ export const getOperatingSystem = (): OperatingSystem => {
   } else {
     return 'Linux';
   }
+};
+
+/**
+ * Whether this machine is Windows on ARM64.
+ *
+ * `process.arch` names the launcher binary's architecture, not the machine's: an x64 launcher running under Windows'
+ * emulation reports `x64`. Windows sets `PROCESSOR_ARCHITEW6432` to the machine architecture for emulated processes
+ * (and `PROCESSOR_ARCHITECTURE` for native ones), so both are consulted. Getting this right matters because an
+ * x86_64 Python cannot load the ARM64 torch wheel, so an emulated launcher must still request the native interpreter.
+ */
+export const isWindowsArm64 = (env: NodeJS.ProcessEnv = process.env): boolean => {
+  if (process.platform !== 'win32') {
+    return false;
+  }
+  const machine = env.PROCESSOR_ARCHITEW6432 ?? env.PROCESSOR_ARCHITECTURE ?? '';
+  return process.arch === 'arm64' || machine.toUpperCase() === 'ARM64';
+};
+
+export const getSystemArch = (): SystemArch => {
+  if (isWindowsArm64()) {
+    return 'arm64';
+  }
+  switch (process.arch) {
+    case 'x64':
+      return 'x64';
+    case 'arm64':
+      return 'arm64';
+    default:
+      return 'other';
+  }
+};
+
+/**
+ * The interpreter to ask uv for, given the `major.minor` version pinned by the Invoke release.
+ *
+ * A bare version ("3.12") makes uv install an x86_64 CPython on Windows ARM64, which cannot load the ARM64 torch
+ * wheel; the fully qualified request names the native build. Everywhere else the bare version is what the launcher
+ * has always passed.
+ */
+export const getPythonRequest = (pythonVersion: string): string => {
+  return isWindowsArm64() ? `cpython-${pythonVersion}-windows-aarch64-none` : pythonVersion;
 };
 
 /**
@@ -80,6 +121,8 @@ export const getActivateVenvCommand = (installLocation: string): string => {
  * - macOS: always `cpu`. PyTorch has no separate index for MPS; the CPU wheels carry it.
  * - Windows + AMD: `cpu`. There is no ROCm build of torch for Windows, which is exactly what the GPU confirmation step
  *   tells the user before they get here.
+ * - Windows ARM64 + Intel: `cpu`. PyTorch's +xpu wheels are x64 only. (On Windows ARM64 the Invoke lockfile installs
+ *   NVIDIA's torch build for every extra, `cpu` included, so the extra only has to exist.)
  *
  * @param gpuType The GPU type
  * @returns The torch platform corresponding to the GPU type
@@ -94,7 +137,7 @@ export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'xpu' | 'c
         return process.platform === 'win32' ? 'cpu' : 'rocm';
       case 'intel':
         // Intel's XPU backend. PyTorch publishes +xpu wheels for linux-x86_64 and windows-amd64 only.
-        return 'xpu';
+        return isWindowsArm64() ? 'cpu' : 'xpu';
       case 'nvidia<30xx':
       case 'nvidia>=30xx':
         return 'cuda';
@@ -171,6 +214,15 @@ const getPythonPathForVenv = (venvPath: string): string => {
  */
 const getPythonVersion = async (pythonPath: string): Promise<string> => {
   const cmd = `"${pythonPath}" -c "import sys; print(sys.version.split()[0]);"`;
+  const { stdout } = await execAsync(cmd);
+  return stdout.replace(/[\r\n]+/g, '');
+};
+
+/**
+ * Get `platform.machine()` of the python at the provided path (e.g. `AMD64` or `ARM64` on Windows).
+ */
+const getPythonMachine = async (pythonPath: string): Promise<string> => {
+  const cmd = `"${pythonPath}" -c "import platform; print(platform.machine());"`;
   const { stdout } = await execAsync(cmd);
   return stdout.replace(/[\r\n]+/g, '');
 };
@@ -254,6 +306,7 @@ export const getInstallationDetails = async (installLocation: string): Promise<D
     canInstall: true,
     version: version.startsWith('v') ? version : `v${version}`, // Make it consistent w/ our tagging format
     pythonVersion: await getPythonVersion(pythonPath),
+    pythonMachine: await getPythonMachine(pythonPath),
     pythonPath,
     invokeExecPath: getInvokeExecPath(installLocation),
     activateVenvPath: getActivateVenvPath(installLocation),

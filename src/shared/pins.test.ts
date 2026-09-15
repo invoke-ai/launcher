@@ -224,6 +224,30 @@ resolution-markers = [
     ]);
   });
 
+  it("selects torch from NVIDIA's Windows ARM64 index as a cuda build", () => {
+    // Invoke locks torch for Windows on ARM64 from https://pypi.nvidia.com/nvtorch_oot/ (RTX Spark); a custom index
+    // override on that platform must still find the cuda torch packages.
+    const lock = `
+[[package]]
+name = "torch"
+version = "2.14.0+cu134"
+source = { registry = "https://pypi.nvidia.com/nvtorch_oot/" }
+dependencies = [
+    { name = "filelock" },
+]
+
+[[package]]
+name = "torchvision"
+version = "0.29.0+cu134"
+source = { registry = "https://pypi.nvidia.com/nvtorch_oot/" }
+`;
+    expect(getTorchPackagesFromLock(lock, 'cuda')).toEqual([
+      { name: 'torch', version: '2.14.0' },
+      { name: 'torchvision', version: '0.29.0' },
+    ]);
+    expect(getTorchPackagesFromLock(lock, 'cpu')).toEqual([]);
+  });
+
   it('does not confuse the xpu and cpu indexes', () => {
     // `whl/xpu` and `whl/cpu` differ by one character; a sloppy pattern matches both.
     expect(getTorchPackagesFromLock(uvLock, 'cpu').map((pkg) => pkg.version)).not.toContain('2.13.0');

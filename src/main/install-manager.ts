@@ -14,7 +14,16 @@ import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { buildCustomIndexArg, buildCustomIndexProbeCommand, buildCustomTorchInstallCommand } from '@/main/torch-index';
-import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
+import {
+  getInstallationDetails,
+  getPythonRequest,
+  getSystemArch,
+  getTorchPlatform,
+  getUVExecutablePath,
+  isDirectory,
+  isFile,
+  isWindowsArm64,
+} from '@/main/util';
 import type { InvokeReleaseInstallFiles } from '@/shared/pins';
 import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock } from '@/shared/pins';
 import type {
@@ -47,8 +56,9 @@ const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'xpu
     extras.push(torchPlatform);
   }
 
-  // We only install xformers on 20xx and earlier Nvidia GPUs - otherwise, torch's native sdp is faster
-  if (gpuType === 'nvidia<30xx') {
+  // We only install xformers on 20xx and earlier Nvidia GPUs - otherwise, torch's native sdp is faster. xformers has
+  // no Windows ARM64 build, and the Invoke release excludes the extra there.
+  if (gpuType === 'nvidia<30xx' && !isWindowsArm64()) {
     extras.push('xformers');
   }
 
@@ -364,13 +374,19 @@ export class InstallManager {
 
     // We only support Windows, Linux, and macOS on specific architectures
     const systemPlatform = process.platform;
-    const systemArch = process.arch;
+    const systemArch = getSystemArch();
     assert(
       (systemPlatform === 'win32' && systemArch === 'x64') ||
+        (systemPlatform === 'win32' && systemArch === 'arm64') ||
         (systemPlatform === 'linux' && systemArch === 'x64') ||
         (systemPlatform === 'darwin' && systemArch === 'arm64'),
       `Unsupported platform: ${systemPlatform} ${systemArch}`
     );
+    if (isWindowsArm64() && process.arch !== 'arm64') {
+      this.log.warn(
+        'This is the x64 launcher running under emulation on Windows ARM64. It installs the native ARM64 Invoke, but the ARM64 launcher is the supported build for this machine.\r\n'
+      );
+    }
 
     // The torch platform is determined by the GPU type, which in turn determines which torch extra and index to use
     const torchPlatform = getTorchPlatform(gpuType);
@@ -447,6 +463,8 @@ export class InstallManager {
 
     const invokeaiPackageSpecifier = getInvokePackageSpecifier(version, invokeExtras);
     const pythonVersion = pins.python;
+    // What uv is asked for: the bare version, except on Windows ARM64 where the native build must be named.
+    const pythonRequest = getPythonRequest(pythonVersion);
 
     const installationDetails = await getInstallationDetails(location);
 
@@ -465,6 +483,13 @@ export class InstallManager {
       if (!majorVersionMatch || !minorVersionMatch) {
         pythonVersionMismatch = true;
       }
+
+      // An x86_64 venv on Windows ARM64 (from an earlier launcher, or an emulated one) cannot load the ARM64 torch
+      // wheel; the version match above does not see the difference, so recreate it.
+      if (isWindowsArm64() && installationDetails.pythonMachine !== 'ARM64') {
+        this.log.info(`- Python architecture: ${installationDetails.pythonMachine ?? 'unknown'} (ARM64 required)\r\n`);
+        pythonVersionMismatch = true;
+      }
     } else {
       pythonVersionMismatch = true;
     }
@@ -473,6 +498,10 @@ export class InstallManager {
     this.log.info(`- Invoke version: ${version}\r\n`);
     this.log.info(`- Install location: ${location}\r\n`);
     this.log.info(`- Python version: ${pythonVersion}\r\n`);
+    this.log.info(`- Platform: ${systemPlatform}/${systemArch}\r\n`);
+    if (pythonRequest !== pythonVersion) {
+      this.log.info(`- Python build: ${pythonRequest}\r\n`);
+    }
     this.log.info(`- GPU type: ${gpuType}\r\n`);
     this.log.info(`- Torch platform: ${torchPlatform}\r\n`);
     this.log.info(`- Invoke package: ${invokeaiPackageSpecifier}\r\n`);
@@ -550,7 +579,7 @@ export class InstallManager {
         // Use `uv`'s python interface to install the specific python version
         'python',
         'install',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python
         '--python-preference',
         'only-managed',
@@ -627,7 +656,7 @@ export class InstallManager {
         'invoke',
         // Ensure we install against the correct python version
         '--python',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python. This installs the required python if it is not
         // already installed.
         '--python-preference',
@@ -755,7 +784,7 @@ export class InstallManager {
         '--frozen',
         // Ensure we sync against the correct python version.
         '--python',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python.
         '--python-preference',
         'only-managed',
@@ -878,7 +907,7 @@ export class InstallManager {
         'install',
         // Ensure we install against the correct python version
         '--python',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python
         '--python-preference',
         'only-managed',
@@ -928,7 +957,7 @@ export class InstallManager {
         // torch-only mirror that would have installed correctly.
         const indexIsUsable = await this.verifyCustomTorchIndex({
           uvPath,
-          pythonTarget: pythonVersion,
+          pythonTarget: pythonRequest,
           indexUrl: torchIndexOverride,
           requirements: LEGACY_TORCH_PROBE_REQUIREMENTS,
           runProcessOptions,

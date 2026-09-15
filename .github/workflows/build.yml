@@ -232,3 +232,86 @@ jobs:
             dist/*.yml
             dist/*.yaml
           retention-days: 7
+
+  # Native ARM64 build (Windows on ARM, NVIDIA RTX Spark): the bundled uv must be the aarch64 binary so its
+  # managed-Python default is the native interpreter, and node-pty is rebuilt for the host architecture.
+  build-windows-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Generate lockfile hash without version
+        id: lockfile-hash
+        shell: bash
+        run: echo "hash=$(node .github/scripts/generate-lockfile-hash.js)" >> $GITHUB_OUTPUT
+
+      - name: Cache node modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.electron
+            ~/.electron-gyp
+          key: ${{ runner.os }}-arm64-node-${{ env.NODE_VERSION }}-modules-${{ steps.lockfile-hash.outputs.hash }}
+
+      - name: Install deps
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Get UV hash
+        id: uv-hash
+        shell: bash
+        run: |
+          echo "hash=$(node -e "console.log(require('./package.json').uv['win-arm64'].sha256)")" >> $GITHUB_OUTPUT
+
+      - name: Cache UV binaries
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: assets/bin
+          key: ${{ runner.os }}-arm64-uv-${{ steps.uv-hash.outputs.hash }}
+
+      - name: Download uv
+        if: steps.cache-uv.outputs.cache-hit != 'true'
+        run: npm run download win-arm64
+
+      # ENABLE_SIGNING wires up scripts/customSign.js and signExts exactly as the release build
+      # does, while SIGNING_DRY_RUN makes the hook record what it was offered instead of signing.
+      # The artifacts are therefore byte-identical to a plain unsigned build, but we come out with
+      # proof of which binaries electron-builder actually handed to the signer — which is the only
+      # way to catch a binary that ships unsigned because it was never offered at all.
+      - name: Build
+        # The hook appends to the record rather than truncating it, so that concurrent
+        # electron-builder processes cannot wipe each other's entries. Freshness is this step's job.
+        # This job's default shell is PowerShell, where `rm -f` is an ambiguous alias for Remove-Item.
+        run: |
+          Remove-Item -Force -ErrorAction SilentlyContinue "${{ github.workspace }}/dist/offered-for-signing.txt"
+          npm run package -- --arm64
+        env:
+          ENABLE_SIGNING: 'true'
+          SIGNING_DRY_RUN: ${{ github.workspace }}/dist/offered-for-signing.txt
+
+      # Real signing happens on OSSign's runner where we never see the logs, so a gap there is
+      # invisible until a user with Smart App Control hits it. That is how #148 shipped an unsigned
+      # winpty-agent.exe.
+      - name: Verify Windows signing coverage
+        run: node scripts/checkWindowsSigningCoverage.js dist/win-unpacked "${{ github.workspace }}/dist/offered-for-signing.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'windows-arm64-artifacts-unsigned'
+          path: |
+            dist/*.exe
+            dist/*.EXE
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
+          retention-days: 7

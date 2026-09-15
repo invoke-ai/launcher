@@ -4,25 +4,30 @@ import { createContext, memo, useContext, useMemo } from 'react';
 import { assert } from 'tsafe';
 
 import { LoaderFullScreen } from '@/renderer/common/LoaderFullScreen';
-import { $initialized, $operatingSystem } from '@/renderer/services/store';
-import type { OperatingSystem } from '@/shared/types';
+import { $initialized, $operatingSystem, $systemArch } from '@/renderer/services/store';
+import type { OperatingSystem, SystemArch } from '@/shared/types';
 
 type SystemInfo = {
   operatingSystem?: OperatingSystem;
+  systemArch?: SystemArch;
   initialized: boolean;
 };
 
 const SystemInfoContext = createContext<SystemInfo>({ initialized: false });
 
 const isCtxReady = (ctx: SystemInfo): ctx is Required<SystemInfo> => {
-  return ctx.operatingSystem !== undefined && ctx.initialized === true;
+  return ctx.operatingSystem !== undefined && ctx.systemArch !== undefined && ctx.initialized === true;
 };
 
 export const SystemInfoProvider = memo((props: PropsWithChildren) => {
   const operatingSystem = useStore($operatingSystem);
+  const systemArch = useStore($systemArch);
   const initialized = useStore($initialized);
 
-  const systemInfo = useMemo<SystemInfo>(() => ({ operatingSystem, initialized }), [initialized, operatingSystem]);
+  const systemInfo = useMemo<SystemInfo>(
+    () => ({ operatingSystem, systemArch, initialized }),
+    [initialized, operatingSystem, systemArch]
+  );
 
   return <SystemInfoContext.Provider value={systemInfo}>{props.children}</SystemInfoContext.Provider>;
 });

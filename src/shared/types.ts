@@ -401,6 +401,7 @@ type UtilIpcEvents = Namespaced<
     'get-path-exists': (path: string) => boolean;
     'get-os': () => OperatingSystem;
     'get-arch': () => SystemArch;
+    'get-is-windows-arm64-build': () => boolean;
     'get-dir-details': (path: string) => DirDetails;
     'get-default-install-dir': () => string;
     'open-directory': (path: string) => string;

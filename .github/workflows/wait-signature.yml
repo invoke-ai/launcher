@@ -107,14 +107,19 @@ jobs:
             echo "::error::No latest.yml among signed artifacts; cannot verify they belong to ${{ inputs.target_ref }}. Refusing to attach."
             exit 1
           fi
-          actual=$(awk '/^version:/ {print $2; exit}' dist/latest.yml)
-          if [ "${actual}" != "${expected}" ]; then
-            echo "::error::OSSign returned artifacts for version '${actual}' but the target ref is '${{ inputs.target_ref }}'. The OSSign build likely failed and stale artifacts were returned. Refusing to attach."
-            exit 1
-          fi
-          echo "Artifact version ${actual} matches ${{ inputs.target_ref }}."
+          # latest.yml is the x64 manifest and is mandatory; latest-<arch>.yml (today: latest-arm64.yml) is one
+          # per additional Windows architecture the OSSign run built, and every manifest present must match.
+          shopt -s nullglob
+          for manifest in dist/latest.yml dist/latest-*.yml; do
+            actual=$(awk '/^version:/ {print $2; exit}' "${manifest}")
+            if [ "${actual}" != "${expected}" ]; then
+              echo "::error::OSSign returned artifacts for version '${actual}' (${manifest#dist/}) but the target ref is '${{ inputs.target_ref }}'. The OSSign build likely failed and stale artifacts were returned. Refusing to attach."
+              exit 1
+            fi
+            echo "Artifact version ${actual} in ${manifest#dist/} matches ${{ inputs.target_ref }}."
+          done
 
-      - name: Reconcile signed artifacts with latest.yml
+      - name: Reconcile signed artifacts with the update manifests
         # electron-updater downloads *exactly* the filenames latest.yml declares, resolved against
         # the release's download path — so the payload names and the manifest have to agree byte
         # for byte. They don't, by default: electron-builder writes manifest URLs with spaces
@@ -145,6 +150,14 @@ jobs:
           # Compare names ignoring the separator characters the two sanitizers disagree about.
           norm() { printf '%s' "$1" | sed 's/%20/-/g; s/[ .]/-/g'; }
 
+          # Names already assigned to an earlier entry, so a later entry cannot rename them away. Shared across
+          # manifests: the x64 and arm64 manifests must never claim the same payload.
+          claimed=""
+
+          shopt -s nullglob
+          for manifest in latest.yml latest-*.yml; do
+          echo "Reconciling against ${manifest}"
+
           # Emit one "<url>\t<sha512>" line per files[] entry. The trailing top-level sha512 (which
           # duplicates files[0]) can't clobber an entry: sha is only taken when still unset.
           entries=$(awk '
@@ -157,15 +170,12 @@ jobs:
               sub(/^[[:space:]]*sha512:[[:space:]]*/, ""); s = $0
             }
             END { if (u != "") { print u "\t" s } }
-          ' latest.yml)
+          ' "${manifest}")
 
           if [ -z "${entries}" ]; then
-            echo "::error::latest.yml declares no files[] entries; cannot verify what the updater will fetch."
+            echo "::error::${manifest} declares no files[] entries; cannot verify what the updater will fetch."
             exit 1
           fi
-
-          # Names already assigned to an earlier entry, so a later entry cannot rename them away.
-          claimed=""
 
           while IFS=$'\t' read -r want sha; do
             [ -n "${want}" ] || continue
@@ -175,7 +185,7 @@ jobs:
             # this step exists to prevent, with a green build. Refuse instead of renaming.
             case "${want}" in
               *[!0-9A-Za-z._-]*)
-                echo "::error::latest.yml declares '${want}', which contains characters GitHub's asset API rewrites on upload. The updater could not fetch it under that name. Refusing to attach."
+                echo "::error::${manifest} declares '${want}', which contains characters GitHub's asset API rewrites on upload. The updater could not fetch it under that name. Refusing to attach."
                 exit 1
                 ;;
             esac
@@ -198,10 +208,10 @@ jobs:
                 break
               done
               if [ -z "${found}" ]; then
-                echo "::error::latest.yml declares '${want}' but no downloaded artifact matches it, even ignoring '.'/' ' separators. Refusing to attach a release the updater cannot download."
+                echo "::error::${manifest} declares '${want}' but no downloaded artifact matches it, even ignoring '.'/' ' separators. Refusing to attach a release the updater cannot download."
                 exit 1
               fi
-              echo "Renaming '${found}' -> '${want}' to match latest.yml"
+              echo "Renaming '${found}' -> '${want}' to match ${manifest}"
               mv -- "${found}" "${want}"
               # electron-updater derives the differential-download blockmap URL by appending
               # .blockmap to the declared filename, so it has to follow the installer's new name.
@@ -214,13 +224,14 @@ jobs:
             if [ -n "${sha}" ]; then
               actual=$(openssl dgst -sha512 -binary "${want}" | base64 -w0)
               if [ "${actual}" != "${sha}" ]; then
-                echo "::error::'${want}' does not match the sha512 in latest.yml (expected ${sha}, got ${actual}). electron-updater would reject this download. Refusing to attach."
+                echo "::error::'${want}' does not match the sha512 in ${manifest} (expected ${sha}, got ${actual}). electron-updater would reject this download. Refusing to attach."
                 exit 1
               fi
             fi
 
             echo "Verified: ${want}"
           done <<< "${entries}"
+          done
 
           echo "Artifacts after reconciliation:"
           ls -l

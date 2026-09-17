@@ -19,14 +19,14 @@ invoke-ai/launcher                              OSSign (api.ossign.org)        O
 build-and-sign.yml :: build-windows
   dispatch (dispatch_only: true)           ───▶  dispatch/<user>          ───▶  "Build and Sign" workflow
     -> returns workflow_id                                                        - checkout invoke-ai/launcher@<ref>
-  gh workflow run wait-signature.yml                                              - npm run package (ENABLE_SIGNING)
-                                                                                     -> scripts/customSign.js
-wait-signature.yml  (loops)                                                          -> OSSign CLI + OSSIGN_CONFIG
-  [Signatures env wait timer ~20 min]                                            - publish signed release  ─┐
-  single_check(workflow_id)              ◀────  check/<user>/<id>          ◀──── release assets  ◀──────────┘
-    - not done -> re-dispatch self (next interval)
+  gh workflow run wait-signature.yml                                              - x64:   npm run package (ENABLE_SIGNING)
+                                                                                  - arm64: npm run package -- --arm64
+wait-signature.yml  (loops)                                                          (LAUNCHER_WIN_ARCH=arm64, windows-11-arm)
+  [Signatures env wait timer ~20 min]                                                -> scripts/customSign.js
+  single_check(workflow_id)              ◀────  check/<user>/<id>          ◀────     -> OSSign CLI + OSSIGN_CONFIG
+    - not done -> re-dispatch self (next interval)                               - release job: one signed release
     - done     -> download signed_artifacts
-                  attach .exe/.blockmap/latest.yml to the vX.Y.Z GitHub Release
+                  attach .exe/.blockmap/latest.yml/latest-arm64.yml to the vX.Y.Z GitHub Release
 ```
 
 1. When a `v*` tag is pushed (or the workflow is dispatched), `build-windows` calls
@@ -44,8 +44,10 @@ wait-signature.yml  (loops)                                                     
    (~20 min, consuming no runner minutes while queued), does one `single_check`, and—if signing
    isn't done—re-dispatches itself for the next interval (up to `max_attempts`, default 72 ≈ 24h).
 5. Once signing completes, the loop downloads the signed artifacts and, for a `vX.Y.Z` tag,
-   attaches them (`.exe`, `.blockmap`, `latest.yml`) to that tag's GitHub Release — alongside the
-   Linux/macOS installers already published there by their build jobs. (Non-tag test runs stop at
+   attaches them (`.exe`, `.blockmap`, `latest.yml`, `latest-arm64.yml`) to that tag's GitHub Release —
+   alongside the Linux/macOS installers already published there by their build jobs. The x64 and ARM64
+   installers are verified against their own manifests: `latest.yml` (x64, mandatory) and `latest-arm64.yml`
+   (present when the OSSign run built the ARM64 launcher). (Non-tag test runs stop at
    a `windows-artifacts-signed` workflow artifact, since there is no release to attach to.)
 
 Linux and macOS builds are unaffected and continue to build/sign in
@@ -62,7 +64,14 @@ duplicated in this repository (it would never run here, and a stale copy would o
 
 It already builds and signs using the approach above: it checks out `invoke-ai/launcher`, runs
 `npm run package` with `ENABLE_SIGNING=true`, and signs via `scripts/customSign.js` using the
-`OSSIGN_CONFIG` certificate.
+`OSSIGN_CONFIG` certificate. Windows ARM64 is a second job in that workflow, on a `windows-11-arm`
+runner, running `npm run download win-arm64` and `npm run package -- --arm64` with
+`LAUNCHER_WIN_ARCH=arm64`, which names the installer `... Setup <version>-arm64.exe` and puts the
+build on the `latest-arm64` update channel (`electron-builder.config.ts`). The two build jobs are
+independent, so OSSign's reviewer sees both approval prompts at once (GitHub grants environment
+approvals per job); neither publishes. A final job downloads both signed sets and publishes one
+release, so a release only appears once every build succeeded, and a launcher ref that predates ARM64
+support skips the arm64 job so older tags can still be re-signed.
 
 **Note the coupling:** that workflow runs _this_ repo's build (`npm run download win`,
 `npm run package`, `scripts/customSign.js`, the `NODE_VERSION`, etc.). If those change here, the

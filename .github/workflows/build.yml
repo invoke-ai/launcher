@@ -295,8 +295,8 @@ jobs:
           Remove-Item -Force -ErrorAction SilentlyContinue "${{ github.workspace }}/dist/offered-for-signing.txt"
           npm run package -- --arm64
         env:
-          # Distinct installer name: "Invoke Community Edition Setup <version>-arm64.exe" (and its "latest-arm64" copy).
-          LAUNCHER_ARTIFACT_SUFFIX: '-arm64'
+          # Distinct installer name ("... Setup <version>-arm64.exe") and update channel (latest-arm64.yml).
+          LAUNCHER_WIN_ARCH: arm64
           ENABLE_SIGNING: 'true'
           SIGNING_DRY_RUN: ${{ github.workspace }}/dist/offered-for-signing.txt
 

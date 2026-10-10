@@ -31,7 +31,7 @@
     "test": "npm rebuild node-pty && vitest",
     "test:ui": "npm rebuild node-pty && vitest --coverage --ui",
     "test:no-watch": "npm rebuild node-pty && vitest --no-watch",
-    "rebuild": "electron-rebuild -f -w node-pty",
+    "rebuild": "node -e \"const { spawnSync } = require('node:child_process'); const path = require('node:path'); const modules = process.platform === 'win32' ? 'node-pty,wintab-pen-bridge' : 'node-pty'; const command = path.resolve('node_modules', '.bin', process.platform === 'win32' ? 'electron-rebuild.cmd' : 'electron-rebuild'); const result = process.platform === 'win32' ? spawnSync(command, ['-f', '-w', modules], { stdio: 'inherit', shell: true }) : spawnSync(command, ['-f', '-w', modules], { stdio: 'inherit' }); if (result.error) { console.error(result.error); process.exit(1); } process.exit(result.status ?? 1);\"",
     "postinstall": "npm run rebuild",
     "react-devtools": "react-devtools",
     "version": "npm version --message 'chore: bump version to v%s'"
@@ -123,6 +123,9 @@
   "dependencies": {
     "@eslint/compat": "^1.3.1",
     "node-pty": "^1.1.0-beta27"
+  },
+  "optionalDependencies": {
+    "wintab-pen-bridge": "file:./native/wintab-pen-bridge"
   },
   "uv": {
     "linux": {

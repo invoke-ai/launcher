@@ -12,7 +12,7 @@ export default defineConfig({
         entry: resolve('src/main/index.ts'),
       },
       rollupOptions: {
-        external: ['node-pty'],
+        external: ['node-pty', 'wintab-pen-bridge'],
       },
     },
   },

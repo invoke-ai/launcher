@@ -13,9 +13,10 @@ import { DEFAULT_ENV } from '@/lib/pty-utils';
 import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
+import { buildCustomIndexArg, buildCustomIndexProbeCommand, buildCustomTorchInstallCommand } from '@/main/torch-index';
 import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
 import type { InvokeReleaseInstallFiles } from '@/shared/pins';
-import { getInvokeReleaseInstallFiles, getPins } from '@/shared/pins';
+import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock } from '@/shared/pins';
 import type {
   GpuType,
   InstallProcessStatus,
@@ -24,15 +25,22 @@ import type {
   LogEntry,
   WithTimestamp,
 } from '@/shared/types';
+import { hasInsecureCredentials, isCustomTorchIndexUrlInvalid, redactUrlCredentials } from '@/shared/url';
 
 const BOOTSTRAP_PROJECT_DIR_NAME = '.launcher-bootstrap';
+
+/**
+ * What a custom index is asked for on the legacy (pre-bootstrap) install path. That path resolves the whole graph from
+ * package metadata rather than a lockfile, so there is no pinned version to check against.
+ */
+const LEGACY_TORCH_PROBE_REQUIREMENTS = ['torch'];
 const MIN_BOOTSTRAP_INSTALL_VERSION = '6.14.0rc1';
 
 const shouldUseBootstrapInstall = (version: string): boolean => {
   return compare(version.replace(/^v/, ''), MIN_BOOTSTRAP_INSTALL_VERSION) >= 0;
 };
 
-const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'cpu' | null): string[] => {
+const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'xpu' | 'cpu' | null): string[] => {
   const extras: string[] = [];
 
   if (torchPlatform && process.platform !== 'darwin') {
@@ -110,6 +118,107 @@ export class InstallManager {
     this.isCancellationRequested = false;
   }
 
+  /**
+   * Ask uv whether the user's custom index can actually satisfy the torch requirements, before anything is downloaded.
+   *
+   * Returns false when the install must stop - the status has already been set in that case.
+   */
+  private verifyCustomTorchIndex = async (arg: {
+    uvPath: string;
+    pythonTarget: string;
+    indexUrl: string;
+    requirements: string[];
+    runProcessOptions: { env: Record<string, string> };
+    cwd: string;
+    redactForLog: (text: string) => string;
+  }): Promise<boolean> => {
+    /** Runs one attempt. `'unavailable'` means uv could not carry the check out, which is not evidence either way. */
+    const attempt = async (useUvConfig: boolean): Promise<'ok' | 'unresolvable' | 'unavailable' | 'canceled'> => {
+      const { args, env } = buildCustomIndexProbeCommand({
+        pythonTarget: arg.pythonTarget,
+        indexUrl: arg.indexUrl,
+        requirements: arg.requirements,
+        baseEnv: arg.runProcessOptions.env,
+        useUvConfig,
+      });
+
+      this.log.info(arg.redactForLog(`> ${arg.uvPath} ${args.join(' ')}\r\n`));
+
+      const result = await withResultAsync(() => this.runCommand(arg.uvPath, args, { env, cwd: arg.cwd }));
+
+      if (result.isOk()) {
+        return result.value === 'canceled' ? 'canceled' : 'ok';
+      }
+
+      // uv exits 1 when the resolution itself failed, and 2 for everything operational - connection refused, DNS
+      // failure, a 5xx from the index. Only the former says anything about what this index carries; the latter used
+      // to be a warning and should stay one, or a transient blip during a one-second probe kills the whole install.
+      const exitCode = (result.error as { exitCode?: number }).exitCode;
+      return exitCode === 1 ? 'unresolvable' : 'unavailable';
+    };
+
+    this.log.info(c.cyan('Checking the custom PyTorch index...\r\n'));
+
+    const isolated = await attempt(false);
+
+    if (isolated === 'canceled') {
+      this.log.warn(c.yellow('Installation canceled\r\n'));
+      this.updateStatus({ type: 'canceled' });
+      return false;
+    }
+
+    if (isolated === 'ok') {
+      return true;
+    }
+
+    if (isolated === 'unavailable') {
+      this.log.warn(
+        c.yellow('Could not check the custom PyTorch index - continuing. Watch the install output for errors.\r\n')
+      );
+      return true;
+    }
+
+    // The isolated attempt suppressed uv's config so that a configured index could not answer in place of the one
+    // under test. But config also carries credentials, `keyring-provider` and TLS settings that the real install does
+    // use, so this failure is not yet proof the index is wrong. Ask again with config applied.
+    const withConfig = await attempt(true);
+
+    if (withConfig === 'canceled') {
+      this.log.warn(c.yellow('Installation canceled\r\n'));
+      this.updateStatus({ type: 'canceled' });
+      return false;
+    }
+
+    if (withConfig === 'unavailable') {
+      this.log.warn(
+        c.yellow('Could not check the custom PyTorch index - continuing. Watch the install output for errors.\r\n')
+      );
+      return true;
+    }
+
+    if (withConfig === 'ok') {
+      // Resolvable only with the uv config applied. That is either credentials for this index or a different index
+      // standing in for it, and we cannot tell which - so warn rather than block or wave it through silently.
+      this.log.warn(
+        c.yellow(
+          'The custom PyTorch index resolved only with your uv configuration applied, so it could not be verified ' +
+            'on its own. If your uv config points at another index, torch may come from there instead.\r\n'
+        )
+      );
+      return true;
+    }
+
+    // Neither attempt could resolve the requirements from this index. Letting it through would install the default
+    // build from another index and still report success.
+    const message = 'The custom PyTorch index cannot supply the required torch packages.';
+    this.log.error(c.red(`${message}\r\n`));
+    this.log.error(
+      c.red('Check the index URL and that it carries these exact versions. See the resolver output above.\r\n')
+    );
+    this.updateStatus({ type: 'error', error: { message } });
+    return false;
+  };
+
   logRepairModeMessages = (): void => {
     this.log.info('Try installing again with Repair mode enabled to fix this.\r\n');
     this.log.info('Ask for help on Discord or GitHub if you continue to have issues.\r\n');
@@ -156,7 +265,9 @@ export class InstallManager {
       if (result.exitCode === 0) {
         return 'success';
       } else {
-        throw new Error(`Process exited with code ${result.exitCode}`);
+        // Carry the code on the error: uv distinguishes "the resolution failed" (1) from "something went wrong while
+        // running" (2 - connection refused, DNS, 5xx), and the custom-index check needs to tell those apart.
+        throw Object.assign(new Error(`Process exited with code ${result.exitCode}`), { exitCode: result.exitCode });
       }
     } catch (error) {
       if (this.isCancellationRequested) {
@@ -184,7 +295,22 @@ export class InstallManager {
     this.onStatusChange(this.status);
   };
 
-  startInstall = async (location: string, gpuType: GpuType, version: string, repair?: boolean) => {
+  startInstall = async (
+    location: string,
+    gpuType: GpuType,
+    version: string,
+    customTorchIndexUrl?: string,
+    repair?: boolean
+  ) => {
+    // Normalize the optional custom torch index override: an empty/whitespace value means "use defaults".
+    const torchIndexOverride = customTorchIndexUrl?.trim() || undefined;
+
+    // Any credentials embedded in the override must never be echoed into the install log or the surfaced command lines.
+    const redactedTorchIndexOverride = torchIndexOverride ? redactUrlCredentials(torchIndexOverride) : undefined;
+    const redactForLog = (text: string): string =>
+      torchIndexOverride && redactedTorchIndexOverride
+        ? text.split(torchIndexOverride).join(redactedTorchIndexOverride)
+        : text;
     /**
      * Installation is a 2-step process:
      * - Create a virtual environment.
@@ -199,6 +325,29 @@ export class InstallManager {
     this.isCancellationRequested = false;
     this.updateStatus({ type: 'starting' });
     // Do some initial checks and setup
+
+    // Defense-in-depth: the renderer already rejects non-http(s) URLs at entry, but the main process should not trust
+    // that. A bad value here would otherwise surface as a cryptic uv error minutes into the install.
+    //
+    // These checks must come *after* the `starting` status above: the Install step only renders its Finish button once
+    // it has seen an active -> inactive transition, so returning before it would leave the user on a screen with no way
+    // out but restarting the app.
+    if (torchIndexOverride && isCustomTorchIndexUrlInvalid(torchIndexOverride)) {
+      const message = `Invalid custom torch index URL: ${redactUrlCredentials(torchIndexOverride)}`;
+      this.log.error(c.red(`${message}\r\n`));
+      this.updateStatus({ type: 'error', error: { message } });
+      return;
+    }
+
+    // There is no macOS wheel on any PyTorch device index - macOS torch comes from PyPI and uses MPS. Pointing the
+    // override at e.g. a CUDA index there cannot resolve, and would only fail after the full dependency sync. The
+    // Configure step hides the field on macOS; this is the matching guard for a direct IPC call.
+    if (torchIndexOverride && process.platform === 'darwin') {
+      const message = 'A custom PyTorch index is not supported on macOS - torch for macOS is published on PyPI.';
+      this.log.error(c.red(`${message}\r\n`));
+      this.updateStatus({ type: 'error', error: { message } });
+      return;
+    }
 
     // First make sure the install location is valid (e.g. it's a folder that exists)
     const locationCheckResult = await withResultAsync(async () => {
@@ -265,6 +414,19 @@ export class InstallManager {
       if (omittedExtras.length > 0) {
         this.log.warn(c.yellow(`Skipping undefined Invoke package extras: ${omittedExtras.join(', ')}\r\n`));
       }
+
+      // The torch-platform extra is what selects the accelerator build - dropping it is not a degradation, it is a
+      // different install than the one the user asked for. Invoke gained the `xpu` extra in v6.14.0, so picking Intel
+      // on an older release would otherwise sync the plain PyPI torch and finish with a green "completed", right after
+      // the UI told the user it had detected an Intel Arc GPU. Same shape for any other accelerator extra a release
+      // does not declare. (`cpu` is not an accelerator: the default index is the right answer there.)
+      if (torchPlatform !== 'cpu' && omittedExtras.includes(torchPlatform)) {
+        const message = `Invoke ${version} does not support ${torchPlatform.toUpperCase()} - it does not declare the "${torchPlatform}" extra.`;
+        this.log.error(c.red(`${message}\r\n`));
+        this.log.error(c.red('Choose a newer Invoke version, or a different GPU type.\r\n'));
+        this.updateStatus({ type: 'error', error: { message } });
+        return;
+      }
     } else {
       const pinsResult = await withResultAsync(() => getPins(version));
 
@@ -319,6 +481,31 @@ export class InstallManager {
         useBootstrapInstall ? 'frozen Invoke pyproject.toml and uv.lock' : 'legacy package metadata install'
       }\r\n`
     );
+    if (torchIndexOverride) {
+      this.log.info(c.magenta(`- Torch index override: ${redactedTorchIndexOverride}\r\n`));
+
+      if (hasInsecureCredentials(torchIndexOverride)) {
+        this.log.warn(
+          c.yellow(
+            '- Warning: the custom torch index URL carries credentials over plain http, so they are sent unencrypted. ' +
+              'Use https if your index supports it.\r\n'
+          )
+        );
+      }
+
+      // xformers (installed only on nvidia<30xx) is pulled from Invoke's default index and built against the lock's
+      // default CUDA torch. If the user swaps torch to a different CUDA build via the override, the two can have
+      // mismatched ABIs, which is a known source of import errors or crashes. Warn, but don't block - the user opted in.
+      if (invokeExtras.includes('xformers')) {
+        this.log.warn(
+          c.yellow(
+            '- Warning: a custom torch index is combined with the xformers extra (20xx-series cards). xformers is built ' +
+              "against Invoke's default CUDA torch, so a mismatched custom CUDA build may cause import errors or " +
+              'crashes.\r\n'
+          )
+        );
+      }
+    }
 
     if (repair) {
       this.log.info(c.magenta('Repair mode enabled:\r\n'));
@@ -486,6 +673,9 @@ export class InstallManager {
     runProcessOptions.env.VIRTUAL_ENV = venvPath;
 
     let installInvokeArgs: string[];
+    // Extra environment for the invokeai install. Only the legacy path uses it, to keep custom-index credentials out
+    // of argv; the bootstrap path installs invokeai without any index override at all.
+    let installInvokeEnv: Record<string, string> = {};
 
     if (useBootstrapInstall) {
       assert(releaseFiles, 'Bootstrap install requires release files');
@@ -510,6 +700,46 @@ export class InstallManager {
       }
 
       const bootstrapProjectPath = bootstrapProjectResult.value;
+
+      // When a custom torch index is set, we install the torch-family packages from that index instead of the source
+      // the lockfile records. To avoid downloading torch twice (once from the lock during `uv sync`, once from the
+      // custom index afterwards), we skip those packages during the sync and install them once from the custom index
+      // below. `uv sync --frozen` cannot pull them from a different index in-place, so a separate install is required.
+      const torchPackages = torchIndexOverride ? getTorchPackagesFromLock(releaseFiles.uvLock, torchPlatform) : [];
+
+      // Everything that can invalidate the override is checked here, before `uv sync` downloads several GB - not at
+      // the install step further down, where the user would pay for the sync first only to be told it was pointless.
+      if (torchIndexOverride) {
+        if (torchPackages.length === 0) {
+          // The torch packages are selected by matching each package's `source` in a lockfile we fetch at runtime from
+          // the Invoke repo - so an upstream change (a host migration, a nightly/test channel) can make this empty
+          // without anything in this repo changing. Silently continuing would install the default torch while the
+          // Review step and the log both told the user it came from their index, and still report success. Fail loudly.
+          const message = `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile, so the override cannot be applied.`;
+          this.log.error(c.red(`${message}\r\n`));
+          this.log.error(
+            c.red('Remove the custom PyTorch index to install with the versions Invoke ships, or report this.\r\n')
+          );
+          this.updateStatus({ type: 'error', error: { message } });
+          return;
+        }
+
+        // Probe the exact pinned specifiers, so an index that carries torch but not the version the lock pins - an
+        // older ROCm channel, say - fails here rather than after the sync.
+        const indexIsUsable = await this.verifyCustomTorchIndex({
+          uvPath,
+          pythonTarget: venvPath,
+          indexUrl: torchIndexOverride,
+          requirements: torchPackages.map(({ name, version }) => `${name}==${version}`),
+          runProcessOptions,
+          cwd: location,
+          redactForLog,
+        });
+        if (!indexIsUsable) {
+          return;
+        }
+      }
+
       const syncInvokeArgs = [
         // Use `uv sync` against the selected Invoke release's pyproject.toml and lockfile.
         'sync',
@@ -534,6 +764,11 @@ export class InstallManager {
 
       for (const extra of invokeExtras) {
         syncInvokeArgs.push('--extra', extra);
+      }
+
+      // Skip the torch-family packages during sync - they are reinstalled from the custom index below.
+      for (const pkg of torchPackages) {
+        syncInvokeArgs.push('--no-install-package', pkg.name);
       }
 
       this.log.info(c.cyan('Syncing invokeai environment...\r\n'));
@@ -567,6 +802,59 @@ export class InstallManager {
         this.log.warn(c.yellow('Installation canceled\r\n'));
         this.updateStatus({ type: 'canceled' });
         return;
+      }
+
+      // If a custom torch index is set, install the torch-family packages from it. These were skipped during `uv sync`
+      // (see `--no-install-package` above), so this is a single download from the user's index rather than a second
+      // one. This deliberately departs from the lock's recorded source - which is exactly what the user is asking for
+      // when they set the field (e.g. a cu126 build of the same torch version on 20xx cards).
+      if (torchIndexOverride) {
+        const { args: reinstallTorchArgs, env: torchIndexEnv } = buildCustomTorchInstallCommand(
+          venvPath,
+          torchIndexOverride,
+          torchPackages
+        );
+
+        this.log.info(c.cyan('Installing torch from custom index...\r\n'));
+        this.log.info(redactForLog(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${reinstallTorchArgs.join(' ')}\r\n`));
+
+        const reinstallTorchResult = await withResultAsync(() =>
+          this.runCommand(uvPath, reinstallTorchArgs, {
+            ...runProcessOptions,
+            env: { ...runProcessOptions.env, ...torchIndexEnv },
+            cwd: location,
+          })
+        );
+
+        if (reinstallTorchResult.isErr()) {
+          this.log.error(
+            c.red(`Failed to reinstall torch from custom index: ${reinstallTorchResult.error.message}\r\n`)
+          );
+          // torch was skipped during sync and this step may have uninstalled a previously-present build, so the venv
+          // is now without torch. Say so - the launcher's installed-version check only looks at the invokeai package,
+          // so the install would otherwise look normal and only fail at generation time.
+          this.log.error(
+            c.red(
+              'This environment now has no torch installed. Re-run the install - either without the custom PyTorch ' +
+                'index, or with one that carries the versions listed above.\r\n'
+            )
+          );
+          this.logRepairModeMessages();
+          this.updateStatus({
+            type: 'error',
+            error: {
+              message: 'Failed to reinstall torch from custom index',
+              context: serializeError(reinstallTorchResult.error),
+            },
+          });
+          return;
+        }
+
+        if (reinstallTorchResult.value === 'canceled') {
+          this.log.warn(c.yellow('Installation canceled\r\n'));
+          this.updateStatus({ type: 'canceled' });
+          return;
+        }
       }
 
       installInvokeArgs = [
@@ -603,16 +891,83 @@ export class InstallManager {
       ];
 
       const torchIndexUrl = pins.torchIndexUrl[systemPlatform][torchPlatform];
+
+      // These releases predate the `xpu` extra and their pins.json has no xpu index, so an Intel install here would
+      // resolve the plain PyPI torch and still report success. Same shape for any accelerator this release has no
+      // index for on this OS.
+      //
+      // This only ever fires for a combination that *could* work on a newer release, so the advice is actionable:
+      // combinations that can never work here (AMD on Windows) already resolved to `cpu` in `getTorchPlatform`, and
+      // install the CPU build deliberately rather than dying on a missing ROCm index no release has ever shipped.
+      //
+      // Gated on the override: supplying the missing index by hand is exactly what the field is for, and on these
+      // releases (an older CUDA or ROCm channel, or XPU, which no legacy pins.json has at all) it is the only way to
+      // install for that GPU.
+      if (torchPlatform !== 'cpu' && !torchIndexUrl && !torchIndexOverride) {
+        const message = `Invoke ${version} has no ${torchPlatform.toUpperCase()} PyTorch index for ${systemPlatform}, so it cannot be installed for this GPU type.`;
+        this.log.error(c.red(`${message}\r\n`));
+        this.log.error(
+          c.red('Choose a newer Invoke version, a different GPU type, or set a custom PyTorch index.\r\n')
+        );
+        this.updateStatus({ type: 'error', error: { message } });
+        return;
+      }
+
+      // The override is *added in front of* the pinned index, not swapped for it, so an AMD user on Invoke 5.x who
+      // sets a custom index does not lose the ROCm index for the rest of the dependency graph.
+      //
+      // Note the scope difference from the bootstrap path: this is a single `uv pip install` of the whole graph, and
+      // `--index` flags are searched in the order given, so the override takes priority for *every* package it
+      // happens to carry - not just torch. `whl/cu126`, for example, also serves numpy, pillow and sympy. There is no
+      // way to scope a CLI index to one package, so the override is genuinely index-wide on this path; the tooltip
+      // says so.
+      if (torchIndexOverride) {
+        // No lockfile on this path, so there are no versions to check - just that the index carries torch at all.
+        // Deliberately only `torch`: the override exists to redirect torch, and uv resolves anything the override
+        // does not carry from the pinned index that sits next in line, so demanding torchvision here would reject a
+        // torch-only mirror that would have installed correctly.
+        const indexIsUsable = await this.verifyCustomTorchIndex({
+          uvPath,
+          pythonTarget: pythonVersion,
+          indexUrl: torchIndexOverride,
+          requirements: LEGACY_TORCH_PROBE_REQUIREMENTS,
+          runProcessOptions,
+          cwd: location,
+          redactForLog,
+        });
+        if (!indexIsUsable) {
+          return;
+        }
+
+        const { arg, env } = buildCustomIndexArg(torchIndexOverride);
+        // Credentials go in the environment, not argv - the bootstrap path has always done this, and a token is just
+        // as readable from `ps auxww` during a legacy install.
+        installInvokeArgs.push(arg);
+        // Same reason as the bootstrap path: an ambient `unsafe-best-match` would let uv mix indexes per version and
+        // quietly serve torch from the pinned index when the override does not have the requested one.
+        installInvokeArgs.push('--index-strategy', 'first-index');
+        installInvokeEnv = env;
+        this.log.warn(
+          c.yellow(
+            `- Note: on Invoke ${version} the custom index takes priority for every package it carries, not just ` +
+              'torch, because the whole dependency graph is resolved in one step.\r\n'
+          )
+        );
+      }
       if (torchIndexUrl) {
         installInvokeArgs.push(`--index=${torchIndexUrl}`);
       }
     }
 
     this.log.info(c.cyan('Installing invokeai package...\r\n'));
-    this.log.info(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${installInvokeArgs.join(' ')}\r\n`);
+    this.log.info(redactForLog(`> VIRTUAL_ENV=${venvPath} ${uvPath} ${installInvokeArgs.join(' ')}\r\n`));
 
     const installAppResult = await withResultAsync(() =>
-      this.runCommand(uvPath, installInvokeArgs, { ...runProcessOptions, cwd: location })
+      this.runCommand(uvPath, installInvokeArgs, {
+        ...runProcessOptions,
+        env: { ...runProcessOptions.env, ...installInvokeEnv },
+        cwd: location,
+      })
     );
 
     if (installAppResult.isErr()) {
@@ -696,11 +1051,11 @@ export const createInstallManager = (arg: {
     },
   });
 
-  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, repair) => {
+  ipc.handle('install-process:start-install', (_, installationPath, gpuType, version, customTorchIndexUrl, repair) => {
     // startInstall has unguarded throws after it sets `starting`/`installing` (platform assert, env resolution). If one
     // escapes, the status would pin at an active value forever, wrongly reporting "install in progress". Catch here and
     // surface it as an error so the status is accurate.
-    installManager.startInstall(installationPath, gpuType, version, repair).catch((error) => {
+    installManager.startInstall(installationPath, gpuType, version, customTorchIndexUrl, repair).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       installManager.updateStatus({ type: 'error', error: { message } });
     });

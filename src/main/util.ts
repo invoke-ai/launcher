@@ -69,21 +69,32 @@ export const getActivateVenvCommand = (installLocation: string): string => {
 };
 
 /**
- * Gets the appropriate platform for a given GPU type.
+ * Gets the torch platform to install for a given GPU type on this operating system.
  *
- * Note: If the system is MacOS, we return 'cpu' regardless of the given GPU type.
+ * This is the single place the platform x accelerator support matrix lives: a GPU type whose accelerator has no torch
+ * build on this OS resolves to `cpu`, because that is what the user is actually going to get. Deciding it here rather
+ * than letting it fall out of a missing index or an extra that resolves to nothing keeps the install honest - the
+ * logged torch platform, the requested extra and the installed wheel all agree, and the guards further down do not
+ * have to distinguish "this release is too old" from "this never works here".
+ *
+ * - macOS: always `cpu`. PyTorch has no separate index for MPS; the CPU wheels carry it.
+ * - Windows + AMD: `cpu`. There is no ROCm build of torch for Windows, which is exactly what the GPU confirmation step
+ *   tells the user before they get here.
  *
  * @param gpuType The GPU type
- * @returns The platform corresponding to the GPU type
+ * @returns The torch platform corresponding to the GPU type
  */
-export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'cpu' => {
+export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'xpu' | 'cpu' => {
   if (process.platform === 'darwin') {
     // macOS uses MPS, but we don't need to provide a separate option for this because pytorch doesn't have a separate index url for MPS
     return 'cpu';
   } else {
     switch (gpuType) {
       case 'amd':
-        return 'rocm';
+        return process.platform === 'win32' ? 'cpu' : 'rocm';
+      case 'intel':
+        // Intel's XPU backend. PyTorch publishes +xpu wheels for linux-x86_64 and windows-amd64 only.
+        return 'xpu';
       case 'nvidia<30xx':
       case 'nvidia>=30xx':
         return 'cuda';

@@ -10,15 +10,34 @@ import { withResultAsync } from '@/lib/result';
 import { DEFAULT_XTERM_OPTIONS, STATUS_POLL_INTERVAL_MS } from '@/renderer/constants';
 import { $latestGHReleases } from '@/renderer/services/gh';
 import { emitter, ipc } from '@/renderer/services/ipc';
-import {
-  $installDirDetails,
-  $operatingSystem,
-  persistedStoreApi,
-  syncInstallDirDetails,
-} from '@/renderer/services/store';
-import type { DirDetails, GpuType, InstallProcessStatus, InstallType, WithTimestamp } from '@/shared/types';
+import { $installDirDetails, persistedStoreApi, syncInstallDirDetails } from '@/renderer/services/store';
+import type {
+  DirDetails,
+  GpuBackend,
+  GpuDetectionResult,
+  GpuType,
+  InstallProcessStatus,
+  InstallType,
+  WithTimestamp,
+} from '@/shared/types';
 
 const steps = ['Location', 'Version', 'Configure', 'Review', 'Install'] as const;
+
+/** The sub-views of the GPU confirmation flow in the Configure step. */
+type GpuConfirmPhase = 'confirm' | 'nvidia-tier' | 'manual' | 'done';
+
+/**
+ * Non-CUDA backends map straight to a GPU type. CUDA is handled separately because the generation is ambiguous.
+ *
+ * Both `metal` and `cpu` map to `nogpu`: the launcher's GPU types select a torch index, and macOS torch (MPS included)
+ * comes from the default index either way.
+ */
+export const BACKEND_TO_GPU_TYPE: Record<Exclude<GpuBackend, 'cuda'>, GpuType> = {
+  rocm: 'amd',
+  xpu: 'intel',
+  metal: 'nogpu',
+  cpu: 'nogpu',
+};
 
 const $choices = map<{
   dirDetails: DirDetails | null;
@@ -33,16 +52,26 @@ const $choices = map<{
     | { type: 'manual'; version: string }
     | null;
   repairMode: boolean;
+  customTorchIndexUrl: string;
 }>({
   dirDetails: null,
   gpuType: null,
   release: null,
   repairMode: false,
+  customTorchIndexUrl: '',
 });
 
 const $activeStep = atom(0);
 const $isStarted = atom(false);
 const $isFinished = atom(false);
+const $gpuDetection = atom<GpuDetectionResult | null>(null);
+const $gpuDetectionStatus = atom<'idle' | 'detecting' | 'done' | 'error'>('idle');
+// Which sub-view of the GPU confirmation step is showing. Kept in the store (not component state) so it survives
+// navigating away from and back to the Configure step - otherwise returning would drop back to the manual picker.
+const $gpuConfirmPhase = atom<GpuConfirmPhase>('confirm');
+// Incremented for every detection run (and whenever the flow is reset) so an in-flight run that has been superseded
+// can drop its result instead of writing it into fresh state.
+let gpuDetectionRunId = 0;
 const $installType = computed($choices, ({ dirDetails, release }): InstallType | null => {
   if (!release) {
     return null;
@@ -83,6 +112,37 @@ export const installFlowApi = {
   $activeStep: $activeStep as ReadableAtom<number>,
   $isStarted: $isStarted as ReadableAtom<boolean>,
   $isFinished: $isFinished as ReadableAtom<boolean>,
+  $gpuDetection: $gpuDetection as ReadableAtom<GpuDetectionResult | null>,
+  $gpuDetectionStatus: $gpuDetectionStatus as ReadableAtom<'idle' | 'detecting' | 'done' | 'error'>,
+  // Mutable - the Configure step reads and writes the current sub-view.
+  $gpuConfirmPhase,
+  detectGpu: async () => {
+    if ($gpuDetectionStatus.get() === 'detecting') {
+      return;
+    }
+    const runId = ++gpuDetectionRunId;
+    $gpuDetectionStatus.set('detecting');
+    const result = await withResultAsync(() => emitter.invoke('util:detect-gpu'));
+    // `beginFlow`/`cancelFlow` reset the status to 'idle' while a probe may still be in flight, which lets a second run
+    // start. Drop the superseded run's result rather than letting it stomp the fresh state.
+    if (runId !== gpuDetectionRunId) {
+      return;
+    }
+    if (result.isOk()) {
+      $gpuDetection.set(result.value);
+      $gpuDetectionStatus.set('done');
+      if (result.value.backend === 'metal') {
+        // On macOS "we detected a Mac GPU (Metal / MPS) - is this correct?" has exactly one sane answer, so skip the
+        // confirmation. Done here rather than in a render effect, which would flash the prompt for a frame first.
+        $choices.setKey('gpuType', BACKEND_TO_GPU_TYPE.metal);
+        $gpuConfirmPhase.set('done');
+      }
+    } else {
+      // Detection is advisory; on failure we fall back to the manual GPU picker in the Configure step.
+      $gpuDetection.set(null);
+      $gpuDetectionStatus.set('error');
+    }
+  },
   nextStep: () => {
     const currentStep = $activeStep.get();
     $activeStep.set(clamp(currentStep + 1, 0, installFlowApi.steps.length - 1));
@@ -97,7 +157,12 @@ export const installFlowApi = {
       gpuType: null,
       release: null,
       repairMode: false,
+      customTorchIndexUrl: '',
     });
+    gpuDetectionRunId++;
+    $gpuDetection.set(null);
+    $gpuDetectionStatus.set('idle');
+    $gpuConfirmPhase.set('confirm');
     $activeStep.set(0);
     $isStarted.set(true);
   },
@@ -107,17 +172,30 @@ export const installFlowApi = {
       gpuType: null,
       release: null,
       repairMode: false,
+      customTorchIndexUrl: '',
     });
+    gpuDetectionRunId++;
+    $gpuDetection.set(null);
+    $gpuDetectionStatus.set('idle');
+    $gpuConfirmPhase.set('confirm');
     $activeStep.set(0);
     $isStarted.set(false);
   },
   startInstall: () => {
-    const { dirDetails, gpuType, release, repairMode } = $choices.get();
+    const { dirDetails, gpuType, release, repairMode, customTorchIndexUrl } = $choices.get();
     if (!dirDetails || !dirDetails.canInstall || !release || !gpuType) {
       return;
     }
     initializeTerminal();
-    emitter.invoke('install-process:start-install', dirDetails.path, gpuType, release.version, repairMode);
+    const trimmedCustomTorchIndexUrl = customTorchIndexUrl.trim() || undefined;
+    emitter.invoke(
+      'install-process:start-install',
+      dirDetails.path,
+      gpuType,
+      release.version,
+      trimmedCustomTorchIndexUrl,
+      repairMode
+    );
     installFlowApi.nextStep();
   },
   cancelInstall: async () => {
@@ -162,19 +240,6 @@ const syncReleaseChoiceWithLatestReleases = () => {
 
 $latestGHReleases.listen(syncReleaseChoiceWithLatestReleases);
 $choices.listen(syncReleaseChoiceWithLatestReleases);
-
-const syncGpuTypeWithOperatingSystem = () => {
-  if ($choices.get().gpuType) {
-    return;
-  }
-
-  const operatingSystem = $operatingSystem.get();
-
-  $choices.setKey('gpuType', operatingSystem === 'macOS' ? 'nogpu' : 'nvidia>=30xx');
-};
-
-$operatingSystem.listen(syncGpuTypeWithOperatingSystem);
-$choices.listen(syncGpuTypeWithOperatingSystem);
 
 export const $installProcessStatus = atom<WithTimestamp<InstallProcessStatus>>({
   type: 'uninitialized',

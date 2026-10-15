@@ -8,6 +8,7 @@ import { createInstallManager } from '@/main/install-manager';
 import { createInvokeManager } from '@/main/invoke-manager';
 import { MainProcessManager } from '@/main/main-process-manager';
 import { store } from '@/main/store';
+import { isWindowsArm64Build } from '@/main/updater';
 import {
   getHomeDirectory,
   getInstallationDetails,
@@ -155,6 +156,7 @@ main.ipc.handle('util:get-is-file', (_, path) => isFile(path));
 main.ipc.handle('util:get-path-exists', (_, path) => pathExists(path));
 main.ipc.handle('util:get-os', () => getOperatingSystem());
 main.ipc.handle('util:get-arch', () => getSystemArch());
+main.ipc.handle('util:get-is-windows-arm64-build', () => isWindowsArm64Build());
 main.ipc.handle('util:open-directory', (_, path) => shell.openPath(path));
 main.ipc.handle('util:get-launcher-version', () => app.getVersion());
 main.ipc.handle('util:detect-gpu', () => detectGpu());

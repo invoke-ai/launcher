@@ -10,9 +10,28 @@ autoUpdater.logger = console;
 autoUpdater.autoDownload = false;
 // autoUpdater.forceDevUpdateConfig = true;
 
+/**
+ * Whether this launcher binary is the Windows ARM64 build. `process.arch` is the binary's architecture, which is the
+ * right question here: the update channel is baked into the build (see electron-builder.config.ts), so an x64 launcher
+ * running under emulation on an ARM64 machine still follows the x64 channel.
+ */
+export const isWindowsArm64Build = (platform = process.platform, arch = process.arch): boolean =>
+  platform === 'win32' && arch === 'arm64';
+
+/**
+ * Whether the updater may follow prereleases for this build.
+ *
+ * The Windows ARM64 build reads its own manifest, `latest-arm64.yml`. With prereleases allowed, electron-updater
+ * replaces the channel with the tag's prerelease name (`rc.yml`, which no build writes) and then falls back to
+ * `latest.yml` -- the x64 manifest, whose first installer is the x64 one. Either way an ARM64 launcher would be
+ * handed the x64 installer, so the opt-in is honoured everywhere except on that build.
+ */
+export const shouldAllowPrerelease = (optIn: boolean, platform = process.platform, arch = process.arch): boolean =>
+  optIn && !isWindowsArm64Build(platform, arch);
+
 export const checkForUpdates = async (mainWindow: BrowserWindow) => {
   try {
-    autoUpdater.allowPrerelease = store.get('optInToLauncherPrereleases');
+    autoUpdater.allowPrerelease = shouldAllowPrerelease(store.get('optInToLauncherPrereleases'));
     const updateCheckResult = await autoUpdater.checkForUpdates();
     if (!updateCheckResult) {
       return;

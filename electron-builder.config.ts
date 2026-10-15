@@ -21,6 +21,19 @@ const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
   return {};
 };
 
+/**
+ * The Windows ARM64 launcher is a separate build with its own update channel.
+ *
+ * electron-builder names a single-arch NSIS installer without the architecture and, on Windows, writes the
+ * electron-updater manifest as `latest.yml` whatever the architecture. Published next to the x64 build, the arm64
+ * installer would collide with it and an ARM64 launcher reading the shared manifest would be handed the x64
+ * installer. Giving the arm64 build the `latest-arm64` channel makes electron-builder write `latest-arm64.yml`
+ * and bake that channel into the packaged app-update.yml, so the ARM64 launcher only ever reads its own manifest.
+ * The arm64 CI job (and the OSSign signing workflow) set LAUNCHER_WIN_ARCH=arm64; nothing else changes.
+ */
+const WINDOWS_ARM64_UPDATE_CHANNEL = 'latest-arm64';
+const isWindowsArm64Build = process.env.LAUNCHER_WIN_ARCH === 'arm64';
+
 export default {
   appId: 'com.invoke.invoke-community-edition',
   productName: 'Invoke Community Edition',
@@ -37,12 +50,10 @@ export default {
   ],
   win: {
     target: ['nsis'],
-    // electron-builder names a single-arch NSIS installer without the architecture, so an arm64 build would
-    // collide with the x64 one on a release. The arm64 CI job sets LAUNCHER_ARTIFACT_SUFFIX=-arm64; the x64
-    // build keeps its historical name (the README's "latest" link and the signing pipeline depend on it).
-    ...(process.env.LAUNCHER_ARTIFACT_SUFFIX
-      ? { artifactName: `\${productName} Setup \${version}${process.env.LAUNCHER_ARTIFACT_SUFFIX}.\${ext}` }
-      : {}),
+    // The arm64 installer carries its architecture in its name; the x64 build keeps its historical name (the
+    // README's "latest" link and the signing pipeline depend on it).
+    // eslint-disable-next-line no-template-curly-in-string -- electron-builder file-name macros, not a template
+    ...(isWindowsArm64Build ? { artifactName: '${productName} Setup ${version}-arm64.${ext}' } : {}),
     ...getWindowsSigningOptions(),
   },
   linux: {
@@ -52,6 +63,8 @@ export default {
     provider: 'github',
     owner: 'invoke-ai',
     repo: 'launcher',
+    // Its own update channel, so the arm64 launcher polls latest-arm64.yml (see the note on the constant).
+    ...(isWindowsArm64Build ? { channel: WINDOWS_ARM64_UPDATE_CHANNEL } : {}),
   },
   electronFuses: {
     runAsNode: false,

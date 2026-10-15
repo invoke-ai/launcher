@@ -137,7 +137,7 @@ export const $systemArch = atom<SystemArch | undefined>(undefined);
 emitter.invoke('util:get-arch').then($systemArch.set);
 
 /**
- * Whether this launcher binary is the Windows ARM64 build, which follows its own stable-only update channel.
+ * Whether this launcher binary is the Windows ARM64 build, which has its own update channel and never follows prereleases.
  */
 export const $isWindowsArm64Build = atom<boolean>(false);
 

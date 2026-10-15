@@ -107,8 +107,7 @@ jobs:
             echo "::error::No latest.yml among signed artifacts; cannot verify they belong to ${{ inputs.target_ref }}. Refusing to attach."
             exit 1
           fi
-          # latest.yml is the x64 manifest and is mandatory; latest-<arch>.yml (today: latest-arm64.yml) is one
-          # per additional Windows architecture the OSSign run built, and every manifest present must match.
+          # latest.yml is the x64 manifest, latest-arm64.yml the ARM64 one. Every manifest present must match the tag.
           shopt -s nullglob
           for manifest in dist/latest.yml dist/latest-*.yml; do
             actual=$(awk '/^version:/ {print $2; exit}' "${manifest}")
@@ -118,6 +117,15 @@ jobs:
             fi
             echo "Artifact version ${actual} in ${manifest#dist/} matches ${{ inputs.target_ref }}."
           done
+          # latest-arm64.yml is mandatory too, checked after the versions so recycled artifacts from an older x64-only
+          # release are reported as stale rather than as a missing ARM64 build. Automated runs poll from the ref OSSign
+          # built, and every ref carrying this check supports LAUNCHER_WIN_ARCH, so a missing ARM64 manifest means the
+          # OSSign side skipped or broke the arm64 build. Shipping x64-only would leave ARM64 launchers without updates
+          # behind a green pipeline. (A manual re-poll of an older tag must pass --ref <that tag>; see the README.)
+          if [ ! -f dist/latest-arm64.yml ]; then
+            echo "::error::No latest-arm64.yml among signed artifacts. The OSSign run did not build the Windows ARM64 launcher for ${{ inputs.target_ref }} (check its LAUNCHER_WIN_ARCH detection, see .github/ossign/README.md). Refusing to attach."
+            exit 1
+          fi
 
       - name: Reconcile signed artifacts with the update manifests
         # electron-updater downloads *exactly* the filenames latest.yml declares, resolved against
@@ -151,7 +159,7 @@ jobs:
           norm() { printf '%s' "$1" | sed 's/%20/-/g; s/[ .]/-/g'; }
 
           # Names already assigned to an earlier entry, so a later entry cannot rename them away. Shared across
-          # manifests: the x64 and arm64 manifests must never claim the same payload.
+          # manifests, so the arm64 manifest cannot rename away a payload the x64 one already claimed.
           claimed=""
 
           shopt -s nullglob

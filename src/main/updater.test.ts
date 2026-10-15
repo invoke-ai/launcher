@@ -25,8 +25,8 @@ describe('shouldAllowPrerelease', () => {
   });
 
   it('never follows prereleases on the Windows ARM64 build', () => {
-    // latest-arm64.yml exists only for stable releases; electron-updater's prerelease path would fall back to
-    // latest.yml and hand this build the x64 installer.
+    // electron-updater's prerelease path swaps the channel for the tag's prerelease name (rc.yml, which no build
+    // writes) and falls back to latest.yml, the x64 manifest, handing this build the x64 installer.
     expect(shouldAllowPrerelease(true, 'win32', 'arm64')).toBe(false);
     expect(shouldAllowPrerelease(false, 'win32', 'arm64')).toBe(false);
   });

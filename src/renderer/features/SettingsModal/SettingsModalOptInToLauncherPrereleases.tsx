@@ -8,7 +8,7 @@ import { $isWindowsArm64Build, persistedStoreApi } from '@/renderer/services/sto
 
 export const SettingsModalOptInToLauncherPrereleases = memo(() => {
   const { optInToLauncherPrereleases } = useStore(persistedStoreApi.$atom);
-  // The Windows ARM64 build follows its own stable-only update channel; the main process ignores the opt-in there.
+  // The Windows ARM64 build never follows prereleases; the main process ignores the opt-in there.
   const isWindowsArm64Build = useStore($isWindowsArm64Build);
   const onChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     persistedStoreApi.setKey('optInToLauncherPrereleases', e.target.checked);
@@ -25,7 +25,7 @@ export const SettingsModalOptInToLauncherPrereleases = memo(() => {
       </Flex>
       <FormHelperText>
         {isWindowsArm64Build
-          ? 'The Windows ARM64 launcher receives stable releases only; prereleases are published for x64 first.'
+          ? "Prerelease updates aren't offered to the Windows ARM64 launcher; it updates to stable releases only."
           : 'Check for prerelease versions of the launcher on startup. If disabled, the launcher will only check for stable releases.'}
       </FormHelperText>
     </FormControl>

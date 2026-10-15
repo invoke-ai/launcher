@@ -46,8 +46,8 @@ wait-signature.yml  (loops)                                                     
 5. Once signing completes, the loop downloads the signed artifacts and, for a `vX.Y.Z` tag,
    attaches them (`.exe`, `.blockmap`, `latest.yml`, `latest-arm64.yml`) to that tag's GitHub Release —
    alongside the Linux/macOS installers already published there by their build jobs. The x64 and ARM64
-   installers are verified against their own manifests: `latest.yml` (x64, mandatory) and `latest-arm64.yml`
-   (present when the OSSign run built the ARM64 launcher). (Non-tag test runs stop at
+   installers are verified against their own manifests, `latest.yml` (x64) and `latest-arm64.yml` (ARM64);
+   both are mandatory, so a run that did not build the ARM64 launcher fails instead of attaching. (Non-tag test runs stop at
    a `windows-artifacts-signed` workflow artifact, since there is no release to attach to.)
 
 Linux and macOS builds are unaffected and continue to build/sign in
@@ -70,13 +70,33 @@ runner, running `npm run download win-arm64` and `npm run package -- --arm64` wi
 build on the `latest-arm64` update channel (`electron-builder.config.ts`). The two build jobs are
 independent, so OSSign's reviewer sees both approval prompts at once (GitHub grants environment
 approvals per job); neither publishes. A final job downloads both signed sets and publishes one
-release, so a release only appears once every build succeeded, and a launcher ref that predates ARM64
-support skips the arm64 job so older tags can still be re-signed.
+release, so a release only appears once every build succeeded. For a launcher ref that predates ARM64
+support, the arm64 job still runs (and still needs approval): it checks out the ref and runs `npm ci`,
+then skips the build, sign and upload steps, so older tags can still be re-signed as long as their
+dependencies install on the ARM64 runner.
 
 **Note the coupling:** that workflow runs _this_ repo's build (`npm run download win`,
 `npm run package`, `scripts/customSign.js`, the `NODE_VERSION`, etc.). If those change here, the
 OSSign-hosted workflow may need a matching update — open a PR against `OSSign/invoke-ai-launcher`
 and notify OSSign for review.
+
+This includes the ARM64 switch. The OSSign workflow builds ARM64 only for a ref where
+`package.json` has a `uv['win-arm64']` entry **and** `grep -q LAUNCHER_WIN_ARCH electron-builder.config.ts`
+matches, and sets `LAUNCHER_WIN_ARCH=arm64` for the arm64 build. Renaming either, or moving the
+`LAUNCHER_WIN_ARCH` logic out of `electron-builder.config.ts`, silently turns the arm64 build off on
+the OSSign side; `wait-signature.yml` then fails the release for the
+missing `latest-arm64.yml`. Update the OSSign workflow in the same change.
+
+Two consequences of that mandatory check:
+
+- **Merge order.** OSSign always runs its own `main`, so the OSSign-side ARM64 job
+  ([OSSign/invoke-ai-launcher#3](https://github.com/OSSign/invoke-ai-launcher/pull/3)) must be merged
+  before the first launcher tag that carries the check. Otherwise that release's Windows signing completes
+  x64-only and the wait loop refuses to attach it (the signed files are still kept in the
+  `windows-artifacts-signed` workflow artifact).
+- **Manual re-polls.** The loop applies the check from whatever ref it runs on. When dispatching
+  `wait-signature.yml` by hand, pass `--ref <target tag>` (the Actions UI defaults to `main`); re-polling
+  an x64-only tag from `main` would otherwise fail for the missing ARM64 manifest.
 
 The flip side: changing **which files we sign** needs no OSSign-side change at all. The policy lives
 in `scripts/customSign.js` here, and the hosted workflow picks it up when it checks this repo out at

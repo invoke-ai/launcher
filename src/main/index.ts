@@ -12,6 +12,7 @@ import {
   getHomeDirectory,
   getInstallationDetails,
   getOperatingSystem,
+  getSystemArch,
   isDirectory,
   isFile,
   pathExists,
@@ -153,6 +154,7 @@ main.ipc.handle('util:get-is-directory', (_, path) => isDirectory(path));
 main.ipc.handle('util:get-is-file', (_, path) => isFile(path));
 main.ipc.handle('util:get-path-exists', (_, path) => pathExists(path));
 main.ipc.handle('util:get-os', () => getOperatingSystem());
+main.ipc.handle('util:get-arch', () => getSystemArch());
 main.ipc.handle('util:open-directory', (_, path) => shell.openPath(path));
 main.ipc.handle('util:get-launcher-version', () => app.getVersion());
 main.ipc.handle('util:detect-gpu', () => detectGpu());

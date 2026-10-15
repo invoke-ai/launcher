@@ -136,6 +136,10 @@
     "mac": {
       "url": "https://github.com/astral-sh/uv/releases/download/0.11.28/uv-aarch64-apple-darwin.tar.gz",
       "sha256": "33540eb7c883ab857eff79bd5ac2aa31fe27b595abecb4a9c003a2c998447232"
+    },
+    "win-arm64": {
+      "url": "https://github.com/astral-sh/uv/releases/download/0.11.28/uv-aarch64-pc-windows-msvc.zip",
+      "sha256": "3248109afad3ec59baad299d324ff53de17e2d9a3b3e21580ffd26744b11e036"
     }
   },
   "peerDependencies": {

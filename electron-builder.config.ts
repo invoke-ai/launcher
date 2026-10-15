@@ -1,4 +1,5 @@
 import type { Configuration, WindowsConfiguration } from 'electron-builder';
+import { Arch } from 'electron-builder';
 
 const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
   if (process.env.ENABLE_SIGNING) {
@@ -37,6 +38,12 @@ export default {
   ],
   win: {
     target: ['nsis'],
+    // electron-builder names a single-arch NSIS installer without the architecture, so an arm64 build would
+    // collide with the x64 one on a release. The arm64 CI job sets LAUNCHER_ARTIFACT_SUFFIX=-arm64; the x64
+    // build keeps its historical name (the README's "latest" link and the signing pipeline depend on it).
+    ...(process.env.LAUNCHER_ARTIFACT_SUFFIX
+      ? { artifactName: `\${productName} Setup \${version}${process.env.LAUNCHER_ARTIFACT_SUFFIX}.\${ext}` }
+      : {}),
     ...getWindowsSigningOptions(),
   },
   linux: {
@@ -57,6 +64,15 @@ export default {
     resetAdHocDarwinSignature: true,
   },
   electronUpdaterCompatibility: '>= 2.16',
+  // The x64 and arm64 uv both download to assets/bin/uv.exe; refuse to package the wrong one.
+  beforePack: (context) => {
+    if (context.electronPlatformName !== 'win32') {
+      return;
+    }
+    const path = require('path');
+    const { assertUvMatchesArch } = require(path.join(process.cwd(), 'scripts', 'checkBundledUvArch.js'));
+    assertUvMatchesArch(path.join(process.cwd(), 'assets', 'bin', 'uv.exe'), Arch[context.arch]);
+  },
   afterAllArtifactBuild: (buildResult) => {
     const fs = require('fs');
     const path = require('path');

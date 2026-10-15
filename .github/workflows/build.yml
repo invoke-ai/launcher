@@ -254,6 +254,10 @@ jobs:
             '--quiet', '--wait', '--norestart', '--nocache',
             '--add', 'Microsoft.VisualStudio.Workload.VCTools',
             '--add', 'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+            # node-pty's binding.gyp sets SpectreMitigation for every Windows target (MSB8040 without these).
+            '--add', 'Microsoft.VisualStudio.Component.VC.Runtimes.ARM64.Spectre',
+            # @electron/node-gyp 10 only accepts an installation that has this component (getToolset), even on ARM64.
+            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
             '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.26100'
           )
           # 3010 = success, reboot required (not needed for the build tools to be usable).

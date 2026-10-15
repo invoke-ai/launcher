@@ -97,7 +97,11 @@ const blockAppliesToTarget = (block: string, windowsArm64: boolean): boolean => 
  */
 export const lockSupportsWindowsArm64 = (uvLock: string): boolean => {
   const header = uvLock.split(/\n\[\[package\]\]/)[0] ?? '';
-  return (getResolutionMarkers(header) ?? []).some((marker) => marker.includes(WINDOWS_ARM64_MARKER));
+  const requiredMarkers = header.match(/^required-markers\s*=\s*\[([^\]]*)\]/m)?.[1] ?? '';
+  return (
+    requiredMarkers.includes(WINDOWS_ARM64_MARKER) ||
+    (getResolutionMarkers(header) ?? []).some((marker) => marker.includes(WINDOWS_ARM64_MARKER))
+  );
 };
 
 /**

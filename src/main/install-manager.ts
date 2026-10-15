@@ -762,7 +762,9 @@ export class InstallManager {
           // the Invoke repo - so an upstream change (a host migration, a nightly/test channel) can make this empty
           // without anything in this repo changing. Silently continuing would install the default torch while the
           // Review step and the log both told the user it came from their index, and still report success. Fail loudly.
-          const message = `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile, so the override cannot be applied.`;
+          const message = isWindowsArm64()
+            ? `Custom torch index is set, but the Invoke release lockfile has no ${torchPlatform} torch for Windows on ARM64, so the override cannot be applied. Choose an Nvidia GPU type, or remove the custom PyTorch index.`
+            : `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile, so the override cannot be applied.`;
           this.log.error(c.red(`${message}\r\n`));
           this.log.error(
             c.red('Remove the custom PyTorch index to install with the versions Invoke ships, or report this.\r\n')

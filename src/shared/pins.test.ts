@@ -311,6 +311,14 @@ resolution-markers = [
 
     it('detects whether a lock resolves for Windows ARM64', () => {
       expect(lockSupportsWindowsArm64(arm64Lock)).toBe(true);
+      // A lock that supports ARM64 without a resolution fork of its own still declares it as required.
+      expect(
+        lockSupportsWindowsArm64(`version = 1
+required-markers = [
+    "platform_machine == 'ARM64' and sys_platform == 'win32'",
+]
+`)
+      ).toBe(true);
       // Releases before ARM64 support: x64-only resolution markers, or none at all. Package-level markers that
       // mention ARM64 do not count.
       expect(lockSupportsWindowsArm64(uvLock)).toBe(false);

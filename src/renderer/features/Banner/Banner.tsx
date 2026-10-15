@@ -82,8 +82,10 @@ export const Banner = memo(() => {
           </Button>
         )}
       </GridItem>
-      <SettingsModalOpenButton position="absolute" insetBlockStart={3} insetInlineStart={3} />
-      <HideToTrayButton position="absolute" insetBlockStart={3} insetInlineStart={13} />
+      <Flex position="absolute" insetBlockStart={3} insetInlineStart={3} gap={2}>
+        <SettingsModalOpenButton />
+        <HideToTrayButton />
+      </Flex>
     </Grid>
   );
 });

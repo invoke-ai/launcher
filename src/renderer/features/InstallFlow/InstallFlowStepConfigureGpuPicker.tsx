@@ -9,14 +9,15 @@ import { GPU_TYPE_MAP } from '@/shared/types';
 
 export const InstallFlowStepConfigureGpuPicker = memo(() => {
   const { operatingSystem, systemArch } = useSystemInfo();
-  // Windows on ARM64 (NVIDIA RTX Spark): the only torch build is NVIDIA's; AMD and Intel accelerators have none.
+  // Windows on ARM64 (NVIDIA RTX Spark): the only torch build is NVIDIA's; AMD and Intel accelerators have none, and
+  // the machine has no pre-30xx NVIDIA GPU (that choice only adds xformers, which has no ARM64 build).
   const isWindowsArm64 = operatingSystem === 'Windows' && systemArch === 'arm64';
 
   return (
     <>
       <Heading>What GPU do you have?</Heading>
       <ButtonGroup variant="outline" flexWrap="wrap" justifyContent="center" rowGap={2}>
-        <GpuButton type="nvidia<30xx" />
+        {!isWindowsArm64 && <GpuButton type="nvidia<30xx" />}
         <GpuButton type="nvidia>=30xx" />
         {!isWindowsArm64 && <GpuButton type="amd" />}
         {/* PyTorch publishes +xpu wheels for linux-x86_64 and windows-amd64 only - on a Mac, Intel means Metal or CPU. */}
@@ -26,7 +27,8 @@ export const InstallFlowStepConfigureGpuPicker = memo(() => {
       {operatingSystem === 'macOS' && <Text fontSize="md">Tip: Macs usually have no dedicated GPU.</Text>}
       {isWindowsArm64 && (
         <Text fontSize="md">
-          Windows on ARM64: torch is installed from NVIDIA&apos;s RTX Spark index for every choice.
+          Windows on ARM64: Invoke releases with ARM64 support install torch from NVIDIA&apos;s RTX Spark index for
+          every choice.
         </Text>
       )}
     </>

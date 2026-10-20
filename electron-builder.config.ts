@@ -1,4 +1,5 @@
 import type { Configuration, WindowsConfiguration } from 'electron-builder';
+import { Arch } from 'electron-builder';
 
 const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
   if (process.env.ENABLE_SIGNING) {
@@ -76,6 +77,15 @@ export default {
     resetAdHocDarwinSignature: true,
   },
   electronUpdaterCompatibility: '>= 2.16',
+  // The x64 and arm64 uv both download to assets/bin/uv.exe; refuse to package the wrong one.
+  beforePack: (context) => {
+    if (context.electronPlatformName !== 'win32') {
+      return;
+    }
+    const path = require('path');
+    const { assertUvMatchesArch } = require(path.join(process.cwd(), 'scripts', 'checkBundledUvArch.js'));
+    assertUvMatchesArch(path.join(process.cwd(), 'assets', 'bin', 'uv.exe'), Arch[context.arch]);
+  },
   afterAllArtifactBuild: (buildResult) => {
     const fs = require('fs');
     const path = require('path');

@@ -191,8 +191,8 @@ export type DirDetails =
       isFirstRun: boolean;
       version: string;
       pythonVersion: string;
-      /** `platform.machine()` of the venv's interpreter, e.g. `AMD64` or `ARM64` on Windows. */
-      pythonMachine?: string;
+      /** `sysconfig.get_platform()` of the venv's interpreter, e.g. `win-amd64` or `win-arm64`. */
+      pythonPlatform: string;
       pythonPath: string;
       invokeExecPath: string;
       activateVenvPath: string;

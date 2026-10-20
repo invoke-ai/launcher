@@ -237,8 +237,31 @@ jobs:
   # managed-Python default is the native interpreter, and node-pty is rebuilt for the host architecture.
   build-windows-arm64:
     runs-on: windows-11-arm
+    env:
+      # Use the VS 2022 Build Tools installed below; node-gyp ignores the image's VS 2026 (see that step).
+      npm_config_msvs_version: '2022'
     steps:
       - uses: actions/checkout@v4
+
+      # The windows-11-arm image ships only Visual Studio 2026 (version 18), which @electron/node-gyp 10.x rejects
+      # ("unsupported version: 18"), so the node-pty rebuild - in `npm ci` and again when electron-builder packages -
+      # fails with "could not find a version of Visual Studio 2017 or newer". The x64 job sidesteps this by pinning
+      # windows-2022; there is no ARM64 image with VS 2022, so install its C++ build tools here, on every run.
+      - name: Install Visual Studio 2022 Build Tools
+        run: |
+          Invoke-WebRequest -Uri https://aka.ms/vs/17/release/vs_buildtools.exe -OutFile "$env:RUNNER_TEMP\vs_buildtools.exe"
+          $proc = Start-Process -FilePath "$env:RUNNER_TEMP\vs_buildtools.exe" -Wait -PassThru -ArgumentList @(
+            '--quiet', '--wait', '--norestart', '--nocache',
+            '--add', 'Microsoft.VisualStudio.Workload.VCTools',
+            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+            # node-pty's binding.gyp sets SpectreMitigation for every Windows target (MSB8040 without these).
+            '--add', 'Microsoft.VisualStudio.Component.VC.Runtimes.ARM64.Spectre',
+            # @electron/node-gyp 10 only accepts an installation that has this component (getToolset), even on ARM64.
+            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+            '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.26100'
+          )
+          # 3010 = success, reboot required (not needed for the build tools to be usable).
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) { throw "vs_buildtools.exe exited with $($proc.ExitCode)" }
 
       - name: setup nodejs
         uses: actions/setup-node@v4

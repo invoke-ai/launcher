@@ -67,6 +67,43 @@ const TORCH_INDEX_SOURCE_PATTERN: Record<TorchPlatform, RegExp> = {
   cpu: /^source\s*=\s*\{[^}]*\bpytorch\.org\/whl\/(?:[\w.+-]+\/)?cpu\b[^}]*\}/m,
 };
 
+/** The marker uv writes for the Windows on ARM64 resolution fork (`platform.machine()` is `ARM64` there). */
+const WINDOWS_ARM64_MARKER = "platform_machine == 'ARM64'";
+
+/**
+ * The `resolution-markers` of a `[[package]]` block (or of the lock header), or `null` if it has none - which means
+ * the block applies to every platform the lock supports.
+ */
+const getResolutionMarkers = (block: string): string[] | null => {
+  const markers = block.match(/^resolution-markers\s*=\s*\[([^\]]*)\]/m)?.[1];
+  if (markers === undefined) {
+    return null;
+  }
+  return [...markers.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
+};
+
+const blockAppliesToTarget = (block: string, windowsArm64: boolean): boolean => {
+  const markers = getResolutionMarkers(block);
+  if (markers === null) {
+    return true;
+  }
+  return markers.some((marker) => marker.includes(WINDOWS_ARM64_MARKER) === windowsArm64);
+};
+
+/**
+ * Whether an Invoke release's `uv.lock` has a resolution for Windows on ARM64. Releases before ARM64 support resolve
+ * only for x64 Windows, and `uv sync --frozen` would fail on them with a generic error - after the launcher has
+ * already replaced the venv's Python. Checked up front instead, so the user gets a clear message.
+ */
+export const lockSupportsWindowsArm64 = (uvLock: string): boolean => {
+  const header = uvLock.split(/\n\[\[package\]\]/)[0] ?? '';
+  const requiredMarkers = header.match(/^required-markers\s*=\s*\[([^\]]*)\]/m)?.[1] ?? '';
+  return (
+    requiredMarkers.includes(WINDOWS_ARM64_MARKER) ||
+    (getResolutionMarkers(header) ?? []).some((marker) => marker.includes(WINDOWS_ARM64_MARKER))
+  );
+};
+
 /**
  * Parse the torch-family packages for a given torch platform out of an Invoke release's `uv.lock`.
  *
@@ -83,8 +120,18 @@ const TORCH_INDEX_SOURCE_PATTERN: Record<TorchPlatform, RegExp> = {
  * blocks with the same name and source when the resolution differs per `resolution-markers` - today's lock does this
  * for `xformers` and the `nvidia-*-cu12` family, and nothing exempts the torch family from it. Emitting
  * `torch==A torch==B` in one command would be an unsatisfiable requirement set.
+ *
+ * Before deduplicating, blocks are filtered by whether their `resolution-markers` apply to the target machine. Invoke
+ * locks a different CUDA torch for Windows on ARM64 (NVIDIA's `nvtorch_oot` build, a newer version) than for x64, and
+ * the x64 block comes first - so without this filter an ARM64 install would pin the x64 version, and vice versa.
+ *
+ * @param target.windowsArm64 Whether the install is for Windows on ARM64.
  */
-export const getTorchPackagesFromLock = (uvLock: string, torchPlatform: TorchPlatform): LockedPackage[] => {
+export const getTorchPackagesFromLock = (
+  uvLock: string,
+  torchPlatform: TorchPlatform,
+  target: { windowsArm64: boolean } = { windowsArm64: false }
+): LockedPackage[] => {
   const sourcePattern = TORCH_INDEX_SOURCE_PATTERN[torchPlatform];
   const packages: LockedPackage[] = [];
   const seenNames = new Set<string>();
@@ -93,6 +140,11 @@ export const getTorchPackagesFromLock = (uvLock: string, torchPlatform: TorchPla
   for (const block of uvLock.split(/\n\[\[package\]\]/).slice(1)) {
     // Only consider packages resolved from the PyTorch download index for the selected platform.
     if (!sourcePattern.test(block)) {
+      continue;
+    }
+
+    // Only consider packages resolved for the target machine.
+    if (!blockAppliesToTarget(block, target.windowsArm64)) {
       continue;
     }
 

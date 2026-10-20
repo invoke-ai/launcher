@@ -25,7 +25,12 @@ import {
   isWindowsArm64,
 } from '@/main/util';
 import type { InvokeReleaseInstallFiles } from '@/shared/pins';
-import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock } from '@/shared/pins';
+import {
+  getInvokeReleaseInstallFiles,
+  getPins,
+  getTorchPackagesFromLock,
+  lockSupportsWindowsArm64,
+} from '@/shared/pins';
 import type {
   GpuType,
   InstallProcessStatus,
@@ -461,6 +466,17 @@ export class InstallManager {
       pins = pinsResult.value;
     }
 
+    // Only releases whose lockfile resolves for Windows on ARM64 can be installed there. Checked before anything in the
+    // install location is touched: an older release would otherwise get as far as replacing the venv's Python before
+    // `uv sync --frozen` failed with a generic error.
+    if (isWindowsArm64() && !(releaseFiles && lockSupportsWindowsArm64(releaseFiles.uvLock))) {
+      const message = `Invoke ${version} does not support Windows on ARM64 - its lockfile has no ARM64 resolution.`;
+      this.log.error(c.red(`${message}\r\n`));
+      this.log.error(c.red('Choose a newer Invoke version with Windows on ARM64 support.\r\n'));
+      this.updateStatus({ type: 'error', error: { message } });
+      return;
+    }
+
     const invokeaiPackageSpecifier = getInvokePackageSpecifier(version, invokeExtras);
     const pythonVersion = pins.python;
     // What uv is asked for: the bare version, except on Windows ARM64 where the native build must be named.
@@ -486,8 +502,8 @@ export class InstallManager {
 
       // An x86_64 venv on Windows ARM64 (from an earlier launcher, or an emulated one) cannot load the ARM64 torch
       // wheel; the version match above does not see the difference, so recreate it.
-      if (isWindowsArm64() && installationDetails.pythonMachine !== 'ARM64') {
-        this.log.info(`- Python architecture: ${installationDetails.pythonMachine ?? 'unknown'} (ARM64 required)\r\n`);
+      if (isWindowsArm64() && installationDetails.pythonPlatform !== 'win-arm64') {
+        this.log.info(`- Python platform: ${installationDetails.pythonPlatform || 'unknown'} (win-arm64 required)\r\n`);
         pythonVersionMismatch = true;
       }
     } else {
@@ -734,7 +750,9 @@ export class InstallManager {
       // the lockfile records. To avoid downloading torch twice (once from the lock during `uv sync`, once from the
       // custom index afterwards), we skip those packages during the sync and install them once from the custom index
       // below. `uv sync --frozen` cannot pull them from a different index in-place, so a separate install is required.
-      const torchPackages = torchIndexOverride ? getTorchPackagesFromLock(releaseFiles.uvLock, torchPlatform) : [];
+      const torchPackages = torchIndexOverride
+        ? getTorchPackagesFromLock(releaseFiles.uvLock, torchPlatform, { windowsArm64: isWindowsArm64() })
+        : [];
 
       // Everything that can invalidate the override is checked here, before `uv sync` downloads several GB - not at
       // the install step further down, where the user would pay for the sync first only to be told it was pointless.
@@ -744,7 +762,9 @@ export class InstallManager {
           // the Invoke repo - so an upstream change (a host migration, a nightly/test channel) can make this empty
           // without anything in this repo changing. Silently continuing would install the default torch while the
           // Review step and the log both told the user it came from their index, and still report success. Fail loudly.
-          const message = `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile, so the override cannot be applied.`;
+          const message = isWindowsArm64()
+            ? `Custom torch index is set, but the Invoke release lockfile has no ${torchPlatform} torch for Windows on ARM64, so the override cannot be applied. Choose an Nvidia GPU type, or remove the custom PyTorch index.`
+            : `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile, so the override cannot be applied.`;
           this.log.error(c.red(`${message}\r\n`));
           this.log.error(
             c.red('Remove the custom PyTorch index to install with the versions Invoke ships, or report this.\r\n')

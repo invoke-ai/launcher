@@ -136,5 +136,12 @@ export const $systemArch = atom<SystemArch | undefined>(undefined);
 
 emitter.invoke('util:get-arch').then($systemArch.set);
 
+/**
+ * Whether this launcher binary is the Windows ARM64 build, which has its own update channel and never follows prereleases.
+ */
+export const $isWindowsArm64Build = atom<boolean>(false);
+
+emitter.invoke('util:get-is-windows-arm64-build').then($isWindowsArm64Build.set);
+
 // Sync the store with the main process when the app starts
 persistedStoreApi.sync();

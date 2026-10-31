@@ -14,9 +14,23 @@ import { withResultAsync } from '@/lib/result';
 import { SimpleLogger } from '@/lib/simple-logger';
 import { FIRST_RUN_MARKER_FILENAME } from '@/main/constants';
 import { buildCustomIndexArg, buildCustomIndexProbeCommand, buildCustomTorchInstallCommand } from '@/main/torch-index';
-import { getInstallationDetails, getTorchPlatform, getUVExecutablePath, isDirectory, isFile } from '@/main/util';
+import {
+  getInstallationDetails,
+  getPythonRequest,
+  getSystemArch,
+  getTorchPlatform,
+  getUVExecutablePath,
+  isDirectory,
+  isFile,
+  isWindowsArm64,
+} from '@/main/util';
 import type { InvokeReleaseInstallFiles } from '@/shared/pins';
-import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock } from '@/shared/pins';
+import {
+  getInvokeReleaseInstallFiles,
+  getPins,
+  getTorchPackagesFromLock,
+  lockSupportsWindowsArm64,
+} from '@/shared/pins';
 import type {
   GpuType,
   InstallProcessStatus,
@@ -47,8 +61,9 @@ const getInvokeExtras = (gpuType: GpuType, torchPlatform: 'cuda' | 'rocm' | 'xpu
     extras.push(torchPlatform);
   }
 
-  // We only install xformers on 20xx and earlier Nvidia GPUs - otherwise, torch's native sdp is faster
-  if (gpuType === 'nvidia<30xx') {
+  // We only install xformers on 20xx and earlier Nvidia GPUs - otherwise, torch's native sdp is faster. xformers has
+  // no Windows ARM64 build, and the Invoke release excludes the extra there.
+  if (gpuType === 'nvidia<30xx' && !isWindowsArm64()) {
     extras.push('xformers');
   }
 
@@ -364,13 +379,19 @@ export class InstallManager {
 
     // We only support Windows, Linux, and macOS on specific architectures
     const systemPlatform = process.platform;
-    const systemArch = process.arch;
+    const systemArch = getSystemArch();
     assert(
       (systemPlatform === 'win32' && systemArch === 'x64') ||
+        (systemPlatform === 'win32' && systemArch === 'arm64') ||
         (systemPlatform === 'linux' && systemArch === 'x64') ||
         (systemPlatform === 'darwin' && systemArch === 'arm64'),
       `Unsupported platform: ${systemPlatform} ${systemArch}`
     );
+    if (isWindowsArm64() && process.arch !== 'arm64') {
+      this.log.warn(
+        'This is the x64 launcher running under emulation on Windows ARM64. It installs the native ARM64 Invoke, but the ARM64 launcher is the supported build for this machine.\r\n'
+      );
+    }
 
     // The torch platform is determined by the GPU type, which in turn determines which torch extra and index to use
     const torchPlatform = getTorchPlatform(gpuType);
@@ -445,8 +466,21 @@ export class InstallManager {
       pins = pinsResult.value;
     }
 
+    // Only releases whose lockfile resolves for Windows on ARM64 can be installed there. Checked before anything in the
+    // install location is touched: an older release would otherwise get as far as replacing the venv's Python before
+    // `uv sync --frozen` failed with a generic error.
+    if (isWindowsArm64() && !(releaseFiles && lockSupportsWindowsArm64(releaseFiles.uvLock))) {
+      const message = `Invoke ${version} does not support Windows on ARM64 - its lockfile has no ARM64 resolution.`;
+      this.log.error(c.red(`${message}\r\n`));
+      this.log.error(c.red('Choose a newer Invoke version with Windows on ARM64 support.\r\n'));
+      this.updateStatus({ type: 'error', error: { message } });
+      return;
+    }
+
     const invokeaiPackageSpecifier = getInvokePackageSpecifier(version, invokeExtras);
     const pythonVersion = pins.python;
+    // What uv is asked for: the bare version, except on Windows ARM64 where the native build must be named.
+    const pythonRequest = getPythonRequest(pythonVersion);
 
     const installationDetails = await getInstallationDetails(location);
 
@@ -465,6 +499,13 @@ export class InstallManager {
       if (!majorVersionMatch || !minorVersionMatch) {
         pythonVersionMismatch = true;
       }
+
+      // An x86_64 venv on Windows ARM64 (from an earlier launcher, or an emulated one) cannot load the ARM64 torch
+      // wheel; the version match above does not see the difference, so recreate it.
+      if (isWindowsArm64() && installationDetails.pythonPlatform !== 'win-arm64') {
+        this.log.info(`- Python platform: ${installationDetails.pythonPlatform || 'unknown'} (win-arm64 required)\r\n`);
+        pythonVersionMismatch = true;
+      }
     } else {
       pythonVersionMismatch = true;
     }
@@ -473,6 +514,10 @@ export class InstallManager {
     this.log.info(`- Invoke version: ${version}\r\n`);
     this.log.info(`- Install location: ${location}\r\n`);
     this.log.info(`- Python version: ${pythonVersion}\r\n`);
+    this.log.info(`- Platform: ${systemPlatform}/${systemArch}\r\n`);
+    if (pythonRequest !== pythonVersion) {
+      this.log.info(`- Python build: ${pythonRequest}\r\n`);
+    }
     this.log.info(`- GPU type: ${gpuType}\r\n`);
     this.log.info(`- Torch platform: ${torchPlatform}\r\n`);
     this.log.info(`- Invoke package: ${invokeaiPackageSpecifier}\r\n`);
@@ -550,7 +595,7 @@ export class InstallManager {
         // Use `uv`'s python interface to install the specific python version
         'python',
         'install',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python
         '--python-preference',
         'only-managed',
@@ -627,7 +672,7 @@ export class InstallManager {
         'invoke',
         // Ensure we install against the correct python version
         '--python',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python. This installs the required python if it is not
         // already installed.
         '--python-preference',
@@ -705,7 +750,9 @@ export class InstallManager {
       // the lockfile records. To avoid downloading torch twice (once from the lock during `uv sync`, once from the
       // custom index afterwards), we skip those packages during the sync and install them once from the custom index
       // below. `uv sync --frozen` cannot pull them from a different index in-place, so a separate install is required.
-      const torchPackages = torchIndexOverride ? getTorchPackagesFromLock(releaseFiles.uvLock, torchPlatform) : [];
+      const torchPackages = torchIndexOverride
+        ? getTorchPackagesFromLock(releaseFiles.uvLock, torchPlatform, { windowsArm64: isWindowsArm64() })
+        : [];
 
       // Everything that can invalidate the override is checked here, before `uv sync` downloads several GB - not at
       // the install step further down, where the user would pay for the sync first only to be told it was pointless.
@@ -715,7 +762,9 @@ export class InstallManager {
           // the Invoke repo - so an upstream change (a host migration, a nightly/test channel) can make this empty
           // without anything in this repo changing. Silently continuing would install the default torch while the
           // Review step and the log both told the user it came from their index, and still report success. Fail loudly.
-          const message = `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile, so the override cannot be applied.`;
+          const message = isWindowsArm64()
+            ? `Custom torch index is set, but the Invoke release lockfile has no ${torchPlatform} torch for Windows on ARM64, so the override cannot be applied. Choose an Nvidia GPU type, or remove the custom PyTorch index.`
+            : `Custom torch index is set, but no ${torchPlatform} torch packages were found in the Invoke release lockfile, so the override cannot be applied.`;
           this.log.error(c.red(`${message}\r\n`));
           this.log.error(
             c.red('Remove the custom PyTorch index to install with the versions Invoke ships, or report this.\r\n')
@@ -755,7 +804,7 @@ export class InstallManager {
         '--frozen',
         // Ensure we sync against the correct python version.
         '--python',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python.
         '--python-preference',
         'only-managed',
@@ -878,7 +927,7 @@ export class InstallManager {
         'install',
         // Ensure we install against the correct python version
         '--python',
-        pythonVersion,
+        pythonRequest,
         // Always use a managed python version - never the system python
         '--python-preference',
         'only-managed',
@@ -928,7 +977,7 @@ export class InstallManager {
         // torch-only mirror that would have installed correctly.
         const indexIsUsable = await this.verifyCustomTorchIndex({
           uvPath,
-          pythonTarget: pythonVersion,
+          pythonTarget: pythonRequest,
           indexUrl: torchIndexOverride,
           requirements: LEGACY_TORCH_PROBE_REQUIREMENTS,
           runProcessOptions,

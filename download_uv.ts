@@ -11,9 +11,10 @@ import packageJson from './package.json';
 
 const destBasePath = path.resolve(__dirname, 'assets/bin/');
 
-type Platforms = 'linux' | 'win' | 'mac';
+// `win` is x64; `win-arm64` is the native build for Windows on ARM64, whose managed-Python default is otherwise x86_64.
+type Platforms = 'linux' | 'win' | 'win-arm64' | 'mac';
 
-const validPlatforms: Platforms[] = ['linux', 'win', 'mac'];
+const validPlatforms: Platforms[] = ['linux', 'win', 'win-arm64', 'mac'];
 
 function isPlatform(value?: string): value is Platforms {
   return validPlatforms.includes(value as Platforms);

@@ -232,3 +232,111 @@ jobs:
             dist/*.yml
             dist/*.yaml
           retention-days: 7
+
+  # Native ARM64 build (Windows on ARM, NVIDIA RTX Spark): the bundled uv must be the aarch64 binary so its
+  # managed-Python default is the native interpreter, and node-pty is rebuilt for the host architecture.
+  build-windows-arm64:
+    runs-on: windows-11-arm
+    env:
+      # Use the VS 2022 Build Tools installed below; node-gyp ignores the image's VS 2026 (see that step).
+      npm_config_msvs_version: '2022'
+    steps:
+      - uses: actions/checkout@v4
+
+      # The windows-11-arm image ships only Visual Studio 2026 (version 18), which @electron/node-gyp 10.x rejects
+      # ("unsupported version: 18"), so the node-pty rebuild - in `npm ci` and again when electron-builder packages -
+      # fails with "could not find a version of Visual Studio 2017 or newer". The x64 job sidesteps this by pinning
+      # windows-2022; there is no ARM64 image with VS 2022, so install its C++ build tools here, on every run.
+      - name: Install Visual Studio 2022 Build Tools
+        run: |
+          Invoke-WebRequest -Uri https://aka.ms/vs/17/release/vs_buildtools.exe -OutFile "$env:RUNNER_TEMP\vs_buildtools.exe"
+          $proc = Start-Process -FilePath "$env:RUNNER_TEMP\vs_buildtools.exe" -Wait -PassThru -ArgumentList @(
+            '--quiet', '--wait', '--norestart', '--nocache',
+            '--add', 'Microsoft.VisualStudio.Workload.VCTools',
+            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+            # node-pty's binding.gyp sets SpectreMitigation for every Windows target (MSB8040 without these).
+            '--add', 'Microsoft.VisualStudio.Component.VC.Runtimes.ARM64.Spectre',
+            # @electron/node-gyp 10 only accepts an installation that has this component (getToolset), even on ARM64.
+            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+            '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.26100'
+          )
+          # 3010 = success, reboot required (not needed for the build tools to be usable).
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) { throw "vs_buildtools.exe exited with $($proc.ExitCode)" }
+
+      - name: setup nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Generate lockfile hash without version
+        id: lockfile-hash
+        shell: bash
+        run: echo "hash=$(node .github/scripts/generate-lockfile-hash.js)" >> $GITHUB_OUTPUT
+
+      - name: Cache node modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.electron
+            ~/.electron-gyp
+          key: ${{ runner.os }}-arm64-node-${{ env.NODE_VERSION }}-modules-${{ steps.lockfile-hash.outputs.hash }}
+
+      - name: Install deps
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Get UV hash
+        id: uv-hash
+        shell: bash
+        run: |
+          echo "hash=$(node -e "console.log(require('./package.json').uv['win-arm64'].sha256)")" >> $GITHUB_OUTPUT
+
+      - name: Cache UV binaries
+        id: cache-uv
+        uses: actions/cache@v4
+        with:
+          path: assets/bin
+          key: ${{ runner.os }}-arm64-uv-${{ steps.uv-hash.outputs.hash }}
+
+      - name: Download uv
+        if: steps.cache-uv.outputs.cache-hit != 'true'
+        run: npm run download win-arm64
+
+      # ENABLE_SIGNING wires up scripts/customSign.js and signExts exactly as the release build
+      # does, while SIGNING_DRY_RUN makes the hook record what it was offered instead of signing.
+      # The artifacts are therefore byte-identical to a plain unsigned build, but we come out with
+      # proof of which binaries electron-builder actually handed to the signer — which is the only
+      # way to catch a binary that ships unsigned because it was never offered at all.
+      - name: Build
+        # The hook appends to the record rather than truncating it, so that concurrent
+        # electron-builder processes cannot wipe each other's entries. Freshness is this step's job.
+        # This job's default shell is PowerShell, where `rm -f` is an ambiguous alias for Remove-Item.
+        run: |
+          Remove-Item -Force -ErrorAction SilentlyContinue "${{ github.workspace }}/dist/offered-for-signing.txt"
+          npm run package -- --arm64
+        env:
+          # Distinct installer name ("... Setup <version>-arm64.exe") and update channel (latest-arm64.yml).
+          LAUNCHER_WIN_ARCH: arm64
+          ENABLE_SIGNING: 'true'
+          SIGNING_DRY_RUN: ${{ github.workspace }}/dist/offered-for-signing.txt
+
+      # Real signing happens on OSSign's runner where we never see the logs, so a gap there is
+      # invisible until a user with Smart App Control hits it. That is how #148 shipped an unsigned
+      # winpty-agent.exe.
+      - name: Verify Windows signing coverage
+        run: node scripts/checkWindowsSigningCoverage.js dist/win-arm64-unpacked "${{ github.workspace }}/dist/offered-for-signing.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'windows-arm64-artifacts-unsigned'
+          path: |
+            dist/*.exe
+            dist/*.EXE
+            dist/*.blockmap
+            dist/*.yml
+            dist/*.yaml
+          retention-days: 7

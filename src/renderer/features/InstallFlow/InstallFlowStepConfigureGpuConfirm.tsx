@@ -2,6 +2,7 @@ import { Button, ButtonGroup, Flex, Heading, Spinner, Text } from '@invoke-ai/ui
 import { useStore } from '@nanostores/react';
 import { memo, useCallback, useEffect } from 'react';
 
+import { useSystemInfo } from '@/renderer/contexts/SystemInfoContext';
 import { InstallFlowStepConfigureGpuPicker } from '@/renderer/features/InstallFlow/InstallFlowStepConfigureGpuPicker';
 import { BACKEND_TO_GPU_TYPE, installFlowApi } from '@/renderer/features/InstallFlow/state';
 import type { GpuBackend } from '@/shared/types';
@@ -28,12 +29,19 @@ export const InstallFlowStepConfigureGpuConfirm = memo(() => {
     }
   }, []);
 
+  const { operatingSystem, systemArch } = useSystemInfo();
+  // Windows on ARM64 (NVIDIA RTX Spark) has no pre-30xx NVIDIA GPU, so there is no generation to ask about.
+  const isWindowsArm64 = operatingSystem === 'Windows' && systemArch === 'arm64';
+
   const onConfirmYes = useCallback(() => {
     const result = installFlowApi.$gpuDetection.get();
     if (!result) {
       return;
     }
-    if (result.backend === 'cuda') {
+    if (result.backend === 'cuda' && isWindowsArm64) {
+      installFlowApi.$choices.setKey('gpuType', 'nvidia>=30xx');
+      installFlowApi.$gpuConfirmPhase.set('done');
+    } else if (result.backend === 'cuda') {
       // We can't auto-detect the Nvidia generation, so force a tier choice before continuing.
       installFlowApi.$choices.setKey('gpuType', null);
       installFlowApi.$gpuConfirmPhase.set('nvidia-tier');
@@ -41,7 +49,7 @@ export const InstallFlowStepConfigureGpuConfirm = memo(() => {
       installFlowApi.$choices.setKey('gpuType', BACKEND_TO_GPU_TYPE[result.backend]);
       installFlowApi.$gpuConfirmPhase.set('done');
     }
-  }, []);
+  }, [isWindowsArm64]);
 
   const onConfirmNo = useCallback(() => {
     installFlowApi.$choices.setKey('gpuType', null);

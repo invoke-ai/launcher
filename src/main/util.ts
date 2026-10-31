@@ -1,5 +1,5 @@
 import type { ChildProcess } from 'child_process';
-import { exec, execFile } from 'child_process';
+import { exec, execFile, execFileSync } from 'child_process';
 import type { BrowserWindow } from 'electron';
 import { app, screen } from 'electron';
 import fs from 'fs/promises';
@@ -7,7 +7,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { withResultAsync } from '@/lib/result';
-import type { DirDetails, GpuType, OperatingSystem, WindowProps } from '@/shared/types';
+import type { DirDetails, GpuType, OperatingSystem, SystemArch, WindowProps } from '@/shared/types';
 
 const execAsync = promisify(exec);
 
@@ -21,6 +21,108 @@ export const getOperatingSystem = (): OperatingSystem => {
   } else {
     return 'Linux';
   }
+};
+
+type WindowsArchProbe = {
+  platform: NodeJS.Platform;
+  arch: NodeJS.Architecture;
+  env: NodeJS.ProcessEnv;
+  /** The machine's native `PROCESSOR_ARCHITECTURE` from the registry, or `undefined` if it could not be read. */
+  readNativeArch: () => string | undefined;
+};
+
+/**
+ * Read the machine's `PROCESSOR_ARCHITECTURE` system variable from the registry.
+ *
+ * Windows rewrites the *process* environment for an emulated x64 process to `PROCESSOR_ARCHITECTURE=AMD64` (and sets
+ * `PROCESSOR_ARCHITEW6432` only for 32-bit x86 processes under WOW64), so the environment cannot tell an x64 launcher
+ * that it is running on ARM64. The system variable it is derived from is stored, unmodified, under `HKLM\SYSTEM`,
+ * which is shared by every architecture's registry view.
+ */
+const readNativeArchFromRegistry = (): string | undefined => {
+  try {
+    const regPath = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'reg.exe');
+    const stdout = execFileSync(
+      regPath,
+      [
+        'query',
+        'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',
+        '/v',
+        'PROCESSOR_ARCHITECTURE',
+      ],
+      { encoding: 'utf8', timeout: 5000, windowsHide: true }
+    );
+    return stdout.match(/PROCESSOR_ARCHITECTURE\s+REG_\w+\s+(\S+)/)?.[1];
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Whether this machine is Windows on ARM64, given the process's view of itself. Exported for tests; use
+ * `isWindowsArm64`.
+ *
+ * `process.arch` names the launcher binary's architecture, not the machine's: an x64 launcher running under Windows'
+ * emulation reports `x64`, and so does its environment. Only when the binary is not native ARM64 is the registry
+ * consulted for the machine's architecture.
+ */
+export const detectWindowsArm64 = ({ platform, arch, env, readNativeArch }: WindowsArchProbe): boolean => {
+  if (platform !== 'win32') {
+    return false;
+  }
+  if (arch === 'arm64') {
+    return true;
+  }
+  const envMachine = env.PROCESSOR_ARCHITEW6432 ?? env.PROCESSOR_ARCHITECTURE ?? '';
+  if (envMachine.toUpperCase() === 'ARM64') {
+    return true;
+  }
+  return readNativeArch()?.toUpperCase() === 'ARM64';
+};
+
+let cachedIsWindowsArm64: boolean | undefined;
+
+/**
+ * Whether this machine is Windows on ARM64, including when this launcher is the x64 build running under emulation.
+ * Getting this right matters because an x86_64 Python cannot load the ARM64 torch wheel, so an emulated launcher must
+ * still request the native interpreter. The machine cannot change architecture while the launcher runs, so the
+ * answer (which may cost a `reg.exe` call) is computed once.
+ */
+export const isWindowsArm64 = (): boolean => {
+  if (cachedIsWindowsArm64 === undefined) {
+    cachedIsWindowsArm64 = detectWindowsArm64({
+      platform: process.platform,
+      arch: process.arch,
+      env: process.env,
+      readNativeArch: readNativeArchFromRegistry,
+    });
+  }
+  return cachedIsWindowsArm64;
+};
+
+export const getSystemArch = (): SystemArch => {
+  if (isWindowsArm64()) {
+    return 'arm64';
+  }
+  switch (process.arch) {
+    case 'x64':
+      return 'x64';
+    case 'arm64':
+      return 'arm64';
+    default:
+      return 'other';
+  }
+};
+
+/**
+ * The interpreter to ask uv for, given the `major.minor` version pinned by the Invoke release.
+ *
+ * A bare version ("3.12") makes uv install an x86_64 CPython on Windows ARM64, which cannot load the ARM64 torch
+ * wheel; the fully qualified request names the native build. Everywhere else the bare version is what the launcher
+ * has always passed.
+ */
+export const getPythonRequest = (pythonVersion: string): string => {
+  return isWindowsArm64() ? `cpython-${pythonVersion}-windows-aarch64-none` : pythonVersion;
 };
 
 /**
@@ -80,6 +182,8 @@ export const getActivateVenvCommand = (installLocation: string): string => {
  * - macOS: always `cpu`. PyTorch has no separate index for MPS; the CPU wheels carry it.
  * - Windows + AMD: `cpu`. There is no ROCm build of torch for Windows, which is exactly what the GPU confirmation step
  *   tells the user before they get here.
+ * - Windows ARM64 + Intel: `cpu`. PyTorch's +xpu wheels are x64 only. (On Windows ARM64 the Invoke lockfile installs
+ *   NVIDIA's torch build for every extra, `cpu` included, so the extra only has to exist.)
  *
  * @param gpuType The GPU type
  * @returns The torch platform corresponding to the GPU type
@@ -94,7 +198,7 @@ export const getTorchPlatform = (gpuType: GpuType): 'cuda' | 'rocm' | 'xpu' | 'c
         return process.platform === 'win32' ? 'cpu' : 'rocm';
       case 'intel':
         // Intel's XPU backend. PyTorch publishes +xpu wheels for linux-x86_64 and windows-amd64 only.
-        return 'xpu';
+        return isWindowsArm64() ? 'cpu' : 'xpu';
       case 'nvidia<30xx':
       case 'nvidia>=30xx':
         return 'cuda';
@@ -164,15 +268,20 @@ const getPythonPathForVenv = (venvPath: string): string => {
 };
 
 /**
- * Get the version of python at the provided path.
+ * Get the version and build platform of python at the provided path, in a single process.
+ *
+ * The platform is `sysconfig.get_platform()` (e.g. `win-amd64`, `win-arm64`, `linux-x86_64`), which is fixed when the
+ * interpreter is built. `platform.machine()` would not do: on Windows, CPython 3.12+ answers it from WMI, which reports
+ * the physical CPU, so an emulated x86_64 interpreter on ARM64 claims to be `ARM64`.
  *
  * @param pythonPath
- * @returns The python version as a string.
+ * @returns The python version (e.g. `3.12.9`) and build platform.
  */
-const getPythonVersion = async (pythonPath: string): Promise<string> => {
-  const cmd = `"${pythonPath}" -c "import sys; print(sys.version.split()[0]);"`;
+const getPythonVersionAndPlatform = async (pythonPath: string): Promise<{ version: string; platform: string }> => {
+  const cmd = `"${pythonPath}" -c "import sys, sysconfig; print(sys.version.split()[0]); print(sysconfig.get_platform());"`;
   const { stdout } = await execAsync(cmd);
-  return stdout.replace(/[\r\n]+/g, '');
+  const [version = '', platform = ''] = stdout.split(/\r?\n/).map((line) => line.trim());
+  return { version, platform };
 };
 
 /**
@@ -245,6 +354,7 @@ export const getInstallationDetails = async (installLocation: string): Promise<D
   }
 
   const isFirstRun = !(await isFile(path.join(installLocation, 'invokeai.yaml')));
+  const python = await getPythonVersionAndPlatform(pythonPath);
 
   return {
     path: installLocation,
@@ -253,7 +363,8 @@ export const getInstallationDetails = async (installLocation: string): Promise<D
     isFirstRun,
     canInstall: true,
     version: version.startsWith('v') ? version : `v${version}`, // Make it consistent w/ our tagging format
-    pythonVersion: await getPythonVersion(pythonPath),
+    pythonVersion: python.version,
+    pythonPlatform: python.platform,
     pythonPath,
     invokeExecPath: getInvokeExecPath(installLocation),
     activateVenvPath: getActivateVenvPath(installLocation),

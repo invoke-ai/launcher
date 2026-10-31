@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock } from './pins';
+import { getInvokeReleaseInstallFiles, getPins, getTorchPackagesFromLock, lockSupportsWindowsArm64 } from './pins';
 
 const pins = {
   python: '3.12',
@@ -222,6 +222,119 @@ resolution-markers = [
       { name: 'torchvision', version: '0.28.0' },
       { name: 'triton-xpu', version: '3.7.2' },
     ]);
+  });
+
+  describe('Windows on ARM64', () => {
+    // The shape of Invoke's lock once it resolves for Windows on ARM64 (invoke-ai/InvokeAI#9860): the x64 CUDA torch
+    // comes *before* NVIDIA's ARM64 build of a newer version, and the two are told apart only by their
+    // resolution-markers.
+    const arm64Lock = `version = 1
+revision = 3
+requires-python = "==3.12.*"
+resolution-markers = [
+    "(platform_machine != 'ARM64' and platform_machine != 's390x' and sys_platform == 'win32') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
+    "platform_machine == 's390x' and sys_platform == 'win32'",
+    "platform_machine == 'ARM64' and sys_platform == 'win32'",
+    "platform_machine != 's390x' and sys_platform == 'darwin'",
+]
+
+[[package]]
+name = "torch"
+version = "2.13.0+cpu"
+source = { registry = "https://download.pytorch.org/whl/cpu" }
+resolution-markers = [
+    "(platform_machine != 'ARM64' and platform_machine != 's390x' and sys_platform == 'win32') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
+]
+
+[[package]]
+name = "torch"
+version = "2.13.0+cu130"
+source = { registry = "https://download.pytorch.org/whl/cu130" }
+resolution-markers = [
+    "(platform_machine != 'ARM64' and platform_machine != 's390x' and sys_platform == 'win32') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
+    "platform_machine == 's390x' and sys_platform == 'win32'",
+]
+dependencies = [
+    { name = "filelock", marker = "(platform_machine == 'ARM64' and sys_platform == 'win32')" },
+]
+
+[[package]]
+name = "torch"
+version = "2.14.0+cu134"
+source = { registry = "https://pypi.nvidia.com/nvtorch_oot/" }
+resolution-markers = [
+    "platform_machine == 'ARM64' and sys_platform == 'win32'",
+]
+dependencies = [
+    { name = "filelock", marker = "(platform_machine == 'ARM64' and sys_platform == 'win32') or (platform_machine != 'ARM64' and extra == 'extra-8-invokeai-cpu')" },
+]
+
+[[package]]
+name = "torchvision"
+version = "0.28.0+cu130"
+source = { registry = "https://download.pytorch.org/whl/cu130" }
+resolution-markers = [
+    "(platform_machine != 'ARM64' and platform_machine != 's390x' and sys_platform == 'win32') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
+    "platform_machine == 's390x' and sys_platform == 'win32'",
+]
+
+[[package]]
+name = "torchvision"
+version = "0.29.0+cu134"
+source = { registry = "https://pypi.nvidia.com/nvtorch_oot/" }
+resolution-markers = [
+    "platform_machine == 'ARM64' and sys_platform == 'win32'",
+]
+`;
+
+    it("pins NVIDIA's ARM64 torch on Windows ARM64, though the x64 block comes first", () => {
+      expect(getTorchPackagesFromLock(arm64Lock, 'cuda', { windowsArm64: true })).toEqual([
+        { name: 'torch', version: '2.14.0' },
+        { name: 'torchvision', version: '0.29.0' },
+      ]);
+    });
+
+    it("never pins NVIDIA's ARM64 torch on x64", () => {
+      expect(getTorchPackagesFromLock(arm64Lock, 'cuda')).toEqual([
+        { name: 'torch', version: '2.13.0' },
+        { name: 'torchvision', version: '0.28.0' },
+      ]);
+      expect(getTorchPackagesFromLock(arm64Lock, 'cuda', { windowsArm64: false })).toEqual(
+        getTorchPackagesFromLock(arm64Lock, 'cuda')
+      );
+    });
+
+    it('finds no cpu torch for Windows ARM64 - the lock installs the NVIDIA build there for every extra', () => {
+      expect(getTorchPackagesFromLock(arm64Lock, 'cpu', { windowsArm64: true })).toEqual([]);
+      expect(getTorchPackagesFromLock(arm64Lock, 'cpu')).toEqual([{ name: 'torch', version: '2.13.0' }]);
+    });
+
+    it('detects whether a lock resolves for Windows ARM64', () => {
+      expect(lockSupportsWindowsArm64(arm64Lock)).toBe(true);
+      // A lock that supports ARM64 without a resolution fork of its own still declares it as required.
+      expect(
+        lockSupportsWindowsArm64(`version = 1
+required-markers = [
+    "platform_machine == 'ARM64' and sys_platform == 'win32'",
+]
+`)
+      ).toBe(true);
+      // Releases before ARM64 support: x64-only resolution markers, or none at all. Package-level markers that
+      // mention ARM64 do not count.
+      expect(lockSupportsWindowsArm64(uvLock)).toBe(false);
+      expect(
+        lockSupportsWindowsArm64(`version = 1
+
+[[package]]
+name = "torch"
+version = "2.7.1+cu128"
+source = { registry = "https://download.pytorch.org/whl/cu128" }
+resolution-markers = [
+    "platform_machine == 'ARM64' and sys_platform == 'win32'",
+]
+`)
+      ).toBe(false);
+    });
   });
 
   it('does not confuse the xpu and cpu indexes', () => {

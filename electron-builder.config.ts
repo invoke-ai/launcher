@@ -1,4 +1,5 @@
 import type { Configuration, WindowsConfiguration } from 'electron-builder';
+import { Arch } from 'electron-builder';
 
 const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
   if (process.env.ENABLE_SIGNING) {
@@ -21,6 +22,19 @@ const getWindowsSigningOptions = (): Partial<WindowsConfiguration> => {
   return {};
 };
 
+/**
+ * The Windows ARM64 launcher is a separate build with its own update channel.
+ *
+ * electron-builder names a single-arch NSIS installer without the architecture and, on Windows, writes the
+ * electron-updater manifest as `latest.yml` whatever the architecture. Published next to the x64 build, the arm64
+ * installer would collide with it and an ARM64 launcher reading the shared manifest would be handed the x64
+ * installer. Giving the arm64 build the `latest-arm64` channel makes electron-builder write `latest-arm64.yml`
+ * and bake that channel into the packaged app-update.yml, so the ARM64 launcher only ever reads its own manifest.
+ * The arm64 CI job (and the OSSign signing workflow) set LAUNCHER_WIN_ARCH=arm64; nothing else changes.
+ */
+const WINDOWS_ARM64_UPDATE_CHANNEL = 'latest-arm64';
+const isWindowsArm64Build = process.env.LAUNCHER_WIN_ARCH === 'arm64';
+
 export default {
   appId: 'com.invoke.invoke-community-edition',
   productName: 'Invoke Community Edition',
@@ -37,6 +51,10 @@ export default {
   ],
   win: {
     target: ['nsis'],
+    // The arm64 installer carries its architecture in its name; the x64 build keeps its historical name (the
+    // README's "latest" link and the signing pipeline depend on it).
+    // eslint-disable-next-line no-template-curly-in-string -- electron-builder file-name macros, not a template
+    ...(isWindowsArm64Build ? { artifactName: '${productName} Setup ${version}-arm64.${ext}' } : {}),
     ...getWindowsSigningOptions(),
   },
   linux: {
@@ -46,6 +64,8 @@ export default {
     provider: 'github',
     owner: 'invoke-ai',
     repo: 'launcher',
+    // Its own update channel, so the arm64 launcher polls latest-arm64.yml (see the note on the constant).
+    ...(isWindowsArm64Build ? { channel: WINDOWS_ARM64_UPDATE_CHANNEL } : {}),
   },
   electronFuses: {
     runAsNode: false,
@@ -57,6 +77,15 @@ export default {
     resetAdHocDarwinSignature: true,
   },
   electronUpdaterCompatibility: '>= 2.16',
+  // The x64 and arm64 uv both download to assets/bin/uv.exe; refuse to package the wrong one.
+  beforePack: (context) => {
+    if (context.electronPlatformName !== 'win32') {
+      return;
+    }
+    const path = require('path');
+    const { assertUvMatchesArch } = require(path.join(process.cwd(), 'scripts', 'checkBundledUvArch.js'));
+    assertUvMatchesArch(path.join(process.cwd(), 'assets', 'bin', 'uv.exe'), Arch[context.arch]);
+  },
   afterAllArtifactBuild: (buildResult) => {
     const fs = require('fs');
     const path = require('path');

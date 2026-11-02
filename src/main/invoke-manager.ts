@@ -4,7 +4,7 @@ import { BrowserWindow, ipcMain, shell } from 'electron';
 import type Store from 'electron-store';
 import fs from 'fs/promises';
 import ip from 'ip';
-import { join } from 'path';
+import path, { join } from 'path';
 import { shellEnvSync } from 'shell-env';
 
 import { CommandRunner } from '@/lib/command-runner';
@@ -23,6 +23,7 @@ import type {
 } from '@/shared/types';
 
 import type { InstallManager } from './install-manager';
+import { InvokeWindowWinTabBridge } from './invoke-window-wintab-bridge';
 
 export class InvokeManager {
   private status: WithTimestamp<InvokeProcessStatus>;
@@ -37,6 +38,7 @@ export class InvokeManager {
   private commandRunner: CommandRunner;
   private cols: number | undefined;
   private rows: number | undefined;
+  private windowWinTabBridge: InvokeWindowWinTabBridge | null;
   private windowsClosingWithoutExiting: WeakSet<BrowserWindow>;
   private isRestartingWindow: boolean;
 
@@ -62,6 +64,7 @@ export class InvokeManager {
     this.commandRunner = new CommandRunner();
     this.cols = undefined;
     this.rows = undefined;
+    this.windowWinTabBridge = null;
     this.windowsClosingWithoutExiting = new WeakSet();
     this.isRestartingWindow = false;
   }
@@ -244,11 +247,15 @@ export class InvokeManager {
       minHeight: 600,
       webPreferences: {
         devTools: true,
+        preload: path.join(__dirname, '../preload/index.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
         backgroundThrottling: false, // Prevent memory spikes from throttling when window loses focus
         additionalArguments: [
           '--enable-gpu-rasterization', // Offload canvas to GPU
           '--enable-zero-copy', // Reduce memory copies
           '--enable-accelerated-2d-canvas', // GPU acceleration for 2D canvas
+          '--invoke-hosted-window',
         ],
       },
       autoHideMenuBar: true,
@@ -258,6 +265,8 @@ export class InvokeManager {
     });
 
     this.window = window;
+    const windowWinTabBridge = new InvokeWindowWinTabBridge(window, this.log);
+    this.windowWinTabBridge = windowWinTabBridge;
 
     const winProps = this.store.get('appWindowProps');
     manageWindowSize(
@@ -275,6 +284,10 @@ export class InvokeManager {
     });
 
     window.on('close', () => {
+      windowWinTabBridge.detach();
+      if (this.windowWinTabBridge === windowWinTabBridge) {
+        this.windowWinTabBridge = null;
+      }
       this.exitInvoke();
     });
 
@@ -310,6 +323,10 @@ export class InvokeManager {
       }
 
       // Close the crashed window (it may still be visible but unresponsive)
+      windowWinTabBridge.detach();
+      if (this.windowWinTabBridge === windowWinTabBridge) {
+        this.windowWinTabBridge = null;
+      }
       if (!window.isDestroyed()) {
         window.destroy();
       }
@@ -333,6 +350,12 @@ export class InvokeManager {
       }
     });
 
+    window.webContents.on('before-mouse-event', (event, mouse) => {
+      if (windowWinTabBridge.shouldSuppressPrimaryMouse(mouse)) {
+        event.preventDefault();
+      }
+    });
+
     window.webContents.setWindowOpenHandler((handlerDetails) => {
       // If the URL is the same as the main URL, allow it to open in an electron window. This is for things like
       // opening images in a new tab
@@ -353,6 +376,9 @@ export class InvokeManager {
     });
 
     const localUrl = url.replace('0.0.0.0', '127.0.0.1');
+    window.webContents.on('did-finish-load', () => {
+      windowWinTabBridge.attach();
+    });
     window.webContents.loadURL(localUrl);
   };
 
@@ -439,6 +465,8 @@ export class InvokeManager {
       return;
     }
     if (!this.window.isDestroyed()) {
+      this.windowWinTabBridge?.detach();
+      this.windowWinTabBridge = null;
       this.window.destroy();
     }
     this.window = null;
@@ -459,6 +487,8 @@ export class InvokeManager {
 
     const window = this.window;
     if (window.isDestroyed()) {
+      this.windowWinTabBridge?.detach();
+      this.windowWinTabBridge = null;
       if (this.window === window) {
         this.window = null;
       }
@@ -467,6 +497,8 @@ export class InvokeManager {
 
     this.saveAppWindowProps(window);
     this.windowsClosingWithoutExiting.add(window);
+    this.windowWinTabBridge?.detach();
+    this.windowWinTabBridge = null;
 
     const closed = await new Promise<boolean>((resolve) => {
       const timeout = setTimeout(() => {

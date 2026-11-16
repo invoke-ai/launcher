@@ -1,6 +1,6 @@
 import type { IpcListener } from '@electron-toolkit/typed-ipc/main';
 import c from 'ansi-colors';
-import { BrowserWindow, ipcMain, shell } from 'electron';
+import { BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import type Store from 'electron-store';
 import fs from 'fs/promises';
 import ip from 'ip';
@@ -351,6 +351,20 @@ export class InvokeManager {
       shell.openExternal(handlerDetails.url);
       return { action: 'deny' };
     });
+
+    if (process.platform === 'win32' || process.platform === 'linux') {
+      window.webContents.on('did-create-window', (viewerWindow) => {
+        // Electron's default File menu quits the app on these platforms.
+        viewerWindow.setMenu(
+          Menu.buildFromTemplate([
+            { role: 'fileMenu', submenu: [{ role: 'close' }] },
+            { role: 'editMenu' },
+            { role: 'viewMenu' },
+            { role: 'windowMenu' },
+          ])
+        );
+      });
+    }
 
     const localUrl = url.replace('0.0.0.0', '127.0.0.1');
     window.webContents.loadURL(localUrl);

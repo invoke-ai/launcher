@@ -74,14 +74,17 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
       return;
     }
 
-    await dialog.showMessageBox(mainWindow, {
+    const { response: restartResponse } = await dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update Downloaded',
       message: 'Update downloaded and ready to install.',
-      buttons: ['Restart and Install'],
+      buttons: ['Restart and Install', 'Later'],
+      cancelId: 1,
     });
 
-    autoUpdater.quitAndInstall();
+    if (restartResponse === 0) {
+      autoUpdater.quitAndInstall();
+    }
   } catch {
     // no-op
   }

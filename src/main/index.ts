@@ -2,7 +2,7 @@ import { app, dialog, shell } from 'electron';
 import { join } from 'path';
 import { assert } from 'tsafe';
 
-import { waitForPendingPtyExits } from '@/lib/pty-utils';
+import { finishPendingPtyStops } from '@/lib/pty-utils';
 import { createConsoleManager } from '@/main/console-manager';
 import { detectGpu } from '@/main/gpu-detection';
 import { createInstallManager } from '@/main/install-manager';
@@ -92,6 +92,8 @@ async function cleanup() {
     // Close the launcher and tray as shutdown starts so they cannot start new work.
     Promise.resolve().then(main.cleanup),
   ]);
+  // A manual stop or window close may already have detached a PTY from its manager.
+  await finishPendingPtyStops();
   const errors = results
     .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
     .map((result) => result.reason);
@@ -101,8 +103,6 @@ async function cleanup() {
   } else {
     console.debug('Successfully cleaned up all processes');
   }
-  // A manual stop or window close may already have detached a PTY from its manager.
-  await waitForPendingPtyExits();
 }
 
 /**

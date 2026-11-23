@@ -1,7 +1,7 @@
 import type { IPty } from 'node-pty';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { killPtyProcessAsync, waitForPendingPtyExits } from './pty-utils';
+import { finishPendingPtyStops, killPtyProcessAsync } from './pty-utils';
 
 // Tests drive the exit notification directly. Never signal a real PID.
 vi.mock('child_process', () => ({ default: { exec: vi.fn() } }));
@@ -16,7 +16,7 @@ function startStopping() {
     },
   } as unknown as IPty;
   const stopped = killPtyProcessAsync(pty, 100);
-  return { stopped, notifyExit };
+  return { stopped, notifyExit, kill: pty.kill };
 }
 
 afterEach(() => vi.useRealTimers());
@@ -26,7 +26,7 @@ describe('PTYs already stopping at quit time', () => {
     const first = startStopping();
     const second = startStopping();
     const done = vi.fn();
-    const shutdown = waitForPendingPtyExits().then(done);
+    const shutdown = finishPendingPtyStops().then(done);
     first.notifyExit();
     await first.stopped;
     expect(done).not.toHaveBeenCalled();
@@ -37,13 +37,30 @@ describe('PTYs already stopping at quit time', () => {
 
   it('honors the existing stop timeout if a PTY never reports its exit', async () => {
     vi.useFakeTimers();
-    startStopping();
+    const stuck = startStopping();
     const done = vi.fn();
-    const shutdown = waitForPendingPtyExits().then(done);
+    const shutdown = finishPendingPtyStops().then(done);
     await vi.advanceTimersByTimeAsync(99);
     expect(done).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     await shutdown;
     expect(done).toHaveBeenCalledOnce();
+    if (process.platform !== 'win32') {
+      expect(stuck.kill).toHaveBeenLastCalledWith('SIGKILL');
+    }
+    stuck.notifyExit();
+  });
+
+  it('leaves an ordinary stop at its normal timeout until the app actually quits', async () => {
+    vi.useFakeTimers();
+    const stuck = startStopping();
+    await vi.advanceTimersByTimeAsync(100);
+    await stuck.stopped;
+    expect(stuck.kill).not.toHaveBeenCalledWith('SIGKILL');
+    await finishPendingPtyStops();
+    if (process.platform !== 'win32') {
+      expect(stuck.kill).toHaveBeenCalledWith('SIGKILL');
+    }
+    stuck.notifyExit();
   });
 });

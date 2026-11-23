@@ -86,10 +86,20 @@ export function createPtyBuffer() {
 
 // Managers release their entry as soon as a stop starts. Keep its bounded exit wait
 // visible to app shutdown even if the user initiated that stop before quitting.
-const pendingPtyExits = new Set<Promise<void>>();
+const pendingPtyExits = new Map<pty.IPty, Promise<void>>();
 
-export async function waitForPendingPtyExits(): Promise<void> {
-  await Promise.allSettled(pendingPtyExits);
+export async function finishPendingPtyStops(): Promise<void> {
+  await Promise.allSettled(
+    Array.from(pendingPtyExits, async ([processToStop, gracePeriod]) => {
+      await gracePeriod;
+      // A user-initiated stop may already have exhausted its grace period. On
+      // POSIX, a child ignoring TERM and HUP can hold node-pty's native exit
+      // thread open even after Electron emits quit. Escalate only on app quit.
+      if (pendingPtyExits.has(processToStop) && process.platform !== 'win32') {
+        processToStop.kill('SIGKILL');
+      }
+    })
+  );
 }
 
 /**
@@ -115,7 +125,10 @@ export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000
       resolve();
     };
 
-    ptyProcess.onExit(() => cleanup());
+    ptyProcess.onExit(() => {
+      pendingPtyExits.delete(ptyProcess);
+      cleanup();
+    });
 
     timeoutId = setTimeout(() => {
       console.warn(`PTY process did not exit within ${timeout}ms, continuing anyway`);
@@ -133,6 +146,6 @@ export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000
       cleanup();
     }
   });
-  pendingPtyExits.add(exit);
-  return exit.finally(() => pendingPtyExits.delete(exit));
+  pendingPtyExits.set(ptyProcess, exit);
+  return exit;
 }

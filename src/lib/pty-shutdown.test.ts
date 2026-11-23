@@ -4,12 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { finishPendingPtyStops, killPtyProcessAsync } from './pty-utils';
 
 // Tests drive the exit notification directly. Never signal a real PID.
-vi.mock('child_process', () => ({ default: { exec: vi.fn() } }));
+const { readParent } = vi.hoisted(() => ({
+  readParent: vi.fn(() => ({ status: 0, stdout: String(process.pid) })),
+}));
+vi.mock('child_process', () => ({ default: { exec: vi.fn(), spawnSync: readParent } }));
 vi.mock('node-pty', () => ({}));
 
 function startStopping() {
   let notifyExit!: () => void;
   const pty = {
+    pid: 123,
     kill: vi.fn(),
     onExit: (callback: () => void) => {
       notifyExit = callback;
@@ -49,6 +53,16 @@ describe('PTYs already stopping at quit time', () => {
       expect(stuck.kill).toHaveBeenLastCalledWith('SIGKILL');
     }
     stuck.notifyExit();
+  });
+
+  it.skipIf(process.platform === 'win32')('skips a stale PID that no longer belongs to the launcher', async () => {
+    vi.useFakeTimers();
+    const stale = startStopping();
+    await vi.advanceTimersByTimeAsync(100);
+    readParent.mockReturnValueOnce({ status: 0, stdout: '1' });
+    await finishPendingPtyStops();
+    expect(stale.kill).not.toHaveBeenCalledWith('SIGKILL');
+    stale.notifyExit();
   });
 
   it('leaves an ordinary stop at its normal timeout until the app actually quits', async () => {

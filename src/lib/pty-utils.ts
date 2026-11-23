@@ -95,7 +95,16 @@ export async function finishPendingPtyStops(): Promise<void> {
       // A user-initiated stop may already have exhausted its grace period. On
       // POSIX, a child ignoring TERM and HUP can hold node-pty's native exit
       // thread open even after Electron emits quit. Escalate only on app quit.
-      if (pendingPtyExits.has(processToStop) && process.platform !== 'win32') {
+      if (process.platform === 'win32' || !pendingPtyExits.has(processToStop)) {
+        return;
+      }
+      // node-pty signals a numeric PID. A delayed exit notification must not
+      // cause us to signal a PID that has since been assigned to another app.
+      const parent = childProcess.spawnSync('/bin/ps', ['-p', String(processToStop.pid), '-o', 'ppid='], {
+        encoding: 'utf8',
+        timeout: 1000,
+      });
+      if (parent.status === 0 && parent.stdout.trim() === String(process.pid)) {
         processToStop.kill('SIGKILL');
       }
     })

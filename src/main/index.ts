@@ -2,11 +2,13 @@ import { app, dialog, shell } from 'electron';
 import { join } from 'path';
 import { assert } from 'tsafe';
 
+import { finishPendingPtyStops } from '@/lib/pty-utils';
 import { createConsoleManager } from '@/main/console-manager';
 import { detectGpu } from '@/main/gpu-detection';
 import { createInstallManager } from '@/main/install-manager';
 import { createInvokeManager } from '@/main/invoke-manager';
 import { MainProcessManager } from '@/main/main-process-manager';
+import { createBeforeQuitHandler } from '@/main/shutdown';
 import { store } from '@/main/store';
 import { isWindowsArm64Build } from '@/main/updater';
 import {
@@ -35,7 +37,6 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backing-store-limit');
 
 const main = new MainProcessManager({ store });
-let isShuttingDown = false;
 
 // Only allow a single instance. Without this, once the launcher is hidden to the tray (and especially if the tray icon
 // failed to render), relaunching from the desktop would start a second instance contending for the same electron-store
@@ -84,12 +85,15 @@ main.ipc.handle('invoke-process:get-status', () => invoke.getStatus());
  * Cleans up any running processes (installation or invoke).
  */
 async function cleanup() {
-  if (isShuttingDown) {
-    return;
-  }
-  isShuttingDown = true;
-
-  const results = await Promise.allSettled([cleanupInstall(), cleanupInvoke(), cleanupConsole()]);
+  const results = await Promise.allSettled([
+    cleanupInstall(),
+    cleanupInvoke(),
+    cleanupConsole(),
+    // Close the launcher and tray as shutdown starts so they cannot start new work.
+    Promise.resolve().then(main.cleanup),
+  ]);
+  // A manual stop or window close may already have detached a PTY from its manager.
+  await finishPendingPtyStops();
   const errors = results
     .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
     .map((result) => result.reason);
@@ -99,7 +103,6 @@ async function cleanup() {
   } else {
     console.debug('Successfully cleaned up all processes');
   }
-  main.cleanup();
 }
 
 /**
@@ -117,19 +120,12 @@ app.on('ready', () => {
 /**
  * Quit when all windows are closed.
  */
-app.on('window-all-closed', () => {
-  if (!isShuttingDown) {
-    app.quit();
-  }
-});
+app.on('window-all-closed', () => app.quit());
 
-/**
- * When the launcher quits, cleanup any running processes.
- * TODO(psyche): cleanupProcesses uses SIGTERM to kill the processes. This allows processes to handle the signal and
- * perform cleanup, but we aren't waiting for the processes to exit before we quit the host application. Could this
- * result in orphaned or improperly cleaned up processes?
- */
-app.on('before-quit', cleanup);
+app.on(
+  'before-quit',
+  createBeforeQuitHandler(cleanup, () => app.quit())
+);
 
 //#endregion
 

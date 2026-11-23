@@ -84,6 +84,33 @@ export function createPtyBuffer() {
   return new AnsiSequenceBuffer();
 }
 
+// Managers release their entry as soon as a stop starts. Keep its bounded exit wait
+// visible to app shutdown even if the user initiated that stop before quitting.
+const pendingPtyExits = new Map<pty.IPty, Promise<void>>();
+
+export async function finishPendingPtyStops(): Promise<void> {
+  await Promise.allSettled(
+    Array.from(pendingPtyExits, async ([processToStop, gracePeriod]) => {
+      await gracePeriod;
+      // A user-initiated stop may already have exhausted its grace period. On
+      // POSIX, a child ignoring TERM and HUP can hold node-pty's native exit
+      // thread open even after Electron emits quit. Escalate only on app quit.
+      if (process.platform === 'win32' || !pendingPtyExits.has(processToStop)) {
+        return;
+      }
+      // node-pty signals a numeric PID. A delayed exit notification must not
+      // cause us to signal a PID that has since been assigned to another app.
+      const parent = childProcess.spawnSync('/bin/ps', ['-p', String(processToStop.pid), '-o', 'ppid='], {
+        encoding: 'utf8',
+        timeout: 1000,
+      });
+      if (parent.status === 0 && parent.stdout.trim() === String(process.pid)) {
+        processToStop.kill('SIGKILL');
+      }
+    })
+  );
+}
+
 /**
  * Kill a PTY process and wait for it to exit with timeout support
  * @param ptyProcess The PTY process to kill
@@ -91,7 +118,7 @@ export function createPtyBuffer() {
  * @returns Promise that resolves when process exits or timeout occurs
  */
 export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000): Promise<void> {
-  return new Promise<void>((resolve) => {
+  const exit = new Promise<void>((resolve) => {
     let timeoutId: NodeJS.Timeout | null = null;
     let resolved = false;
 
@@ -107,7 +134,10 @@ export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000
       resolve();
     };
 
-    ptyProcess.onExit(() => cleanup());
+    ptyProcess.onExit(() => {
+      pendingPtyExits.delete(ptyProcess);
+      cleanup();
+    });
 
     timeoutId = setTimeout(() => {
       console.warn(`PTY process did not exit within ${timeout}ms, continuing anyway`);
@@ -125,4 +155,6 @@ export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000
       cleanup();
     }
   });
+  pendingPtyExits.set(ptyProcess, exit);
+  return exit;
 }

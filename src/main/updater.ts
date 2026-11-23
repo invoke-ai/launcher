@@ -1,3 +1,5 @@
+import { open } from 'node:fs/promises';
+
 import type { BrowserWindow } from 'electron';
 import { dialog } from 'electron';
 import electronUpdater from 'electron-updater';
@@ -28,6 +30,21 @@ export const isWindowsArm64Build = (platform = process.platform, arch = process.
  */
 export const shouldAllowPrerelease = (optIn: boolean, platform = process.platform, arch = process.arch): boolean =>
   optIn && !isWindowsArm64Build(platform, arch);
+
+async function checkStagedInstaller(installerPath: string | undefined) {
+  if (!installerPath) {
+    throw new Error('The updater returned no installer');
+  }
+  const installer = await open(installerPath, 'r');
+  try {
+    const stat = await installer.stat();
+    if (!stat.isFile() || stat.size === 0) {
+      throw new Error('The staged installer is not a non-empty file');
+    }
+  } finally {
+    await installer.close();
+  }
+}
 
 export const checkForUpdates = async (mainWindow: BrowserWindow) => {
   try {
@@ -63,8 +80,9 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
       return;
     }
 
+    let downloadedFiles: string[];
     try {
-      await autoUpdater.downloadUpdate();
+      downloadedFiles = await autoUpdater.downloadUpdate();
     } catch {
       await dialog.showMessageBox(mainWindow, {
         type: 'error',
@@ -81,6 +99,29 @@ export const checkForUpdates = async (mainWindow: BrowserWindow) => {
       buttons: ['Restart and Install'],
     });
 
+    // NSIS queues app.quit() before it knows whether the installer launched. Check the
+    // staged executable after the dialog, since it may have been quarantined while we waited.
+    if (process.platform === 'win32') {
+      try {
+        await checkStagedInstaller(downloadedFiles[0]);
+      } catch (error) {
+        console.warn('Cannot open the downloaded update installer:', error);
+        // The updater also installs on ordinary quit. Skip that same unusable file this session.
+        autoUpdater.autoInstallOnAppQuit = false;
+        const options = {
+          type: 'error' as const,
+          title: 'Update Installation Error',
+          message:
+            'The downloaded installer is missing or unreadable. Restart the Launcher to check for the update again.',
+        };
+        if (mainWindow.isDestroyed()) {
+          await dialog.showMessageBox(options);
+        } else {
+          await dialog.showMessageBox(mainWindow, options);
+        }
+        return;
+      }
+    }
     autoUpdater.quitAndInstall();
   } catch {
     // no-op

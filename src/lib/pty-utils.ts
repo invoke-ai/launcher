@@ -84,6 +84,14 @@ export function createPtyBuffer() {
   return new AnsiSequenceBuffer();
 }
 
+// Managers release their entry as soon as a stop starts. Keep its bounded exit wait
+// visible to app shutdown even if the user initiated that stop before quitting.
+const pendingPtyExits = new Set<Promise<void>>();
+
+export async function waitForPendingPtyExits(): Promise<void> {
+  await Promise.allSettled(pendingPtyExits);
+}
+
 /**
  * Kill a PTY process and wait for it to exit with timeout support
  * @param ptyProcess The PTY process to kill
@@ -91,7 +99,7 @@ export function createPtyBuffer() {
  * @returns Promise that resolves when process exits or timeout occurs
  */
 export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000): Promise<void> {
-  return new Promise<void>((resolve) => {
+  const exit = new Promise<void>((resolve) => {
     let timeoutId: NodeJS.Timeout | null = null;
     let resolved = false;
 
@@ -125,4 +133,6 @@ export function killPtyProcessAsync(ptyProcess: pty.IPty, timeout: number = 5000
       cleanup();
     }
   });
+  pendingPtyExits.add(exit);
+  return exit.finally(() => pendingPtyExits.delete(exit));
 }
